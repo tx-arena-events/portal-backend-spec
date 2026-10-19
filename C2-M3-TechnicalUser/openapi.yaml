@@ -1,0 +1,593 @@
+openapi: 3.1.0
+info:
+  title: C2-M3 Technical Users
+  version: 0.1.0
+  description: |
+    Manages the accounts that programs use to sign in to the Portal IAM, and
+    records whether an account has access to the dataspace wallet.
+    The behaviour of every operation is described in README.md, section 7.
+
+    - Every call carries a token of the Portal IAM. The required permission is
+      given per operation in `x-permission`.
+    - Paths under `/internal` and `/steps` are for other modules and Process
+      Orchestration, not for the UI.
+    - Errors as Problem Details (RFC 9457), identifiers in README section 10.
+servers:
+  - url: /api/c2-m3
+security:
+  - portalIam: []
+tags:
+  - name: Management
+    description: For the UI, company admin
+  - name: Queries
+    description: For other modules
+  - name: Steps
+    description: For Process Orchestration
+
+paths:
+  /technical-users:
+    get:
+      tags: [Management]
+      operationId: listTechnicalUsers
+      summary: List visible technical users
+      description: |
+        Accounts of the caller's company and accounts it co-views.
+        Sorted by createdAt descending. Without filter `status`: PENDING, ACTIVE,
+        PENDING_DELETION. Entries without roles.
+      x-permission: view_tech_user_management
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - name: status
+          in: query
+          description: May be given several times.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/Status' }
+          style: form
+          explode: true
+        - name: origin
+          in: query
+          schema: { $ref: '#/components/schemas/Origin' }
+        - name: walletAccess
+          in: query
+          schema: { $ref: '#/components/schemas/WalletAccessStatus' }
+      responses:
+        '200':
+          description: One page of the list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TechnicalUserPage' }
+        '403': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [Management]
+      operationId: createTechnicalUser
+      summary: Create a technical user
+      description: |
+        See README 7.2. The response contains the secret exactly once.
+        With a wallet role the account is first PENDING with wallet access REQUESTED.
+      x-permission: add_tech_user_management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TechnicalUserCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TechnicalUserWithCredentials' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /technical-users/assignable-roles:
+    get:
+      tags: [Management]
+      operationId: listAssignableRoles
+      summary: Roles the caller's company can assign
+      description: See README 6.3 and 7.8.
+      x-permission: technical_roles_management
+      parameters:
+        - name: lang
+          in: query
+          schema: { type: string, default: de, examples: [de, en] }
+      responses:
+        '200':
+          description: Roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AssignableRole' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /technical-users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Management]
+      operationId: getTechnicalUser
+      summary: Details of a technical user, with roles, without secret
+      x-permission: view_tech_user_management
+      responses:
+        '200':
+          description: Details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TechnicalUser' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    patch:
+      tags: [Management]
+      operationId: updateTechnicalUser
+      summary: Change name, description or roles
+      description: See README 7.4. Only with status ACTIVE. The wallet role cannot be added or removed.
+      x-permission: add_tech_user_management
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TechnicalUserUpdate' }
+      responses:
+        '200':
+          description: Changed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TechnicalUser' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [Management]
+      operationId: deleteTechnicalUser
+      summary: Delete a technical user
+      description: |
+        See README 7.5. Without active wallet access deleted immediately (204). With
+        wallet access, deletion runs via Process Orchestration (202, status
+        PENDING_DELETION).
+      x-permission: delete_tech_user_management
+      responses:
+        '202':
+          description: Deletion in progress
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TechnicalUser' }
+        '204':
+          description: Deleted
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /technical-users/{id}/credentials/rotate:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Management]
+      operationId: rotateCredentials
+      summary: Generate a new secret
+      description: Only with status ACTIVE or PENDING. The old secret becomes invalid. The response contains the new secret exactly once.
+      x-permission: add_tech_user_management
+      responses:
+        '200':
+          description: New secret
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Credentials' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /technical-users/{id}/wallet-access/credentials:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Management]
+      operationId: retrieveWalletCredentials
+      summary: Retrieve the wallet access credentials once
+      description: See README 7.7. Afterwards they are deleted in the module.
+      x-permission: add_tech_user_management
+      responses:
+        '200':
+          description: Credentials
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletCredentials' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '410': { $ref: '#/components/responses/Problem' }
+
+  /internal/technical-users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Queries]
+      operationId: checkTechnicalUser
+      summary: Check whether an account can be used for a connector
+      description: See README 7.9. Answers 200 with exists false also for an unknown ID.
+      x-permission: view_tech_user_internal
+      parameters:
+        - name: companyId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Result of the check
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TechnicalUserCheck' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /steps/create-for-subscription:
+    post:
+      tags: [Steps]
+      operationId: stepCreateForSubscription
+      summary: 'Step: create accounts for a subscription'
+      description: |
+        See README 7.10. Creates the customer account and, for provider-only roles,
+        a provider account. The result contains the credentials. Repeating with
+        the same stepRunId creates nothing new and returns new secrets.
+      x-permission: execute_tech_user_steps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepCreateForSubscription' }
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultCreateForSubscription' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/apply-wallet-access:
+    post:
+      tags: [Steps]
+      operationId: stepApplyWalletAccess
+      summary: 'Step: apply the outcome of the wallet access'
+      description: See README 7.10. With outcome ACTIVE, walletAccessRef and walletCredentials are required.
+      x-permission: execute_tech_user_steps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepApplyWalletAccess' }
+      responses:
+        '200': { $ref: '#/components/responses/StepResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /steps/delete:
+    post:
+      tags: [Steps]
+      operationId: stepDelete
+      summary: 'Step: delete the account in the Portal IAM'
+      description: See README 7.10. A client that is already gone counts as success.
+      x-permission: execute_tech_user_steps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepDelete' }
+      responses:
+        '200': { $ref: '#/components/responses/StepResult' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/{stepRunId}:
+    get:
+      tags: [Steps]
+      operationId: getStepStatus
+      summary: Status of a step, without secrets
+      x-permission: execute_tech_user_steps
+      parameters:
+        - name: stepRunId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/StepResult' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    portalIam:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token of the Portal IAM.
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    Problem:
+      description: Error (RFC 9457), identifiers in README section 10
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    StepResult:
+      description: Result or intermediate state of a step
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/StepResult' }
+
+  schemas:
+    Status:
+      type: string
+      enum: [PENDING, ACTIVE, PENDING_DELETION, DELETED]
+    Origin:
+      type: string
+      description: OWN = created by the admin; SUBSCRIPTION = created when a subscription is activated.
+      enum: [OWN, SUBSCRIPTION]
+    WalletAccessStatus:
+      type: string
+      enum: [NONE, REQUESTED, ACTIVE, FAILED, REMOVING]
+    AuthMethod:
+      type: string
+      enum: [SECRET]
+    ViewerRole:
+      type: string
+      description: OWNER = account belongs to the caller's company; CO_VIEWER = the caller's company co-views it.
+      enum: [OWNER, CO_VIEWER]
+
+    RoleRef:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: Name of the role on the client `technical_roles_management`.
+          examples: [Connector Management]
+
+    AssignableRole:
+      type: object
+      required: [name, grantsWalletAccess, providerOnly]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        grantsWalletAccess:
+          type: boolean
+          description: Wallet role; leads to wallet access instead of a role in the Portal IAM.
+        providerOnly:
+          type: boolean
+          description: Provider-only role; in subscriptions it goes into a separate account of the provider.
+
+    TechnicalUserSummary:
+      type: object
+      required: [id, companyId, name, origin, status, iamClientId, walletAccess, viewerRole]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        origin: { $ref: '#/components/schemas/Origin' }
+        offerSubscriptionId: { type: [string, 'null'], format: uuid }
+        coViewerCompanyId: { type: [string, 'null'], format: uuid }
+        viewerRole: { $ref: '#/components/schemas/ViewerRole' }
+        status: { $ref: '#/components/schemas/Status' }
+        iamClientId:
+          type: string
+          description: Client ID in the Portal IAM, e.g. sa123.
+        walletAccess: { $ref: '#/components/schemas/WalletAccessStatus' }
+        createdAt: { type: string, format: date-time }
+        changedAt: { type: string, format: date-time }
+
+    TechnicalUser:
+      allOf:
+        - $ref: '#/components/schemas/TechnicalUserSummary'
+        - type: object
+          required: [roles, authMethod]
+          properties:
+            authMethod: { $ref: '#/components/schemas/AuthMethod' }
+            roles:
+              type: array
+              description: Read from the Portal IAM. If walletAccess is not NONE, the wallet role is listed here as well.
+              items: { $ref: '#/components/schemas/RoleRef' }
+
+    TechnicalUserPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/TechnicalUserSummary' }
+        page: { type: integer }
+        size: { type: integer }
+        total: { type: integer }
+
+    TechnicalUserCreate:
+      type: object
+      required: [name, roles]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 255 }
+        authMethod: { $ref: '#/components/schemas/AuthMethod' }
+        roles:
+          type: array
+          minItems: 1
+          description: May contain a wallet role.
+          items: { $ref: '#/components/schemas/RoleRef' }
+
+    TechnicalUserUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 255 }
+        roles:
+          type: array
+          minItems: 1
+          description: New complete list without wallet role.
+          items: { $ref: '#/components/schemas/RoleRef' }
+
+    Credentials:
+      type: object
+      required: [iamClientId, secret, tokenUrl]
+      description: Returned exactly once and not stored.
+      properties:
+        iamClientId: { type: string }
+        secret: { type: string }
+        tokenUrl:
+          type: string
+          format: uri
+          description: Token URL of the Portal IAM.
+
+    TechnicalUserWithCredentials:
+      allOf:
+        - $ref: '#/components/schemas/TechnicalUser'
+        - type: object
+          required: [credentials]
+          properties:
+            credentials: { $ref: '#/components/schemas/Credentials' }
+
+    WalletCredentials:
+      type: object
+      required: [authServiceUrl, clientId, clientSecret]
+      description: Credentials of the wallet access.
+      properties:
+        authServiceUrl: { type: string, format: uri }
+        clientId: { type: string }
+        clientSecret: { type: string }
+
+    TechnicalUserCheck:
+      type: object
+      required: [exists, usableForConnector]
+      properties:
+        exists: { type: boolean }
+        belongsToCompany: { type: boolean }
+        status: { $ref: '#/components/schemas/Status' }
+        origin: { $ref: '#/components/schemas/Origin' }
+        walletAccess: { $ref: '#/components/schemas/WalletAccessStatus' }
+        usableForConnector:
+          type: boolean
+          description: true if the account belongs to the company, is ACTIVE or PENDING and has origin OWN.
+
+    StepRequest:
+      type: object
+      required: [processId, stepRunId]
+      properties:
+        processId:
+          type: string
+          format: uuid
+          description: Process in Process Orchestration.
+        stepRunId:
+          type: string
+          format: uuid
+          description: This execution of the step. Same ID means same request.
+
+    StepCreateForSubscription:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [customerCompanyId, providerCompanyId, offerSubscriptionId, name, roles]
+          properties:
+            customerCompanyId: { type: string, format: uuid }
+            providerCompanyId: { type: string, format: uuid }
+            offerSubscriptionId: { type: string, format: uuid }
+            name:
+              type: string
+              description: Name from the profile or name of the offer; the account is named {client ID}-{name}.
+            roles:
+              type: array
+              description: Roles from the offer's profile; split into wallet, provider-only and remaining roles.
+              items: { $ref: '#/components/schemas/RoleRef' }
+
+    StepApplyWalletAccess:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [technicalUserId, outcome]
+          properties:
+            technicalUserId: { type: string, format: uuid }
+            outcome:
+              type: string
+              enum: [ACTIVE, FAILED]
+            walletAccessRef:
+              type: string
+              description: Identifier of the wallet account at C4-M2; required with ACTIVE.
+            walletCredentials:
+              $ref: '#/components/schemas/WalletCredentials'
+
+    StepDelete:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [technicalUserId]
+          properties:
+            technicalUserId: { type: string, format: uuid }
+
+    StepResult:
+      type: object
+      required: [stepRunId, state]
+      properties:
+        stepRunId: { type: string, format: uuid }
+        state:
+          type: string
+          enum: [RUNNING, DONE, FAILED]
+        result:
+          type: object
+          description: Result with DONE, e.g. the IDs of the created accounts. Never with secrets, except for create-for-subscription.
+          additionalProperties: true
+        message: { type: string }
+
+    StepResultCreateForSubscription:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          properties:
+            result:
+              type: object
+              properties:
+                accounts:
+                  type: array
+                  items:
+                    type: object
+                    required: [technicalUserId, owner, credentials]
+                    properties:
+                      technicalUserId: { type: string, format: uuid }
+                      owner:
+                        type: string
+                        enum: [CUSTOMER, PROVIDER]
+                      roles:
+                        type: array
+                        items: { $ref: '#/components/schemas/RoleRef' }
+                      walletAccess: { $ref: '#/components/schemas/WalletAccessStatus' }
+                      credentials: { $ref: '#/components/schemas/Credentials' }
+
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Identifier, e.g. urn:c2-m3:problem:role-not-assignable (list in README section 10).
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
