@@ -217,7 +217,7 @@ Returns the credentials of the wallet access exactly once and then deletes the r
 
 ### 7.8 `GET /technical-users/assignable-roles`
 
-Roles according to 6.3 for the caller's company. Name and description from the Portal IAM: role attribute `description_{lang}`, otherwise `description`. Flags `grantsWalletAccess` (in `WALLET_ROLES`) and `providerOnly` (in `PROVIDER_ONLY_ROLES`).
+Roles according to 6.3 for the caller's company. Name and description from the Portal IAM: role attribute `description.{lang}`, otherwise `description`. Flags `grantsWalletAccess` (in `WALLET_ROLES`) and `providerOnly` (in `PROVIDER_ONLY_ROLES`).
 
 ### 7.9 `GET /internal/technical-users/{id}?companyId=`
 
@@ -328,7 +328,7 @@ The module is done when these cases work against the test Portal IAM, with built
 
 The test Portal IAM needs:
 
-- the client `technical_roles_management` with the roles from section 6.3, descriptions as attributes `description_de` and `description_en`
+- the client `technical_roles_management` with the roles from section 6.3, descriptions as attributes `description.de` and `description.en`
 - the permissions from section 6.2 for test users and service accounts
 - the claim `company_id` in the tokens of the test users
 - a service account for the module with the permissions listed under `IAM_ADMIN_CLIENT_ID`
