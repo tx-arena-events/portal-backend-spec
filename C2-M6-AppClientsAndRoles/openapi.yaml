@@ -1,0 +1,661 @@
+openapi: 3.1.0
+info:
+  title: C2-M6 App Clients and Roles
+  version: 0.1.0
+  description: |
+    Manages the clients of apps in the Portal IAM and the app roles on them:
+    one client template per app, one instance client per instance.
+    The behaviour of every step and query is described in README.md, sections 7 and 8.
+
+    - Process Orchestration and other modules call these operations in the same
+      process through the module's public interface. The HTTP paths describe the
+      same contract for running the module as a service of its own.
+    - Via HTTP, every call carries a token of the Portal IAM. The required
+      permission is given per operation in `x-permission`.
+    - There are no operations for the UI.
+    - Errors as Problem Details (RFC 9457), identifiers in README section 12.
+    - The events the module publishes are described under `components/schemas`
+      (names starting with `Event`), see README section 9.
+servers:
+  - url: /api/c2-m6
+security:
+  - portalIam: []
+tags:
+  - name: Queries
+    description: For other modules
+  - name: Steps
+    description: For Process Orchestration
+
+paths:
+  /internal/app-roles:
+    get:
+      tags: [Queries]
+      operationId: listAppRoles
+      summary: App roles of one or more apps, read from their templates
+      description: See README 8.1. The order of the apps follows the request.
+      x-permission: view_app_clients_internal
+      parameters:
+        - name: appId
+          in: query
+          required: true
+          description: May be given 1 to QUERY_MAX_APPS (default 50) times.
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 50
+            items: { type: string, format: uuid }
+          style: form
+          explode: true
+        - name: lang
+          in: query
+          description: Language of `description`; otherwise English, otherwise the first one.
+          schema: { type: string, pattern: '^[a-z]{2}$', default: en, examples: [de, en] }
+      responses:
+        '200':
+          description: Roles per app
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AppRoles' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /internal/app-instance-clients:
+    get:
+      tags: [Queries]
+      operationId: listAppInstanceClients
+      summary: Instance clients by app, subscription or customer
+      description: |
+        See README 8.2. At least one of appId and offerSubscriptionId is required.
+        Without filter status: PENDING and ACTIVE. Reads only the module's own table.
+      x-permission: view_app_clients_internal
+      parameters:
+        - name: appId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: offerSubscriptionId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: customerCompanyId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: instanceKind
+          in: query
+          schema: { $ref: '#/components/schemas/InstanceKind' }
+        - name: status
+          in: query
+          description: May be given several times.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/InstanceClientStatus' }
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: Matching instance clients, sorted by createdAt
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AppInstanceClient' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /internal/app-instance-clients/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Queries]
+      operationId: getAppInstanceClient
+      summary: One instance client
+      x-permission: view_app_clients_internal
+      responses:
+        '200':
+          description: The instance client
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppInstanceClient' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /steps/create-client-template:
+    post:
+      tags: [Steps]
+      operationId: stepCreateClientTemplate
+      summary: 'Step: create the client template of an approved app'
+      description: See README 7.1. Repeatable; the template is found again by the app ID.
+      x-permission: execute_app_client_steps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepCreateClientTemplate' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultTemplate' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/create-instance-client:
+    post:
+      tags: [Steps]
+      operationId: stepCreateInstanceClient
+      summary: 'Step: create an instance client from the template, disabled'
+      description: |
+        See README 7.2. SINGLE for a single-instance app (at approval), SUBSCRIPTION
+        for a subscription to a multi-instance app. Repeatable; the row is found
+        again by offerSubscriptionId or, for SINGLE, by appId.
+      x-permission: execute_app_client_steps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepCreateInstanceClient' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultInstanceClient' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/enable-instance-client:
+    post:
+      tags: [Steps]
+      operationId: stepEnableInstanceClient
+      summary: 'Step: enable an instance client'
+      description: See README 7.3. PENDING becomes ACTIVE; ACTIVE stays; DISABLED gives 409.
+      x-permission: execute_app_client_steps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepInstanceClientRef' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultInstanceClient' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/disable-instance-client:
+    post:
+      tags: [Steps]
+      operationId: stepDisableInstanceClient
+      summary: 'Step: disable an instance client'
+      description: See README 7.4. PENDING or ACTIVE becomes DISABLED (final); DISABLED stays.
+      x-permission: execute_app_client_steps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepInstanceClientRef' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultInstanceClient' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/update-instance-url:
+    post:
+      tags: [Steps]
+      operationId: stepUpdateInstanceUrl
+      summary: 'Step: change the URL of an instance'
+      description: See README 7.5. Sets baseUrl and redirect URI of the client.
+      x-permission: execute_app_client_steps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepUpdateInstanceUrl' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultInstanceClient' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/add-app-roles:
+    post:
+      tags: [Steps]
+      operationId: stepAddAppRoles
+      summary: 'Step: add app roles to the template and all instance clients'
+      description: See README 7.6. Existing roles are skipped and keep their descriptions.
+      x-permission: execute_app_client_steps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepAddAppRoles' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultAddAppRoles' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/update-role-descriptions:
+    post:
+      tags: [Steps]
+      operationId: stepUpdateRoleDescriptions
+      summary: 'Step: replace the descriptions of app roles'
+      description: |
+        See README 7.7. Per role the complete new list of descriptions; on the template
+        and on all instance clients. An unknown role gives 404 and nothing is changed.
+      x-permission: execute_app_client_steps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepUpdateRoleDescriptions' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultUpdateRoleDescriptions' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    portalIam:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token of the Portal IAM (only when called via HTTP).
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Problem:
+      description: Error (RFC 9457), identifiers in README section 12
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    InstanceKind:
+      type: string
+      description: SINGLE = the one instance of a single-instance app; SUBSCRIPTION = the instance of one subscription to a multi-instance app.
+      enum: [SINGLE, SUBSCRIPTION]
+    InstanceClientStatus:
+      type: string
+      description: PENDING = created, client disabled; ACTIVE = client enabled; DISABLED = client disabled, final.
+      enum: [PENDING, ACTIVE, DISABLED]
+
+    InstanceUrl:
+      type: string
+      format: uri
+      maxLength: 255
+      pattern: '^https?://[^#]+$'
+      description: Absolute http or https URL without '#'.
+      examples: ['https://demo-app.example.org']
+
+    RoleName:
+      type: string
+      minLength: 1
+      maxLength: 255
+      examples: [Viewer]
+
+    RoleDescription:
+      type: object
+      required: [lang, text]
+      properties:
+        lang:
+          type: string
+          pattern: '^[a-z]{2}$'
+          description: Language from the configuration LANGUAGES, e.g. de or en.
+        text: { type: string, minLength: 1, maxLength: 255 }
+
+    RoleInput:
+      type: object
+      required: [name, descriptions]
+      properties:
+        name: { $ref: '#/components/schemas/RoleName' }
+        descriptions:
+          type: array
+          minItems: 1
+          description: At most one per language.
+          items: { $ref: '#/components/schemas/RoleDescription' }
+
+    AppRole:
+      type: object
+      required: [name, descriptions]
+      properties:
+        name: { $ref: '#/components/schemas/RoleName' }
+        description:
+          type: [string, 'null']
+          description: In the requested language, otherwise English, otherwise the first one.
+        descriptions:
+          type: array
+          items: { $ref: '#/components/schemas/RoleDescription' }
+
+    AppRoles:
+      type: object
+      required: [appId, templateExists, roles]
+      properties:
+        appId: { type: string, format: uuid }
+        templateExists: { type: boolean }
+        roles:
+          type: array
+          description: Sorted by name. Empty if templateExists is false.
+          items: { $ref: '#/components/schemas/AppRole' }
+
+    AppInstanceClient:
+      type: object
+      required: [id, appId, instanceKind, iamClientId, instanceUrl, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        appId: { type: string, format: uuid }
+        instanceKind: { $ref: '#/components/schemas/InstanceKind' }
+        offerSubscriptionId: { type: [string, 'null'], format: uuid }
+        customerCompanyId: { type: [string, 'null'], format: uuid }
+        iamClientId:
+          type: string
+          description: Client ID in the Portal IAM, e.g. app123.
+        instanceUrl: { $ref: '#/components/schemas/InstanceUrl' }
+        status: { $ref: '#/components/schemas/InstanceClientStatus' }
+        createdAt: { type: string, format: date-time }
+        changedAt: { type: string, format: date-time }
+
+    StepRequest:
+      type: object
+      required: [processId, stepRunId]
+      properties:
+        processId:
+          type: string
+          format: uuid
+          description: Process in Process Orchestration; for logging only.
+        stepRunId:
+          type: string
+          format: uuid
+          description: This execution of the step; for logging only.
+
+    StepCreateClientTemplate:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [appId, providerCompanyId, appName, roles]
+          properties:
+            appId: { type: string, format: uuid }
+            providerCompanyId: { type: string, format: uuid }
+            appName: { type: string, minLength: 1, maxLength: 255 }
+            roles:
+              type: array
+              minItems: 1
+              description: App roles from the approved draft; names unique.
+              items: { $ref: '#/components/schemas/RoleInput' }
+
+    StepCreateInstanceClient:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [appId, instanceKind, instanceUrl]
+          properties:
+            appId: { type: string, format: uuid }
+            instanceKind: { $ref: '#/components/schemas/InstanceKind' }
+            instanceUrl: { $ref: '#/components/schemas/InstanceUrl' }
+            offerSubscriptionId:
+              type: string
+              format: uuid
+              description: Required with SUBSCRIPTION, not allowed with SINGLE.
+            customerCompanyId:
+              type: string
+              format: uuid
+              description: Required with SUBSCRIPTION, not allowed with SINGLE.
+
+    StepInstanceClientRef:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [appInstanceClientId]
+          properties:
+            appInstanceClientId: { type: string, format: uuid }
+
+    StepUpdateInstanceUrl:
+      allOf:
+        - $ref: '#/components/schemas/StepInstanceClientRef'
+        - type: object
+          required: [instanceUrl]
+          properties:
+            instanceUrl: { $ref: '#/components/schemas/InstanceUrl' }
+
+    StepAddAppRoles:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [appId, roles]
+          properties:
+            appId: { type: string, format: uuid }
+            roles:
+              type: array
+              minItems: 1
+              items: { $ref: '#/components/schemas/RoleInput' }
+
+    StepUpdateRoleDescriptions:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [appId, roles]
+          properties:
+            appId: { type: string, format: uuid }
+            roles:
+              type: array
+              minItems: 1
+              description: Per role the complete new list of descriptions.
+              items: { $ref: '#/components/schemas/RoleInput' }
+
+    StepResult:
+      type: object
+      required: [stepRunId, state]
+      properties:
+        stepRunId: { type: string, format: uuid }
+        state:
+          type: string
+          description: A step is finished when it returns.
+          enum: [DONE]
+
+    StepResultTemplate:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          required: [result]
+          properties:
+            result:
+              type: object
+              required: [appId, iamClientId, roleNames]
+              properties:
+                appId: { type: string, format: uuid }
+                iamClientId:
+                  type: string
+                  description: e.g. app-template-6f1c2a4e-8b0d-4c55-9a3e-2d7b1f0c9e11
+                roleNames:
+                  type: array
+                  description: All app roles on the template.
+                  items: { $ref: '#/components/schemas/RoleName' }
+
+    StepResultInstanceClient:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          required: [result]
+          properties:
+            result: { $ref: '#/components/schemas/AppInstanceClient' }
+
+    StepResultAddAppRoles:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          required: [result]
+          properties:
+            result:
+              type: object
+              required: [appId, addedRoles, skippedRoles]
+              properties:
+                appId: { type: string, format: uuid }
+                addedRoles:
+                  type: array
+                  items: { $ref: '#/components/schemas/RoleName' }
+                skippedRoles:
+                  type: array
+                  description: Already present on the template; descriptions unchanged.
+                  items: { $ref: '#/components/schemas/RoleName' }
+
+    StepResultUpdateRoleDescriptions:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          required: [result]
+          properties:
+            result:
+              type: object
+              required: [appId, updatedRoles]
+              properties:
+                appId: { type: string, format: uuid }
+                updatedRoles:
+                  type: array
+                  items: { $ref: '#/components/schemas/RoleName' }
+
+    EventBase:
+      type: object
+      required: [eventId, eventType, occurredAt]
+      description: Common fields of every event. Events never contain secrets.
+      properties:
+        eventId: { type: string, format: uuid }
+        eventType: { type: string }
+        occurredAt: { type: string, format: date-time }
+
+    EventAppClientTemplateCreated:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [appId, iamClientId, roleNames]
+          properties:
+            eventType: { const: AppClientTemplateCreated }
+            appId: { type: string, format: uuid }
+            iamClientId: { type: string }
+            roleNames:
+              type: array
+              items: { $ref: '#/components/schemas/RoleName' }
+
+    EventAppInstanceClientCreated:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [appInstanceClientId, appId, instanceKind, iamClientId, instanceUrl]
+          properties:
+            eventType: { const: AppInstanceClientCreated }
+            appInstanceClientId: { type: string, format: uuid }
+            appId: { type: string, format: uuid }
+            instanceKind: { $ref: '#/components/schemas/InstanceKind' }
+            offerSubscriptionId: { type: [string, 'null'], format: uuid }
+            customerCompanyId: { type: [string, 'null'], format: uuid }
+            iamClientId: { type: string }
+            instanceUrl: { $ref: '#/components/schemas/InstanceUrl' }
+
+    EventAppInstanceClientEnabled:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - $ref: '#/components/schemas/EventInstanceClientFields'
+        - type: object
+          properties:
+            eventType: { const: AppInstanceClientEnabled }
+
+    EventAppInstanceClientDisabled:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - $ref: '#/components/schemas/EventInstanceClientFields'
+        - type: object
+          properties:
+            eventType: { const: AppInstanceClientDisabled }
+
+    EventInstanceClientFields:
+      type: object
+      required: [appInstanceClientId, appId, iamClientId]
+      properties:
+        appInstanceClientId: { type: string, format: uuid }
+        appId: { type: string, format: uuid }
+        offerSubscriptionId: { type: [string, 'null'], format: uuid }
+        iamClientId: { type: string }
+
+    EventAppInstanceUrlUpdated:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [appInstanceClientId, appId, instanceUrl]
+          properties:
+            eventType: { const: AppInstanceUrlUpdated }
+            appInstanceClientId: { type: string, format: uuid }
+            appId: { type: string, format: uuid }
+            offerSubscriptionId: { type: [string, 'null'], format: uuid }
+            instanceUrl: { $ref: '#/components/schemas/InstanceUrl' }
+
+    EventAppRolesAdded:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [appId, roleNames]
+          properties:
+            eventType: { const: AppRolesAdded }
+            appId: { type: string, format: uuid }
+            roleNames:
+              type: array
+              items: { $ref: '#/components/schemas/RoleName' }
+
+    EventAppRoleDescriptionsUpdated:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [appId, roleNames]
+          properties:
+            eventType: { const: AppRoleDescriptionsUpdated }
+            appId: { type: string, format: uuid }
+            roleNames:
+              type: array
+              items: { $ref: '#/components/schemas/RoleName' }
+
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Identifier, e.g. urn:c2-m6:problem:template-missing (list in README section 12).
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }

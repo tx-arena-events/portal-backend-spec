@@ -26,3 +26,4 @@ Every step of a flow, such as onboarding, runs through Process Orchestration. Mo
 | Module | Status |
 |---|---|
 | [C2-M3 Technical Users](C2-M3-TechnicalUser/) | draft 0.1 |
+| [C2-M6 App Clients and Roles](C2-M6-AppClientsAndRoles/) | draft 0.1 |
