@@ -1,9 +1,11 @@
-# C2-M6 App Clients and Roles
+# C2-M2 App Access
 
 **Version:** 0.1, as of 2026-10-22
 **Capability:** C2 Identity and Access
 **Kind:** Hackathon (to be built at the hackathon)
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface)
+
+> **Status:** draft 0.1, written before the Portal Service Provider architecture. It covers app clients and app roles. App users and the assignment of app roles to them belong to this module as well and are still to be specified.
 
 This README and the OpenAPI description are sufficient to build the module. Modules from other parts of the spec are referred to by name.
 
@@ -17,7 +19,7 @@ The module has no operations for the UI. Its callers:
 |---|---|
 | Process Orchestration | steps: create the template when an app is approved, create and enable instance clients, add app roles, change descriptions, change the URL of an instance, disable an instance client |
 | Offers | read the app roles of one or more apps, e.g. for the marketplace |
-| Users (C2-M2) | read the app roles and the instance clients on which a company's users receive them |
+| App users (part of this module, to be specified) | read the app roles and the instance clients on which a company's users receive them |
 | Subscriptions | read the instance client of a subscription, e.g. to pass its client ID to the provider |
 
 ## 2. Terms
@@ -39,7 +41,6 @@ The module has no operations for the UI. Its callers:
 |---|---|
 | The app and its draft, including the planned app roles during the release | Offers |
 | Subscriptions and their status | Subscriptions |
-| Assigning app roles to users | C2-M2 Users |
 | Technical users and their profiles (profiles refer to portal roles only) | C2-M3 Technical Users |
 | Portal roles and the clients of the portal itself | C2-M5 Portal IAM (configuration) |
 | Notifications, e.g. to the provider when app roles were added | Notifications, started by the flow |
@@ -48,7 +49,7 @@ The module has no operations for the UI. Its callers:
 ## 4. Technical frame
 
 - Python with FastAPI.
-- Own database schema `c2_m6` in PostgreSQL. The module reads and writes only there. Other modules read through the interface.
+- Own database `c2_m2` in PostgreSQL. The module reads and writes only there. Other modules read through the interface.
 - Process Orchestration and other modules call the module through its public interface **in the same process**. [openapi.yaml](openapi.yaml) describes the same contract as HTTP paths; they apply when the module runs as a service of its own.
 - When called via HTTP, every call carries a token of the Portal IAM, checked by the shared token validation library (permissions in 6.6).
 - Events go out through the outbox of the module skeleton: written in the same transaction as the change, delivered afterwards (section 9).
@@ -58,7 +59,7 @@ The module has no operations for the UI. Its callers:
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | PostgreSQL, schema `c2_m6` | |
+| `DATABASE_URL` | the module's own PostgreSQL database `c2_m2` | |
 | `IAM_URL` | base URL of the Portal IAM | `https://iam.example.org/auth` |
 | `IAM_REALM` | realm | `CX-Central` |
 | `IAM_ADMIN_CLIENT_ID`, `IAM_ADMIN_CLIENT_SECRET` | the module's own service account for the admin API; needs the realm permissions `manage-clients`, `view-clients`, `query-clients` | |
@@ -99,7 +100,7 @@ The module has no operations for the UI. Its callers:
 
 At most one row per app with `instance_kind` `SINGLE` and a status other than `DISABLED` (partial unique index).
 
-**Not stored:** app roles and their descriptions (only in the Portal IAM), the status of subscriptions (Subscriptions), app data apart from the name (Offers), who has which app role (Portal IAM, managed by C2-M2).
+**Not stored:** app roles and their descriptions (only in the Portal IAM), the status of subscriptions (Subscriptions), app data apart from the name (Offers), who has which app role (Portal IAM, managed by the app users part of this module).
 
 ## 6. Rules
 
@@ -254,8 +255,8 @@ Filters: `appId`, `offerSubscriptionId`, `customerCompanyId`, `instanceKind`, `s
 
 Typical use:
 - Subscriptions: `offerSubscriptionId` → the client ID for the provider.
-- C2-M2 for a multi-instance app: `appId` + `customerCompanyId` + `status=ACTIVE` → the clients on which the company's users receive app roles.
-- C2-M2 for a single-instance app: `appId` + `instanceKind=SINGLE` + `status=ACTIVE`. Whether the company has an active subscription, C2-M2 asks Subscriptions.
+- App users part, for a multi-instance app: `appId` + `customerCompanyId` + `status=ACTIVE` → the clients on which the company's users receive app roles.
+- App users part, for a single-instance app: `appId` + `instanceKind=SINGLE` + `status=ACTIVE`. Whether the company has an active subscription is asked at Subscriptions.
 
 ### 8.3 `GET /internal/app-instance-clients/{id}`
 
@@ -313,14 +314,14 @@ Errors come as Problem Details (RFC 9457). `type` is one of these identifiers:
 
 | `type` | HTTP | When |
 |---|---|---|
-| `urn:c2-m6:problem:validation` | 400 | invalid input |
-| `urn:c2-m6:problem:forbidden` | 403 | permission missing (HTTP only) |
-| `urn:c2-m6:problem:not-found` | 404 | instance client does not exist |
-| `urn:c2-m6:problem:role-not-found` | 404 | role does not exist on the template |
-| `urn:c2-m6:problem:template-missing` | 409 | no template for the app |
-| `urn:c2-m6:problem:instance-exists` | 409 | an instance client for this subscription or single-instance app exists with different data |
-| `urn:c2-m6:problem:invalid-state` | 409 | status does not allow the step |
-| `urn:c2-m6:problem:iam-error` | 502 | the Portal IAM did not answer as expected |
+| `urn:c2-m2:problem:validation` | 400 | invalid input |
+| `urn:c2-m2:problem:forbidden` | 403 | permission missing (HTTP only) |
+| `urn:c2-m2:problem:not-found` | 404 | instance client does not exist |
+| `urn:c2-m2:problem:role-not-found` | 404 | role does not exist on the template |
+| `urn:c2-m2:problem:template-missing` | 409 | no template for the app |
+| `urn:c2-m2:problem:instance-exists` | 409 | an instance client for this subscription or single-instance app exists with different data |
+| `urn:c2-m2:problem:invalid-state` | 409 | status does not allow the step |
+| `urn:c2-m2:problem:iam-error` | 502 | the Portal IAM did not answer as expected |
 
 ## 13. Acceptance
 

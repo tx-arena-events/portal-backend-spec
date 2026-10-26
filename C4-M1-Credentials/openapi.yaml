@@ -1,0 +1,6 @@
+openapi: 3.1.0
+info:
+  title: C4-M1 Credentials
+  version: 0.0.0
+  description: To be specified.
+paths: {}

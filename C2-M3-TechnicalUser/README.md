@@ -5,6 +5,8 @@
 **Kind:** Hackathon (to be built at the hackathon)
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface)
 
+> **Status:** draft 0.1, written before the Portal Service Provider architecture. To be updated: calls on behalf of companies by Portal Service Providers (checked through C2-M4 Delegation), the API access of PSPs as technical users, and notifications to PSPs.
+
 This README and the OpenAPI description are sufficient to build the module. Modules from other parts of the spec are referred to by name.
 
 ## 1. Purpose
@@ -36,7 +38,7 @@ Callers:
 
 | What | Where |
 |---|---|
-| Accounts for humans | C2-M2 Users |
+| Accounts for humans (app users) | C2-M2 App Access |
 | Creating the realm, the client `technical_roles_management` and its roles | C2-M5 Portal IAM (configuration) |
 | Creating and deleting the account in the dataspace wallet | C4-M2 Dataspace Wallet Interface |
 | Company data, BPN, company roles | C3-M1 Company Profile |
@@ -47,7 +49,7 @@ Callers:
 ## 4. Technical frame
 
 - Python with FastAPI.
-- Own database schema `c2_m3` in PostgreSQL. The module reads and writes only there. Other modules read through the interface.
+- Own database `c2_m3` in PostgreSQL. The module reads and writes only there. Other modules read through the interface.
 - Every call carries a token of the Portal IAM. The shared token validation library checks signature, expiry and audience and provides user ID, company ID and BPN of the caller as well as their permissions. In the test Portal IAM the company ID is in the claim `company_id`.
 - Secrets never appear in logs.
 
@@ -55,7 +57,7 @@ Callers:
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | PostgreSQL, schema `c2_m3` | |
+| `DATABASE_URL` | the module's own PostgreSQL database `c2_m3` | |
 | `IAM_URL` | base URL of the Portal IAM | `https://iam.example.org/auth` |
 | `IAM_REALM` | realm | `CX-Central` |
 | `IAM_ADMIN_CLIENT_ID`, `IAM_ADMIN_CLIENT_SECRET` | the module's own service account for the admin API; needs the realm permissions `manage-clients`, `view-clients`, `query-clients`, `manage-users`, `view-users` | |
@@ -287,7 +289,7 @@ The module expects the following calls. If the address of a neighbouring module 
 | Subscriptions (`SUBSCRIPTION_URL`) | `GET /subscriptions/{offerSubscriptionId}` | `{ "status" }` | status `INACTIVE` |
 | Notifications (`NOTIFICATION_URL`) | `POST /notifications` with `{ "template", "recipients": [user IDs], "values", "channel" }` | 202 | writes the notification to the log, without secrets |
 
-Recipients of notifications are the owner's users with the permission `add_tech_user_management`. C2-M2 provides this list. In stand-in mode, the log is enough.
+Recipients of notifications are the owner's users with the permission `add_tech_user_management`. The module that holds these users provides this list. In stand-in mode, the log is enough.
 
 ## 10. Errors
 

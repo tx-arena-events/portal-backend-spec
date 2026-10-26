@@ -1,0 +1,6 @@
+openapi: 3.1.0
+info:
+  title: C5-M1 EBW-Connector
+  version: 0.0.0
+  description: To be specified.
+paths: {}

@@ -1,0 +1,6 @@
+openapi: 3.1.0
+info:
+  title: C4-M2 Dataspace Wallet Interface
+  version: 0.0.0
+  description: To be specified.
+paths: {}

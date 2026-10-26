@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: C2-M6 App Clients and Roles
+  title: C2-M2 App Access
   version: 0.1.0
   description: |
     Manages the clients of apps in the Portal IAM and the app roles on them:
@@ -17,7 +17,7 @@ info:
     - The events the module publishes are described under `components/schemas`
       (names starting with `Event`), see README section 9.
 servers:
-  - url: /api/c2-m6
+  - url: /api/c2-m2
 security:
   - portalIam: []
 tags:
@@ -654,7 +654,7 @@ components:
       properties:
         type:
           type: string
-          description: Identifier, e.g. urn:c2-m6:problem:template-missing (list in README section 12).
+          description: Identifier, e.g. urn:c2-m2:problem:template-missing (list in README section 12).
         title: { type: string }
         status: { type: integer }
         detail: { type: string }

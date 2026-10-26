@@ -1,0 +1,6 @@
+openapi: 3.1.0
+info:
+  title: C2-M5 Portal IAM
+  version: 0.0.0
+  description: To be specified.
+paths: {}
