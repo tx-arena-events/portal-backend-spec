@@ -1,6 +1,897 @@
 openapi: 3.1.0
 info:
   title: C4-M2 Dataspace Wallet Interface
-  version: 0.0.0
-  description: To be specified.
-paths: {}
+  version: 0.2.0
+  description: |
+    Provider-neutral interface to the dataspace wallets: dataspace wallet per
+    company (DID, DID document), wallet accounts for technical users, one-time
+    retrieval of the credentials, holder access for C4-M1. One adapter per provider
+    (SAP_DIV, IDENTITY_HUB, CSP; BRING_YOUR_OWN later). C3-M2 makes the entry BPN → DID
+    in the directory of the CSP. Behaviour in README.md.
+
+    - People call through the UI with their token from the Portal IAM of the OSP.
+      The required permission per operation is in `x-permission`, the scope in
+      `x-permission-scope` (FRAMEWORK 4.3).
+    - Process Orchestration and other modules call steps (`/steps`) and queries
+      (`/internal`) in the same process; the HTTP paths describe the same contract.
+    - Callbacks of the providers are under `/callbacks/<provider>` (today only SAP DIV).
+    - Errors as problem details (RFC 9457), identifiers in README section 12.
+    - Events are under `components/schemas` (names start with `Event`),
+      see README section 10. They never contain secrets.
+servers:
+  - url: /api/c4-m2
+security:
+  - portalIam: []
+tags:
+  - name: Company
+    description: Calls by people of a company or by the applicant
+  - name: Provider
+    description: Callbacks of the wallet providers (service accounts)
+  - name: Queries
+    description: For other modules
+  - name: Steps
+    description: For Process Orchestration
+
+paths:
+  /companies/{companyId}/wallet:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+    get:
+      tags: [Company]
+      operationId: getWallet
+      summary: Dataspace wallet of the caller's own company
+      description: README 7.1. companyId must equal company_id in the token, otherwise 404. Without secrets.
+      x-permission: view_dataspace_wallet
+      x-permission-scope: company
+      responses:
+        '200':
+          description: The wallet
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Wallet' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /technical-users/{technicalUserId}/wallet-account:
+    parameters:
+      - $ref: '#/components/parameters/TechnicalUserId'
+    get:
+      tags: [Company]
+      operationId: getWalletAccount
+      summary: Current wallet account of a technical user of the caller's own company
+      description: |
+        README 7.2. If the account does not belong to the company from company_id in
+        the token, 404. Without secrets; shows whether credentials can be retrieved.
+      x-permission: view_dataspace_wallet
+      x-permission-scope: company
+      responses:
+        '200':
+          description: The wallet account
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletAccount' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /technical-users/{technicalUserId}/wallet-account/credentials:
+    parameters:
+      - $ref: '#/components/parameters/TechnicalUserId'
+    post:
+      tags: [Company]
+      operationId: retrieveWalletAccountCredentials
+      summary: Retrieve the credentials of the wallet account exactly once
+      description: |
+        README 7.3. Hands out the credentials and deletes them afterwards. A second
+        call gives 410 already-retrieved. Response with Cache-Control: no-store.
+        Audit log entry with the sub of the person.
+      x-permission: retrieve_wallet_credentials
+      x-permission-scope: company
+      responses:
+        '200':
+          description: Credentials (one time only)
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletAccountCredentials' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '410': { $ref: '#/components/responses/Problem' }
+
+  /wallet-control-challenges:
+    post:
+      tags: [Company]
+      operationId: createWalletControlChallenge
+      summary: Create a control proof challenge for an own wallet (later)
+      description: |
+        README 6.6 and 7.4. Applies only with the own wallet (OP-29). The applicant
+        names their application; the companyId comes from the application at C1-M2.
+        The challenge belongs to the person from the token (sub).
+      x-permission: prove_wallet_control
+      x-permission-scope: own
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ControlChallengeRequest' }
+      responses:
+        '201':
+          description: Challenge created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ControlChallenge' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /wallet-control-challenges/{challengeId}/proof:
+    parameters:
+      - name: challengeId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Company]
+      operationId: submitWalletControlProof
+      summary: Submit the control proof (signed JWT) (later)
+      description: README 6.6 step 3 and 7.5. Only the person who created the challenge.
+      x-permission: prove_wallet_control
+      x-permission-scope: own
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ControlProofRequest' }
+      responses:
+        '200':
+          description: Control proof verified
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ControlProof' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '410': { $ref: '#/components/responses/Problem' }
+
+  /callbacks/sap-div/wallets/{bpn}:
+    parameters:
+      - $ref: '#/components/parameters/Bpn'
+    post:
+      tags: [Provider]
+      operationId: sapDivWalletCreatedCallback
+      summary: 'SAP DIV callback: wallet created'
+      description: |
+        README 7.6. Content as in today's callback to Portal 2.6.0
+        (POST /api/administration/registration/dim/{bpn}). Only the service account
+        SAP_DIV_CALLBACK_CLIENT_ID. Response 204 even if the check of the DID
+        sets the wallet to FAILED.
+      x-permission: submit_wallet_callback
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SapDivWalletCallback' }
+      responses:
+        '204': { description: Accepted }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /callbacks/sap-div/technical-users/{externalId}:
+    parameters:
+      - $ref: '#/components/parameters/ExternalId'
+    post:
+      tags: [Provider]
+      operationId: sapDivWalletAccountCreatedCallback
+      summary: 'SAP DIV callback: wallet account created'
+      description: |
+        README 7.6. externalId is the walletAccountRef. Content as in today's
+        callback POST /api/administration/serviceaccount/callback/{externalId}.
+      x-permission: submit_wallet_callback
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SapDivAuthenticationDetails' }
+      responses:
+        '204': { description: Accepted }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /callbacks/sap-div/technical-users/{externalId}/delete:
+    parameters:
+      - $ref: '#/components/parameters/ExternalId'
+    post:
+      tags: [Provider]
+      operationId: sapDivWalletAccountDeletedCallback
+      summary: 'SAP DIV callback: wallet account deleted'
+      description: README 7.6. Without body.
+      x-permission: submit_wallet_callback
+      x-permission-scope: osp
+      responses:
+        '204': { description: Accepted }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /steps/create-wallet:
+    post:
+      tags: [Steps]
+      operationId: stepCreateWallet
+      summary: 'Step: create the dataspace wallet of the company (long-running)'
+      description: |
+        README 8.1. Precondition: the company has a BPN. Response RUNNING, end with
+        DataspaceWalletCreated or DataspaceWalletFailed. If the wallet was already
+        ACTIVE at the time of the call, response DONE without an event. Idempotent by
+        companyId. Afterwards C3-M2 register-did makes the entry BPN → DID.
+      x-permission: execute_steps_c4_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepCreateWallet' }
+      responses:
+        '200':
+          description: Running or done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultWallet' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/create-wallet-account:
+    post:
+      tags: [Steps]
+      operationId: stepCreateWalletAccount
+      summary: 'Step: create a wallet account for a technical user (long-running)'
+      description: |
+        README 8.2. Preconditions: wallet of the company ACTIVE, company ACTIVE at
+        C3-M1. Response RUNNING, end with WalletAccountCreated or WalletAccountFailed.
+        If the account was already ACTIVE or FAILED at the time of the call, response
+        DONE without an event. Idempotent by technicalUserId.
+      x-permission: execute_steps_c4_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepWalletAccount' }
+      responses:
+        '200':
+          description: Running or done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultWalletAccount' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/delete-wallet-account:
+    post:
+      tags: [Steps]
+      operationId: stepDeleteWalletAccount
+      summary: 'Step: delete the wallet account of a technical user (long-running)'
+      description: |
+        README 8.3. Precondition: no account in status REQUESTED. Response RUNNING,
+        end with WalletAccountDeleted (when the deadline passes,
+        WalletAccountDeletionFailed). If there is no account any more, response DONE
+        without an event. Also for deactivated companies.
+      x-permission: execute_steps_c4_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepWalletAccount' }
+      responses:
+        '200':
+          description: Running or done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultWalletAccount' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /internal/wallets/{companyId}:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+    get:
+      tags: [Queries]
+      operationId: getWalletInfo
+      summary: Wallet of a company (DID, provider, issuance mode, status)
+      description: README 9.1. For C4-M1, C2-M3, connectors. Without secrets.
+      x-permission: query_c4_m2
+      x-permission-scope: osp
+      responses:
+        '200':
+          description: The wallet
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletInfo' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /internal/technical-users/{technicalUserId}/wallet-account:
+    parameters:
+      - $ref: '#/components/parameters/TechnicalUserId'
+    get:
+      tags: [Queries]
+      operationId: getWalletAccountInternal
+      summary: Current wallet account of a technical user
+      description: README 9.2. Without checking the relation to the company, without secrets.
+      x-permission: query_c4_m2
+      x-permission-scope: osp
+      responses:
+        '200':
+          description: The wallet account
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WalletAccount' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /internal/wallets/{companyId}/holder-access:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+    get:
+      tags: [Queries]
+      operationId: getHolderAccess
+      summary: Issuance mode and holder access of the wallet (only for C4-M1)
+      description: |
+        README 9.3. Depending on the provider, returns ISSUER_WRITES (SAP DIV, with
+        access for the credential issuer), HOLDER_REQUESTS (IdentityHub and dataspace
+        wallet of the CSP, with the API key of the participant context) or
+        CREDENTIAL_OFFER (own wallet, later; without secret). The response is neither
+        logged nor cached (Cache-Control: no-store).
+      x-permission: read_wallet_holder_access
+      x-permission-scope: osp
+      responses:
+        '200':
+          description: Issuance mode and access
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HolderAccess' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    portalIam:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token of the Portal IAM of the OSP. People: with sub, company_id (if bound to
+        a company) and the permissions. SAP middleware: service account with exactly
+        the permission submit_wallet_callback. Not used for calls in the same process.
+
+  parameters:
+    TechnicalUserId:
+      name: technicalUserId
+      in: path
+      required: true
+      description: ID of the technical user from C2-M3.
+      schema: { type: string, format: uuid }
+    CompanyId:
+      name: companyId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Bpn:
+      name: bpn
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Bpn' }
+    ExternalId:
+      name: externalId
+      in: path
+      required: true
+      description: walletAccountRef that the module passed as externalId with the order.
+      schema: { type: string, format: uuid }
+
+  responses:
+    Problem:
+      description: Error (RFC 9457), identifiers in README section 12
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    Bpn:
+      type: string
+      pattern: '^BPNL[0-9A-Z]{12}$'
+      examples: [BPNL0000000DIV01]
+
+    Did:
+      type: string
+      pattern: '^did:web:[^\s]+$'
+      description: DID of the dataspace wallet, always did:web.
+      examples: ['did:web:ih.example.org:BPNL00000000IH01']
+
+    Provider:
+      type: string
+      description: |
+        Adapter or provider of the dataspace wallet. CSP = dataspace wallet of the CSP;
+        BRING_YOUR_OWN = own wallet (later, OP-29).
+      enum: [SAP_DIV, IDENTITY_HUB, CSP, BRING_YOUR_OWN]
+
+    WalletStatus:
+      type: string
+      description: |
+        REQUESTED = ordered at the provider, callback pending; VALIDATING = DID
+        known, DID document being checked; ACTIVE = done; FAILED = failed, a new
+        attempt is possible through the step.
+      enum: [REQUESTED, VALIDATING, ACTIVE, FAILED]
+
+    WalletFailureReason:
+      type: string
+      enum: [PROVIDER_TIMEOUT, DID_MISMATCH, INVALID_DID_DOCUMENT, DID_NOT_RESOLVABLE]
+
+    WalletAccountStatus:
+      type: string
+      enum: [REQUESTED, ACTIVE, FAILED, DELETING, DELETED]
+
+    WalletAccountFailureReason:
+      type: string
+      enum: [PROVIDER_TIMEOUT, NOT_SUPPORTED_BY_PROVIDER]
+
+    CredentialsState:
+      type: string
+      description: |
+        NONE = no credentials (account not ACTIVE); AVAILABLE = can be retrieved once;
+        RETRIEVED = retrieved and deleted; EXPIRED = deleted after the deadline.
+      enum: [NONE, AVAILABLE, RETRIEVED, EXPIRED]
+
+    IssuanceMode:
+      type: string
+      description: |
+        How credentials get into the wallet. ISSUER_WRITES = the issuer writes with the
+        holder access (SAP DIV); HOLDER_REQUESTS = the wallet requests from the issuer
+        by DCP (IdentityHub, dataspace wallet of the CSP); CREDENTIAL_OFFER = the issuer
+        sends a DCP offer to the credential service (own wallet, later).
+      enum: [ISSUER_WRITES, HOLDER_REQUESTS, CREDENTIAL_OFFER]
+
+    Wallet:
+      type: object
+      description: View of the people of the company on the dataspace wallet; without secrets.
+      required: [companyId, provider, status, supportsWalletAccounts, createdAt]
+      properties:
+        companyId: { type: string, format: uuid }
+        provider: { $ref: '#/components/schemas/Provider' }
+        status: { $ref: '#/components/schemas/WalletStatus' }
+        did: { oneOf: [{ $ref: '#/components/schemas/Did' }, { type: 'null' }] }
+        didDocumentLocation: { type: [string, 'null'], format: uri }
+        credentialServiceUrl:
+          type: [string, 'null']
+          format: uri
+          description: Address of the service CredentialService from the DID document.
+        bdrsUrl:
+          type: [string, 'null']
+          format: uri
+          description: Address of the directory BPN → DID for the configuration of connectors (BDRS_PUBLIC_URL).
+        stsTokenUrl:
+          type: [string, 'null']
+          format: uri
+          description: IdentityHub only; for SAP DIV and CSP the token address is per wallet account.
+        supportsWalletAccounts: { type: boolean }
+        failureReason: { oneOf: [{ $ref: '#/components/schemas/WalletFailureReason' }, { type: 'null' }] }
+        createdAt: { type: string, format: date-time }
+        activatedAt: { type: [string, 'null'], format: date-time }
+
+    WalletInfo:
+      type: object
+      description: View of other modules on the dataspace wallet; without secrets.
+      required: [walletId, companyId, bpn, provider, status, issuanceMode, supportsWalletAccounts]
+      properties:
+        walletId: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        bpn: { $ref: '#/components/schemas/Bpn' }
+        provider: { $ref: '#/components/schemas/Provider' }
+        providerRef:
+          type: [string, 'null']
+          description: Identifier of the wallet at the provider (SAP DIV the BPN, IdentityHub and CSP the participant context); empty for an own wallet.
+        status: { $ref: '#/components/schemas/WalletStatus' }
+        did: { oneOf: [{ $ref: '#/components/schemas/Did' }, { type: 'null' }] }
+        didDocumentLocation: { type: [string, 'null'], format: uri }
+        credentialServiceUrl: { type: [string, 'null'], format: uri }
+        issuanceMode: { $ref: '#/components/schemas/IssuanceMode' }
+        supportsWalletAccounts: { type: boolean }
+        failureReason: { oneOf: [{ $ref: '#/components/schemas/WalletFailureReason' }, { type: 'null' }] }
+        activatedAt: { type: [string, 'null'], format: date-time }
+
+    WalletAccount:
+      type: object
+      description: Wallet account of a technical user; without secrets.
+      required: [walletAccountRef, technicalUserId, companyId, provider, status, credentialsState, createdAt]
+      properties:
+        walletAccountRef: { type: string, format: uuid }
+        technicalUserId: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        provider: { $ref: '#/components/schemas/Provider' }
+        status: { $ref: '#/components/schemas/WalletAccountStatus' }
+        failureReason: { oneOf: [{ $ref: '#/components/schemas/WalletAccountFailureReason' }, { type: 'null' }] }
+        credentialsState: { $ref: '#/components/schemas/CredentialsState' }
+        credentialsExpireAt:
+          type: [string, 'null']
+          format: date-time
+          description: Until when the credentials can be retrieved (only with AVAILABLE).
+        createdAt: { type: string, format: date-time }
+        changedAt: { type: string, format: date-time }
+
+    WalletAccountCredentials:
+      type: object
+      description: Credentials of a wallet account. Only in the response of retrieveWalletAccountCredentials, exactly once.
+      required: [walletAccountRef, tokenUrl, clientId, clientSecret]
+      properties:
+        walletAccountRef: { type: string, format: uuid }
+        tokenUrl:
+          type: string
+          format: uri
+          description: Token address of the STS (SAP DIV authenticationServiceUrl + /oauth/token; IdentityHub IDENTITYHUB_STS_TOKEN_URL; CSP tokenUrl from the wallet API).
+        clientId: { type: string }
+        clientSecret: { type: string, description: Secret of the wallet account. }
+        did: { $ref: '#/components/schemas/Did' }
+        credentialServiceUrl: { type: [string, 'null'], format: uri }
+
+    ControlChallengeRequest:
+      type: object
+      required: [applicationId, did, credentialServiceUrl]
+      properties:
+        applicationId:
+          type: string
+          format: uuid
+          description: Application of the person at C1-M2; the companyId comes from it.
+        did: { $ref: '#/components/schemas/Did' }
+        credentialServiceUrl:
+          type: string
+          format: uri
+          pattern: '^https://'
+          description: Must be listed in the DID document as service CredentialService.
+
+    ControlChallenge:
+      type: object
+      required: [challengeId, companyId, did, nonce, audience, expiresAt, expectedClaims]
+      properties:
+        challengeId: { type: string, format: uuid }
+        companyId:
+          type: string
+          format: uuid
+          description: Future companyId from the application (C1-M2).
+        did: { $ref: '#/components/schemas/Did' }
+        nonce:
+          type: string
+          description: 128 bit random, base64url.
+          examples: [q8Vb2xLr0YkE5mTt3WcZ1g]
+        audience:
+          type: string
+          description: Value for aud in the control proof (CONTROL_PROOF_AUDIENCE).
+        expiresAt: { type: string, format: date-time }
+        expectedClaims:
+          type: object
+          description: Claims that the JWT must contain (iss, sub, aud, nonce, company_id); the company sets iat and exp.
+          additionalProperties: { type: string }
+
+    ControlProofRequest:
+      type: object
+      required: [proof]
+      properties:
+        proof:
+          type: string
+          description: Compact JWS, signed with a key from the DID document (README 6.6 step 2).
+          pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+
+    ControlProof:
+      type: object
+      required: [challengeId, companyId, did, status, verifiedAt]
+      properties:
+        challengeId: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        did: { $ref: '#/components/schemas/Did' }
+        status: { type: string, enum: [VERIFIED] }
+        verifiedAt: { type: string, format: date-time }
+        validUntil:
+          type: string
+          format: date-time
+          description: Until when create-wallet uses the proof (CONTROL_PROOF_MAX_AGE_DAYS).
+
+    SapDivAuthenticationDetails:
+      type: object
+      description: Access as the SAP middleware delivers it today (field name clientID with capital ID).
+      required: [authenticationServiceUrl, clientID, clientSecret]
+      properties:
+        authenticationServiceUrl: { type: string, format: uri }
+        clientID: { type: string }
+        clientSecret: { type: string }
+
+    SapDivWalletCallback:
+      type: object
+      required: [did, didDocument, authenticationDetails]
+      properties:
+        did: { $ref: '#/components/schemas/Did' }
+        didDocument:
+          type: object
+          description: DID document; checked against the schema of Portal 2.6.0 (README 7.6).
+          required: ['@context', id, service, verificationMethod]
+          additionalProperties: true
+        authenticationDetails: { $ref: '#/components/schemas/SapDivAuthenticationDetails' }
+
+    StepRequest:
+      type: object
+      required: [processId, stepRunId]
+      properties:
+        processId:
+          type: string
+          format: uuid
+          description: Flow in Process Orchestration; only for the audit log.
+        stepRunId:
+          type: string
+          format: uuid
+          description: This execution of the step; only for the audit log.
+
+    StepCreateWallet:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [companyId]
+          description: The step reads the BPN and the name at C3-M1 (README 8.1, 11.5).
+          properties:
+            companyId: { type: string, format: uuid }
+            provider:
+              type: string
+              enum: [SAP_DIV, IDENTITY_HUB, CSP]
+              description: Optional. If not given, DEFAULT_PROVIDER. A verified control proof takes precedence (README 6.1, later).
+
+    StepWalletAccount:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [technicalUserId, companyId]
+          properties:
+            technicalUserId: { type: string, format: uuid }
+            companyId: { type: string, format: uuid }
+            walletAccountRef:
+              type: string
+              format: uuid
+              description: Only for delete-wallet-account, optional (from WalletAccessRemovalRequested); must match the current account.
+
+    StepResult:
+      type: object
+      required: [stepRunId, state]
+      properties:
+        stepRunId: { type: string, format: uuid }
+        state:
+          type: string
+          description: RUNNING = the end follows as an event; DONE = was already complete at the time of the call (README 6.9).
+          enum: [DONE, RUNNING]
+
+    StepResultWallet:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          required: [result]
+          properties:
+            result:
+              type: object
+              required: [walletId, companyId, provider, status]
+              properties:
+                walletId: { type: string, format: uuid }
+                companyId: { type: string, format: uuid }
+                provider: { $ref: '#/components/schemas/Provider' }
+                status: { $ref: '#/components/schemas/WalletStatus' }
+                did: { oneOf: [{ $ref: '#/components/schemas/Did' }, { type: 'null' }] }
+                didDocumentLocation: { type: [string, 'null'], format: uri }
+                failureReason: { oneOf: [{ $ref: '#/components/schemas/WalletFailureReason' }, { type: 'null' }] }
+
+    StepResultWalletAccount:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          required: [result]
+          properties:
+            result:
+              type: object
+              required: [technicalUserId, companyId, status]
+              properties:
+                walletAccountRef:
+                  type: [string, 'null']
+                  format: uuid
+                  description: Empty only for delete-wallet-account if there never was an account.
+                technicalUserId: { type: string, format: uuid }
+                companyId: { type: string, format: uuid }
+                provider: { oneOf: [{ $ref: '#/components/schemas/Provider' }, { type: 'null' }] }
+                status: { $ref: '#/components/schemas/WalletAccountStatus' }
+                failureReason: { oneOf: [{ $ref: '#/components/schemas/WalletAccountFailureReason' }, { type: 'null' }] }
+
+    HolderAccess:
+      description: Issuance mode with access (README 9.3). Only for C4-M1.
+      oneOf:
+        - $ref: '#/components/schemas/HolderAccessIssuerWrites'
+        - $ref: '#/components/schemas/HolderAccessHolderRequests'
+        - $ref: '#/components/schemas/HolderAccessCredentialOffer'
+      discriminator:
+        propertyName: issuanceMode
+        mapping:
+          ISSUER_WRITES: '#/components/schemas/HolderAccessIssuerWrites'
+          HOLDER_REQUESTS: '#/components/schemas/HolderAccessHolderRequests'
+          CREDENTIAL_OFFER: '#/components/schemas/HolderAccessCredentialOffer'
+
+    HolderAccessBase:
+      type: object
+      required: [issuanceMode, companyId, bpn, did, provider]
+      properties:
+        issuanceMode: { $ref: '#/components/schemas/IssuanceMode' }
+        companyId: { type: string, format: uuid }
+        bpn: { $ref: '#/components/schemas/Bpn' }
+        did: { $ref: '#/components/schemas/Did' }
+        provider: { $ref: '#/components/schemas/Provider' }
+
+    HolderAccessIssuerWrites:
+      allOf:
+        - $ref: '#/components/schemas/HolderAccessBase'
+        - type: object
+          required: [holder, walletUrl, clientId, clientSecret]
+          description: Holder access (SAP DIV); field names as today in TechnicalUserDetails of the credential issuer.
+          properties:
+            issuanceMode: { const: ISSUER_WRITES }
+            holder:
+              type: string
+              format: uri
+              description: DID document location, as passed today as holder to the credential issuer.
+            walletUrl: { type: string, format: uri, description: authenticationServiceUrl from the wallet callback of SAP DIV. }
+            clientId: { type: string }
+            clientSecret: { type: string, description: Secret. }
+
+    HolderAccessHolderRequests:
+      allOf:
+        - $ref: '#/components/schemas/HolderAccessBase'
+        - type: object
+          required: [identityApiUrl, participantContextId, apiKey]
+          description: Holder access (IdentityHub, dataspace wallet of the CSP); the same form for both.
+          properties:
+            issuanceMode: { const: HOLDER_REQUESTS }
+            identityApiUrl: { type: string, format: uri, description: Base of the Identity API of the IdentityHub or of the dataspace wallet of the CSP. }
+            participantContextId: { type: string, description: Identifier of the participant context (IdentityHub the BPN; CSP assigned by the CSP). }
+            apiKey: { type: string, description: API key of the participant context. Secret. }
+            credentialServiceUrl: { type: string, format: uri }
+
+    HolderAccessCredentialOffer:
+      allOf:
+        - $ref: '#/components/schemas/HolderAccessBase'
+        - type: object
+          required: [credentialServiceUrl]
+          description: Own wallet (later); without secret.
+          properties:
+            issuanceMode: { const: CREDENTIAL_OFFER }
+            credentialServiceUrl: { type: string, format: uri }
+
+    EventBase:
+      type: object
+      required: [eventId, eventType, occurredAt]
+      description: Common fields of all events. Events never contain secrets.
+      properties:
+        eventId: { type: string, format: uuid }
+        eventType: { type: string }
+        occurredAt: { type: string, format: date-time }
+
+    EventDataspaceWalletCreated:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [companyId, did, walletId, provider, didDocumentLocation, bpn]
+          description: Afterwards C3-M2 register-did enters the DID in the directory BPN → DID.
+          properties:
+            eventType: { const: DataspaceWalletCreated }
+            companyId: { type: string, format: uuid }
+            did: { $ref: '#/components/schemas/Did' }
+            walletId: { type: string, format: uuid }
+            provider: { $ref: '#/components/schemas/Provider' }
+            didDocumentLocation: { type: string, format: uri }
+            bpn: { $ref: '#/components/schemas/Bpn' }
+
+    EventDataspaceWalletFailed:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [companyId, walletId, provider, reason]
+          properties:
+            eventType: { const: DataspaceWalletFailed }
+            companyId: { type: string, format: uuid }
+            walletId: { type: string, format: uuid }
+            provider: { $ref: '#/components/schemas/Provider' }
+            reason: { $ref: '#/components/schemas/WalletFailureReason' }
+
+    EventWalletAccountFields:
+      type: object
+      required: [technicalUserId, companyId, walletAccountRef]
+      properties:
+        technicalUserId: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        walletAccountRef: { type: string, format: uuid }
+
+    EventWalletAccountCreated:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - $ref: '#/components/schemas/EventWalletAccountFields'
+        - type: object
+          required: [provider]
+          properties:
+            eventType: { const: WalletAccountCreated }
+            provider: { $ref: '#/components/schemas/Provider' }
+
+    EventWalletAccountFailed:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - $ref: '#/components/schemas/EventWalletAccountFields'
+        - type: object
+          required: [reason]
+          properties:
+            eventType: { const: WalletAccountFailed }
+            reason: { $ref: '#/components/schemas/WalletAccountFailureReason' }
+
+    EventWalletAccountDeleted:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - $ref: '#/components/schemas/EventWalletAccountFields'
+        - type: object
+          properties:
+            eventType: { const: WalletAccountDeleted }
+
+    EventWalletAccountDeletionFailed:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - $ref: '#/components/schemas/EventWalletAccountFields'
+        - type: object
+          required: [reason]
+          properties:
+            eventType: { const: WalletAccountDeletionFailed }
+            reason: { type: string, enum: [PROVIDER_TIMEOUT] }
+
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          description: Identifier, e.g. urn:c4-m2:problem:wallet-not-active (list in README section 12).
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        retryable:
+          type: boolean
+          description: Steps only. true = temporary, repeating makes sense; false = final (FRAMEWORK 4.4).

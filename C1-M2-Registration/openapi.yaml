@@ -1,6 +1,1567 @@
 openapi: 3.1.0
 info:
   title: C1-M2 Registration
-  version: 0.0.0
-  description: To be specified.
-paths: {}
+  version: 0.2.0
+  description: |
+    Application of a company at the OSP, filed by the applicant personally:
+    company data, verification attestation of the EBW-Connector or supporting
+    documents, company roles, consents, submission, withdrawal. Application kinds
+    ONBOARDING, REACTIVATION, TRANSFER. Behaviour in README.md.
+
+    - People call over HTTP with their token from the Portal IAM of the OSP.
+      The required permission is given per operation in `x-permission`, the
+      scope in `x-permission-scope` (`own`, `osp`; FRAMEWORK 4.3).
+    - Process Orchestration and other modules call steps (`/steps/...`) and
+      queries (`/internal/...`) in the same process; the HTTP paths
+      describe the same contract.
+    - Errors as Problem Details (RFC 9457), identifiers in README section 12.
+    - Events of the module under `components/schemas` (names start with
+      `Event`), see README section 10.
+servers:
+  - url: /api/c1-m2
+security:
+  - portalIam: []
+tags:
+  - name: Company
+    description: Calls by people of a company; here the applicant (scope own)
+  - name: OSP
+    description: Tasks of OSP staff (scope osp)
+  - name: Queries
+    description: For other modules
+  - name: Steps
+    description: For Process Orchestration
+
+paths:
+  /countries:
+    get:
+      tags: [Company]
+      operationId: listCountries
+      summary: Countries
+      description: All countries of the shared reference data, sorted by code (README 7.1). No object reference.
+      x-permission: register_company
+      x-permission-scope: own
+      parameters:
+        - $ref: '#/components/parameters/Lang'
+      responses:
+        '200':
+          description: Countries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Country' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /countries/{countryCode}/identifier-types:
+    parameters:
+      - $ref: '#/components/parameters/CountryCodePath'
+    get:
+      tags: [Company]
+      operationId: listIdentifierTypes
+      summary: Identifier types of a country
+      description: Allowed identifier types with name and regular expression (README 6.6, 7.1).
+      x-permission: register_company
+      x-permission-scope: own
+      parameters:
+        - $ref: '#/components/parameters/Lang'
+      responses:
+        '200':
+          description: Identifier types
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/IdentifierTypeInfo' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /company-roles:
+    get:
+      tags: [Company]
+      operationId: listCompanyRoles
+      summary: Selectable company roles
+      description: Roles with `selectable = true`, with the keys of their terms (README 6.7, 7.1).
+      x-permission: register_company
+      x-permission-scope: own
+      parameters:
+        - $ref: '#/components/parameters/Lang'
+      responses:
+        '200':
+          description: Company roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CompanyRoleInfo' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /agreements:
+    get:
+      tags: [Company]
+      operationId: listAgreements
+      summary: Required terms for company roles
+      description: |
+        Active terms with `scope` ALL and those of the given roles, each in the
+        active version, with party and one document per language (README 6.8, 7.1).
+        Without `companyRole` only those with `scope` ALL.
+      x-permission: register_company
+      x-permission-scope: own
+      parameters:
+        - name: companyRole
+          in: query
+          description: May be repeated.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/CompanyRole' }
+          style: form
+          explode: true
+        - $ref: '#/components/parameters/Lang'
+      responses:
+        '200':
+          description: Required terms
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Agreement' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /applications:
+    post:
+      tags: [Company]
+      operationId: createApplication
+      summary: Create application
+      description: |
+        README 7.2. Only with an account without a company (no `company_id` in the token).
+        Checks the verification attestation (verification path EBW) including the
+        binding to the signed-in person, assigns the `companyId` or takes over that of
+        an existing company (REACTIVATION, return), compares the company data. At
+        most one open application per person; repetition with the same verification
+        attestation: 200 with the existing application.
+      x-permission: register_company
+      x-permission-scope: own
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApplicationCreate' }
+      responses:
+        '201':
+          description: Created; event ApplicationCreated
+          headers:
+            Location:
+              description: Path of the application
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '200':
+          description: Repetition; existing application, nothing changed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+    get:
+      tags: [Company]
+      operationId: listApplications
+      summary: Own applications
+      description: README 7.3. Only applications of the calling person, sorted by createdAt descending.
+      x-permission: register_company
+      x-permission-scope: own
+      parameters:
+        - $ref: '#/components/parameters/StatusFilter'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Page of applications
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /applications/{applicationId}:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationIdPath'
+    get:
+      tags: [Company]
+      operationId: getApplication
+      summary: Read own application
+      description: README 7.4. With `reviewStatus` from C1-M3. The application of another person gives 404.
+      x-permission: register_company
+      x-permission-scope: own
+      responses:
+        '200':
+          description: The application
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationWithReview' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    patch:
+      tags: [Company]
+      operationId: updateApplication
+      summary: Change application
+      description: |
+        README 7.5. Only in status CREATED. Given fields replace, missing ones stay.
+        New comparison with the verification attestation.
+      x-permission: register_company
+      x-permission-scope: own
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApplicationUpdate' }
+      responses:
+        '200':
+          description: Changed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /applications/{applicationId}/attestation:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationIdPath'
+    put:
+      tags: [Company]
+      operationId: replaceAttestation
+      summary: Replace verification attestation
+      description: |
+        README 7.6. Only in status CREATED and in the verification path EBW. The new
+        verification attestation must concern the same company (EBWOID, country, EUID)
+        and the same person.
+      x-permission: register_company
+      x-permission-scope: own
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttestationInput' }
+      responses:
+        '200':
+          description: Replaced or unchanged (same jti)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /applications/{applicationId}/documents:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationIdPath'
+    post:
+      tags: [Company]
+      operationId: uploadDocument
+      summary: Upload supporting document
+      description: |
+        README 7.7. Only in status CREATED and in the verification path DOCUMENTS. PDF,
+        PNG or JPEG, checked by the first bytes; at most DOCUMENT_MAX_BYTES per
+        supporting document and DOCUMENT_MAX_COUNT per application.
+      x-permission: register_company
+      x-permission-scope: own
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, documentType]
+              properties:
+                file:
+                  type: string
+                  contentMediaType: application/octet-stream
+                  description: Content of the supporting document with file name.
+                documentType: { $ref: '#/components/schemas/DocumentType' }
+            encoding:
+              file:
+                contentType: application/pdf, image/png, image/jpeg
+      responses:
+        '201':
+          description: Uploaded
+          headers:
+            Location:
+              description: Path of the supporting document
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentInfo' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /applications/{applicationId}/documents/{documentId}:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationIdPath'
+      - $ref: '#/components/parameters/DocumentIdPath'
+    get:
+      tags: [Company]
+      operationId: getDocument
+      summary: Read own supporting document
+      description: README 7.8. Content with Content-Disposition attachment.
+      x-permission: register_company
+      x-permission-scope: own
+      responses:
+        '200': { $ref: '#/components/responses/DocumentContent' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [Company]
+      operationId: deleteDocument
+      summary: Delete supporting document
+      description: README 7.9. Only in status CREATED.
+      x-permission: register_company
+      x-permission-scope: own
+      responses:
+        '204':
+          description: Deleted
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /applications/{applicationId}/submit:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationIdPath'
+    post:
+      tags: [Company]
+      operationId: submitApplication
+      summary: Submit application
+      description: |
+        README 7.10. With the consents of the person to all required terms (with the
+        language of the document read); in the verification path DOCUMENTS with the
+        declaration of representation. Repeated submission of a submitted application:
+        200, nothing changed. Event ApplicationSubmitted with applicantSub.
+      x-permission: register_company
+      x-permission-scope: own
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubmitRequest' }
+      responses:
+        '200':
+          description: Submitted; event ApplicationSubmitted on the transition
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /applications/{applicationId}/withdraw:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationIdPath'
+    post:
+      tags: [Company]
+      operationId: withdrawApplication
+      summary: Withdraw application
+      description: |
+        README 6.10, 7.11. In CREATED or SUBMITTED, as long as the review case in C1-M3
+        is not decided. From SUBMITTED event ApplicationWithdrawn. Repeated
+        withdrawal: 200, nothing changed.
+      x-permission: register_company
+      x-permission-scope: own
+      responses:
+        '200':
+          description: Withdrawn
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /osp/applications:
+    get:
+      tags: [OSP]
+      operationId: listAllApplications
+      summary: All applications of the installation
+      description: README 7.12. Sorted by createdAt descending.
+      x-permission: view_applications
+      x-permission-scope: osp
+      parameters:
+        - $ref: '#/components/parameters/StatusFilter'
+        - name: kind
+          in: query
+          description: May be repeated.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/ApplicationKind' }
+          style: form
+          explode: true
+        - name: verification
+          in: query
+          description: May be repeated.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/Verification' }
+          style: form
+          explode: true
+        - name: companyId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Page of applications
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /osp/applications/{applicationId}:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationIdPath'
+    get:
+      tags: [OSP]
+      operationId: getAnyApplication
+      summary: Read one application
+      description: README 7.13. In any status, with `reviewStatus`.
+      x-permission: view_applications
+      x-permission-scope: osp
+      responses:
+        '200':
+          description: The application
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationWithReview' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /osp/applications/{applicationId}/documents/{documentId}:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationIdPath'
+      - $ref: '#/components/parameters/DocumentIdPath'
+    get:
+      tags: [OSP]
+      operationId: getAnyDocument
+      summary: Read supporting document of an application
+      description: README 7.14. Every retrieval is recorded in the audit log.
+      x-permission: view_applications
+      x-permission-scope: osp
+      responses:
+        '200': { $ref: '#/components/responses/DocumentContent' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /osp/agreements:
+    get:
+      tags: [OSP]
+      operationId: listAgreementVersions
+      summary: Versions of the terms
+      description: README 7.15. All versions, including inactive ones.
+      x-permission: manage_agreements
+      x-permission-scope: osp
+      parameters:
+        - name: agreementKey
+          in: query
+          schema: { $ref: '#/components/schemas/AgreementKey' }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/AgreementStatus' }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Page of versions
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgreementVersionPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [OSP]
+      operationId: createAgreementVersion
+      summary: Create a new version of terms
+      description: |
+        README 6.8, 7.16. The new version becomes active, the previous active version
+        of the same key INACTIVE. Event AgreementVersionActivated.
+      x-permission: manage_agreements
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgreementVersionCreate' }
+      responses:
+        '201':
+          description: Created and active
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgreementVersion' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /steps/complete-application:
+    post:
+      tags: [Steps]
+      operationId: stepCompleteApplication
+      summary: 'Step: complete application'
+      description: |
+        README 8.1. Precondition: application SUBMITTED. SUBMITTED becomes COMPLETED,
+        event ApplicationCompleted. COMPLETED stays (repetition).
+      x-permission: execute_steps_c1_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepApplicationRef' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultApplication' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /steps/close-application:
+    post:
+      tags: [Steps]
+      operationId: stepCloseApplication
+      summary: 'Step: close application after decline'
+      description: |
+        README 8.2. Precondition: application SUBMITTED. SUBMITTED becomes DECLINED with
+        reason. DECLINED stays (repetition); WITHDRAWN stays (already ended).
+        No event.
+      x-permission: execute_steps_c1_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepCloseApplication' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultApplication' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /internal/applications/{applicationId}:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationIdPath'
+    get:
+      tags: [Queries]
+      operationId: getApplicationInternal
+      summary: Application with verification attestation, comparison, supporting documents and consents
+      description: |
+        README 9.1. For C1-M3 and C3-M1. Checks the signature of the stored
+        verification attestation again on every query (`signatureCheck`). The query
+        does not return the JWT itself or the content of supporting documents.
+      x-permission: query_c1_m2
+      x-permission-scope: osp
+      responses:
+        '200':
+          description: The application
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationInternal' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /internal/applications:
+    get:
+      tags: [Queries]
+      operationId: listApplicationsInternal
+      summary: Short form of several applications
+      description: README 9.2. Order as in the request; unknown IDs are missing.
+      x-permission: query_c1_m2
+      x-permission-scope: osp
+      parameters:
+        - name: applicationId
+          in: query
+          required: true
+          description: 1 to 100 times.
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 100
+            items: { type: string, format: uuid }
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: Applications found
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ApplicationSummary' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /internal/agreements:
+    get:
+      tags: [Queries]
+      operationId: listAgreementsInternal
+      summary: Terms with versions
+      description: README 9.3. For C3-M1 (re-consent of existing companies, OP-11).
+      x-permission: query_c1_m2
+      x-permission-scope: osp
+      parameters:
+        - name: status
+          in: query
+          description: Default ACTIVE.
+          schema: { $ref: '#/components/schemas/AgreementStatus' }
+      responses:
+        '200':
+          description: Versions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AgreementVersion' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    portalIam:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token of a person from the Portal IAM of the OSP (sign-in with the EUDI Wallet
+        through the EBW-Connector). Contains `sub`, `given_name`, `family_name`,
+        `company_id` (only for a bound account) and the permissions under
+        `resource_access.portal-core.roles`. Steps and queries over HTTP: token
+        of a service account with `execute_steps_c1_m2` or `query_c1_m2`.
+
+  parameters:
+    ApplicationIdPath:
+      name: applicationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DocumentIdPath:
+      name: documentId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CountryCodePath:
+      name: countryCode
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/CountryCode' }
+    Lang:
+      name: lang
+      in: query
+      description: Language for names, titles and descriptions.
+      schema: { $ref: '#/components/schemas/Language' }
+    StatusFilter:
+      name: status
+      in: query
+      description: May be repeated.
+      schema:
+        type: array
+        items: { $ref: '#/components/schemas/ApplicationStatus' }
+      style: form
+      explode: true
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    Problem:
+      description: Error (RFC 9457), identifiers in README section 12
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    DocumentContent:
+      description: Content of the supporting document
+      headers:
+        Content-Disposition:
+          description: attachment with the stored file name
+          schema: { type: string }
+        X-Content-Type-Options:
+          description: always nosniff
+          schema: { type: string, const: nosniff }
+      content:
+        application/pdf:
+          schema: { type: string, contentMediaType: application/pdf }
+        image/png:
+          schema: { type: string, contentMediaType: image/png }
+        image/jpeg:
+          schema: { type: string, contentMediaType: image/jpeg }
+
+  schemas:
+    Language:
+      type: string
+      enum: [de, en]
+      default: en
+
+    CountryCode:
+      type: string
+      pattern: '^[A-Z]{2}$'
+      description: ISO 3166-1 alpha-2.
+      examples: [DE]
+
+    Bpn:
+      type: string
+      pattern: '^BPNL[A-Z0-9]{12}$'
+      description: Company identifier (BPN), assigned by the CSP.
+      examples: [BPNL00000000003C]
+
+    ApplicationKind:
+      type: string
+      enum: [ONBOARDING, REACTIVATION, TRANSFER]
+      description: |
+        ONBOARDING = new company; REACTIVATION = deactivated company of this
+        installation; TRANSFER = transfer from another OSP (with reference: return).
+        README 6.2.
+
+    Verification:
+      type: string
+      enum: [EBW, DOCUMENTS]
+      description: EBW = with Business Wallet and verification attestation; DOCUMENTS = without Business Wallet, with supporting documents (README 6.9).
+
+    ApplicationStatus:
+      type: string
+      enum: [CREATED, SUBMITTED, WITHDRAWN, DECLINED, COMPLETED]
+      description: |
+        CREATED = created, changeable; SUBMITTED = submitted, fixed; WITHDRAWN =
+        withdrawn (final); DECLINED = declined (final); COMPLETED =
+        completed, company active (final).
+
+    ReviewStatus:
+      type: string
+      enum: [NONE, OPEN, AWAITING_SECOND_APPROVAL, APPROVED, DECLINED, CLOSED, UNKNOWN]
+      description: |
+        Status of the review case in C1-M3 (README 7.4). NONE = no review case; UNKNOWN =
+        C1-M3 not reachable.
+
+    IdentifierType:
+      type: string
+      enum: [EUID, EBWOID, COMMERCIAL_REG_NUMBER, VAT_ID, LEI_CODE, EORI]
+      description: |
+        EUID = European Unique Identifier (commercial register); EBWOID = identifier from the
+        Business Wallet (LPID); COMMERCIAL_REG_NUMBER = commercial register number;
+        VAT_ID = VAT identification number; LEI_CODE = Legal Entity
+        Identifier; EORI = EORI number.
+
+    CompanyRole:
+      type: string
+      pattern: '^[A-Z_]{1,50}$'
+      description: Company role from the catalogue. Those with selectable = true are selectable.
+      examples: [ACTIVE_PARTICIPANT, APP_PROVIDER, SERVICE_PROVIDER]
+
+    Identifier:
+      type: object
+      required: [type, value]
+      properties:
+        type: { $ref: '#/components/schemas/IdentifierType' }
+        value: { type: string, minLength: 1, maxLength: 200 }
+
+    IdentifierWithSource:
+      allOf:
+        - $ref: '#/components/schemas/Identifier'
+        - type: object
+          required: [source]
+          properties:
+            source:
+              type: string
+              enum: [ATTESTATION, APPLICANT]
+              description: ATTESTATION = from the verification attestation; APPLICANT = given by the person.
+
+    Address:
+      type: object
+      required: [streetName, city, countryCode]
+      properties:
+        streetName: { type: string, minLength: 1, maxLength: 150 }
+        streetNumber: { type: [string, 'null'], maxLength: 20 }
+        postalCode: { type: [string, 'null'], maxLength: 20 }
+        city: { type: string, minLength: 1, maxLength: 150 }
+        region:
+          type: [string, 'null']
+          pattern: '^[A-Z0-9]{1,3}$'
+          description: Code of the region according to ISO 3166-2 without the country part, e.g. BW.
+        countryCode: { $ref: '#/components/schemas/CountryCode' }
+
+    LegalName:
+      type: string
+      minLength: 1
+      maxLength: 160
+      pattern: '^\S(.*\S)?$'
+      description: Without whitespace at the start and end.
+      examples: ['Beispiel Maschinenbau GmbH']
+
+    CompanyDataInput:
+      type: object
+      description: |
+        Verification path EBW: all fields optional; the module takes missing fields
+        from the verification attestation (README 6.5); a differing EBWOID or EUID gives
+        400 attestation-mismatch. Verification path DOCUMENTS: legalName, address and
+        at least one identifier required, EBWOID not allowed (README 6.9).
+      properties:
+        legalName: { $ref: '#/components/schemas/LegalName' }
+        shortName: { type: string, minLength: 1, maxLength: 60 }
+        address: { $ref: '#/components/schemas/Address' }
+        identifiers:
+          type: array
+          maxItems: 10
+          description: At most one identifier per type.
+          items: { $ref: '#/components/schemas/Identifier' }
+
+    CompanyData:
+      type: object
+      required: [legalName, address, identifiers]
+      properties:
+        legalName: { $ref: '#/components/schemas/LegalName' }
+        shortName: { type: [string, 'null'] }
+        address: { $ref: '#/components/schemas/Address' }
+        identifiers:
+          type: array
+          items: { $ref: '#/components/schemas/IdentifierWithSource' }
+
+    Attestation:
+      type: string
+      maxLength: 16384
+      pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+      description: Verification attestation of the EBW-Connector as JWS in compact serialisation (README 6.4).
+
+    ApplicationCreate:
+      type: object
+      required: [kind, verification]
+      description: |
+        README 6.2, 7.2. `attestation` required for EBW, forbidden for DOCUMENTS.
+        Reference (`companyId` or `bpn`, not both): required for REACTIVATION,
+        optional for TRANSFER (return), forbidden for ONBOARDING. `companyRoles`
+        required without reference; with reference, if not given, from C3-M1.
+      properties:
+        kind: { $ref: '#/components/schemas/ApplicationKind' }
+        verification: { $ref: '#/components/schemas/Verification' }
+        attestation: { $ref: '#/components/schemas/Attestation' }
+        companyId:
+          type: string
+          format: uuid
+          description: Reference to an existing company.
+        bpn: { $ref: '#/components/schemas/Bpn' }
+        companyData: { $ref: '#/components/schemas/CompanyDataInput' }
+        companyRoles:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/CompanyRole' }
+      not:
+        required: [companyId, bpn]
+      allOf:
+        - if:
+            properties: { verification: { const: EBW } }
+          then:
+            required: [attestation]
+        - if:
+            properties: { verification: { const: DOCUMENTS } }
+          then:
+            required: [companyData]
+            not: { required: [attestation] }
+        - if:
+            properties: { kind: { const: ONBOARDING } }
+          then:
+            required: [companyRoles]
+            properties:
+              companyId: false
+              bpn: false
+
+    ApplicationUpdate:
+      type: object
+      minProperties: 1
+      description: |
+        Given fields replace, missing ones stay. `identifiers` is the complete
+        list of identifiers with source APPLICANT.
+      properties:
+        legalName: { $ref: '#/components/schemas/LegalName' }
+        shortName: { type: [string, 'null'], maxLength: 60 }
+        address: { $ref: '#/components/schemas/Address' }
+        identifiers:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/Identifier' }
+        companyRoles:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/CompanyRole' }
+
+    AttestationInput:
+      type: object
+      required: [attestation]
+      properties:
+        attestation: { $ref: '#/components/schemas/Attestation' }
+
+    DocumentType:
+      type: string
+      enum: [COMMERCIAL_REGISTER_EXTRACT, POWER_OF_ATTORNEY, OTHER]
+      description: |
+        COMMERCIAL_REGISTER_EXTRACT = commercial register extract (required at submission);
+        POWER_OF_ATTORNEY = power of attorney or proof of signing authority;
+        OTHER = further supporting document (README 6.9).
+
+    DocumentInfo:
+      type: object
+      required: [documentId, documentType, fileName, contentType, sizeBytes, sha256, uploadedAt]
+      description: Metadata of a supporting document, without content.
+      properties:
+        documentId: { type: string, format: uuid }
+        documentType: { $ref: '#/components/schemas/DocumentType' }
+        fileName: { type: string, minLength: 1, maxLength: 200 }
+        contentType:
+          type: string
+          enum: [application/pdf, image/png, image/jpeg]
+        sizeBytes: { type: integer, minimum: 1 }
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        uploadedAt: { type: string, format: date-time }
+
+    ConsentInput:
+      type: object
+      required: [agreementKey, version, language]
+      properties:
+        agreementKey: { $ref: '#/components/schemas/AgreementKey' }
+        version: { type: string, minLength: 1, maxLength: 20 }
+        language:
+          $ref: '#/components/schemas/Language'
+          description: Language of the document the person read.
+
+    SubmitRequest:
+      type: object
+      required: [consents]
+      properties:
+        consents:
+          type: array
+          minItems: 1
+          description: One consent per required terms document, in the active version.
+          items: { $ref: '#/components/schemas/ConsentInput' }
+        representationDeclared:
+          type: boolean
+          description: Only verification path DOCUMENTS, required true there; declaration of the person that they may represent the company.
+
+    Consent:
+      type: object
+      required: [agreementKey, version, language, givenAt]
+      properties:
+        agreementKey: { $ref: '#/components/schemas/AgreementKey' }
+        version: { type: string }
+        language: { $ref: '#/components/schemas/Language' }
+        givenAt: { type: string, format: date-time }
+
+    AgreementRef:
+      type: object
+      required: [agreementKey, version]
+      properties:
+        agreementKey: { $ref: '#/components/schemas/AgreementKey' }
+        version: { type: string }
+
+    AgreementKey:
+      type: string
+      pattern: '^[a-z0-9-]{1,64}$'
+      examples: [osp-terms, terms-active-participant]
+
+    AgreementParty:
+      type: string
+      enum: [OSP, DATASPACE]
+      description: OSP = terms of the OSP; DATASPACE = terms of the dataspace.
+
+    AgreementScope:
+      type: string
+      enum: [ALL, COMPANY_ROLE]
+      description: ALL = applies to every application; COMPANY_ROLE = applies to the assigned roles.
+
+    AgreementStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
+
+    DocumentUrls:
+      type: object
+      minProperties: 1
+      description: One document per language, at least one.
+      properties:
+        de: { type: string, format: uri }
+        en: { type: string, format: uri }
+      additionalProperties: false
+
+    LocalizedText:
+      type: object
+      required: [de, en]
+      properties:
+        de: { type: string, minLength: 1, maxLength: 200 }
+        en: { type: string, minLength: 1, maxLength: 200 }
+
+    Applicant:
+      type: object
+      required: [sub, givenName, familyName]
+      description: Applicant, from the token at creation.
+      properties:
+        sub:
+          type: string
+          description: Identifier of the person in the Portal IAM (pseudonymous).
+        givenName: { type: string }
+        familyName: { type: string }
+
+    PersonExtract:
+      type: object
+      required: [givenName, familyName]
+      description: Extract of the representative from the verification attestation.
+      properties:
+        givenName: { type: string }
+        familyName: { type: string }
+
+    Representation:
+      type: object
+      required: [confirmed]
+      description: Claim representation of the verification attestation (C5-M1 6.5); only confirmed is evaluated.
+      properties:
+        confirmed:
+          type: boolean
+          description: true if the EBW-Connector confirmed the representation.
+        result:
+          type: string
+          enum: [CONFIRMED, NOT_CONFIRMED]
+        type:
+          type: [string, 'null']
+          description: Kind of representation, e.g. legal_representative.
+        role:
+          type: [string, 'null']
+          description: Function, e.g. Geschäftsführerin.
+        validUntil: { type: [string, 'null'], format: date }
+        issuer: { type: [string, 'null'] }
+        trust:
+          type: [string, 'null']
+          description: Rule through which the issuer of the mandate was trusted.
+        reasons:
+          type: array
+          description: Reasons for NOT_CONFIRMED, e.g. COMPANY_MISMATCH.
+          items: { type: string }
+
+    Evidence:
+      type: object
+      required: [type, vct, issuer, wallet, statusChecked]
+      properties:
+        type:
+          type: string
+          enum: [PID, LPID, MANDATE]
+        vct: { type: string }
+        issuer: { type: string }
+        wallet:
+          type: string
+          enum: [EUDI_WALLET, BUSINESS_WALLET]
+        statusChecked: { type: boolean }
+
+    AttestationSummary:
+      type: object
+      required: [attestationId, issuer, issuedAt, expiresAt, person, representation]
+      description: Extract of the current verification attestation, without the JWT.
+      properties:
+        attestationId:
+          type: string
+          description: jti, identifier of the verification.
+        issuer: { type: string }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        verifiedAt: { type: string, format: date-time }
+        person: { $ref: '#/components/schemas/PersonExtract' }
+        representation: { $ref: '#/components/schemas/Representation' }
+
+    AttestedCompany:
+      type: object
+      required: [legalName, ebwoid, countryCode]
+      description: Data of the company from the verification attestation (claim company).
+      properties:
+        legalName: { type: string }
+        ebwoid: { type: string }
+        euid: { type: [string, 'null'] }
+        countryCode: { $ref: '#/components/schemas/CountryCode' }
+        address:
+          type: [object, 'null']
+          properties:
+            streetAddress: { type: [string, 'null'] }
+            postalCode: { type: [string, 'null'] }
+            locality: { type: [string, 'null'] }
+            country: { type: [string, 'null'] }
+
+    SignatureCheck:
+      type: object
+      required: [result, checkedAt]
+      description: Repeated check of the signature at the query (README 9.1).
+      properties:
+        result:
+          type: string
+          enum: [VALID, INVALID, UNAVAILABLE]
+          description: |
+            VALID = issuer recognised, signature valid; INVALID = issuer no longer
+            recognised or key no longer in the JWKS; UNAVAILABLE = JWKS cannot be fetched.
+        checkedAt: { type: string, format: date-time }
+
+    AttestationDetail:
+      allOf:
+        - $ref: '#/components/schemas/AttestationSummary'
+        - type: object
+          required: [keyId, clientId, company, evidence, signatureCheck]
+          properties:
+            keyId: { type: string }
+            clientId: { type: string }
+            company: { $ref: '#/components/schemas/AttestedCompany' }
+            evidence:
+              type: array
+              items: { $ref: '#/components/schemas/Evidence' }
+            signatureCheck: { $ref: '#/components/schemas/SignatureCheck' }
+
+    ComparisonEntry:
+      type: object
+      required: [field, result]
+      properties:
+        field:
+          type: string
+          enum: [EBWOID, EUID, COUNTRY, LEGAL_NAME, STREET, POSTAL_CODE, CITY]
+        result:
+          type: string
+          enum: [FROM_ATTESTATION, MATCH, MISMATCH, NOT_IN_ATTESTATION]
+          description: |
+            FROM_ATTESTATION = taken from the verification attestation; MATCH = value of
+            the person matches; MISMATCH = value of the person differs;
+            NOT_IN_ATTESTATION = claim missing, value of the person not proven.
+
+    Application:
+      type: object
+      required: [id, companyId, kind, existingCompany, verification, applicant, status, companyData, companyRoles, comparison, documents, consents, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId:
+          type: string
+          format: uuid
+          description: Future or existing company ID.
+        kind: { $ref: '#/components/schemas/ApplicationKind' }
+        existingCompany:
+          type: boolean
+          description: true if companyId is an existing company (REACTIVATION, return).
+        verification: { $ref: '#/components/schemas/Verification' }
+        applicant: { $ref: '#/components/schemas/Applicant' }
+        status: { $ref: '#/components/schemas/ApplicationStatus' }
+        companyData: { $ref: '#/components/schemas/CompanyData' }
+        companyRoles:
+          type: array
+          items: { $ref: '#/components/schemas/CompanyRole' }
+        attestation:
+          description: Only in the verification path EBW.
+          oneOf:
+            - $ref: '#/components/schemas/AttestationSummary'
+            - type: 'null'
+        comparison:
+          type: array
+          description: Empty in the verification path DOCUMENTS.
+          items: { $ref: '#/components/schemas/ComparisonEntry' }
+        documents:
+          type: array
+          description: Supporting documents (metadata only); empty in the verification path EBW.
+          items: { $ref: '#/components/schemas/DocumentInfo' }
+        representationDeclared:
+          type: [boolean, 'null']
+          description: Only verification path DOCUMENTS, set at submission.
+        consents:
+          type: array
+          description: Empty until submission.
+          items: { $ref: '#/components/schemas/Consent' }
+        declineReason: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        changedAt: { type: string, format: date-time }
+        submittedAt: { type: [string, 'null'], format: date-time }
+        withdrawnAt: { type: [string, 'null'], format: date-time }
+        closedAt: { type: [string, 'null'], format: date-time }
+        completedAt: { type: [string, 'null'], format: date-time }
+
+    ApplicationWithReview:
+      allOf:
+        - $ref: '#/components/schemas/Application'
+        - type: object
+          required: [reviewStatus]
+          properties:
+            reviewStatus: { $ref: '#/components/schemas/ReviewStatus' }
+
+    ApplicationInternal:
+      allOf:
+        - $ref: '#/components/schemas/Application'
+        - type: object
+          required: [requiredAgreements]
+          properties:
+            attestation:
+              oneOf:
+                - $ref: '#/components/schemas/AttestationDetail'
+                - type: 'null'
+            requiredAgreements:
+              type: array
+              description: Required terms recorded at submission; empty before.
+              items: { $ref: '#/components/schemas/AgreementRef' }
+
+    ApplicationSummary:
+      type: object
+      required: [id, companyId, kind, existingCompany, verification, status, legalName, countryCode, companyRoles, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/ApplicationKind' }
+        existingCompany: { type: boolean }
+        verification: { $ref: '#/components/schemas/Verification' }
+        status: { $ref: '#/components/schemas/ApplicationStatus' }
+        legalName: { type: string }
+        countryCode: { $ref: '#/components/schemas/CountryCode' }
+        companyRoles:
+          type: array
+          items: { $ref: '#/components/schemas/CompanyRole' }
+        createdAt: { type: string, format: date-time }
+        submittedAt: { type: [string, 'null'], format: date-time }
+
+    ApplicationPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ApplicationSummary' }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+
+    Country:
+      type: object
+      required: [code, name]
+      properties:
+        code: { $ref: '#/components/schemas/CountryCode' }
+        name: { type: string }
+
+    IdentifierTypeInfo:
+      type: object
+      required: [type, name, pattern]
+      properties:
+        type: { $ref: '#/components/schemas/IdentifierType' }
+        name: { type: string }
+        pattern:
+          type: string
+          description: Regular expression for this country, otherwise the worldwide one.
+
+    CompanyRoleInfo:
+      type: object
+      required: [role, name, description, agreementKeys]
+      properties:
+        role: { $ref: '#/components/schemas/CompanyRole' }
+        name: { type: string }
+        description: { type: string }
+        agreementKeys:
+          type: array
+          description: Terms of this role (without those with scope ALL).
+          items: { $ref: '#/components/schemas/AgreementKey' }
+
+    Agreement:
+      type: object
+      required: [agreementKey, version, party, title, documentUrls, scope]
+      description: Active version of terms, title in the requested language.
+      properties:
+        agreementKey: { $ref: '#/components/schemas/AgreementKey' }
+        version: { type: string, examples: ['1.0'] }
+        party: { $ref: '#/components/schemas/AgreementParty' }
+        title: { type: string }
+        documentUrls: { $ref: '#/components/schemas/DocumentUrls' }
+        scope: { $ref: '#/components/schemas/AgreementScope' }
+        companyRoles:
+          type: array
+          description: Assigned roles for scope COMPANY_ROLE.
+          items: { $ref: '#/components/schemas/CompanyRole' }
+
+    AgreementVersion:
+      type: object
+      required: [agreementKey, version, party, scope, title, documentUrls, status, reconsentRequired, createdAt]
+      description: Version of terms (README 6.8).
+      properties:
+        agreementKey: { $ref: '#/components/schemas/AgreementKey' }
+        version: { type: string }
+        party: { $ref: '#/components/schemas/AgreementParty' }
+        scope: { $ref: '#/components/schemas/AgreementScope' }
+        companyRoles:
+          type: array
+          items: { $ref: '#/components/schemas/CompanyRole' }
+        title: { $ref: '#/components/schemas/LocalizedText' }
+        documentUrls: { $ref: '#/components/schemas/DocumentUrls' }
+        status: { $ref: '#/components/schemas/AgreementStatus' }
+        reconsentRequired:
+          type: boolean
+          description: Existing companies must consent to this version again (OP-11; handled by C3-M1).
+        reconsentDueAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        createdBy:
+          type: [string, 'null']
+          description: sub of the member of OSP staff; empty for initial values.
+
+    AgreementVersionPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AgreementVersion' }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+
+    AgreementVersionCreate:
+      type: object
+      required: [agreementKey, version, party, scope, title, documentUrls, reconsentRequired]
+      description: README 7.16. Documents only over HTTPS.
+      properties:
+        agreementKey: { $ref: '#/components/schemas/AgreementKey' }
+        version: { type: string, minLength: 1, maxLength: 20 }
+        party: { $ref: '#/components/schemas/AgreementParty' }
+        scope: { $ref: '#/components/schemas/AgreementScope' }
+        companyRoles:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: Required and only allowed for scope COMPANY_ROLE; only selectable roles.
+          items: { $ref: '#/components/schemas/CompanyRole' }
+        title: { $ref: '#/components/schemas/LocalizedText' }
+        documentUrls: { $ref: '#/components/schemas/DocumentUrls' }
+        reconsentRequired: { type: boolean }
+        reconsentDueAt:
+          type: string
+          format: date-time
+          description: Required with reconsentRequired, in the future.
+      allOf:
+        - if:
+            properties: { reconsentRequired: { const: true } }
+          then:
+            required: [reconsentDueAt]
+        - if:
+            properties: { scope: { const: COMPANY_ROLE } }
+          then:
+            required: [companyRoles]
+          else:
+            properties:
+              companyRoles: false
+
+    StepRequest:
+      type: object
+      required: [processId, stepRunId]
+      properties:
+        processId:
+          type: string
+          format: uuid
+          description: Flow in Process Orchestration; for the audit log only.
+        stepRunId:
+          type: string
+          format: uuid
+          description: This run of the step; for the audit log only.
+
+    StepApplicationRef:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [applicationId]
+          properties:
+            applicationId: { type: string, format: uuid }
+
+    StepCloseApplication:
+      allOf:
+        - $ref: '#/components/schemas/StepApplicationRef'
+        - type: object
+          required: [reason]
+          properties:
+            reason:
+              type: string
+              minLength: 1
+              maxLength: 1000
+              description: Reason for the decline from ApplicationDeclined.
+
+    StepResultApplication:
+      type: object
+      required: [stepRunId, state, result]
+      properties:
+        stepRunId: { type: string, format: uuid }
+        state:
+          type: string
+          enum: [DONE]
+          description: Both steps finish within their call.
+        result:
+          type: object
+          required: [applicationId, companyId, kind, status]
+          properties:
+            applicationId: { type: string, format: uuid }
+            companyId: { type: string, format: uuid }
+            kind: { $ref: '#/components/schemas/ApplicationKind' }
+            status: { $ref: '#/components/schemas/ApplicationStatus' }
+
+    EventBase:
+      type: object
+      required: [eventId, eventType, occurredAt]
+      description: Common fields of every event. No secrets, no names of people.
+      properties:
+        eventId: { type: string, format: uuid }
+        eventType: { type: string }
+        occurredAt: { type: string, format: date-time }
+
+    EventApplicationFields:
+      type: object
+      required: [applicationId, companyId, kind]
+      properties:
+        applicationId: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/ApplicationKind' }
+
+    EventExistingCompany:
+      type: object
+      required: [existingCompany]
+      properties:
+        existingCompany:
+          type: boolean
+          description: true = existing company; the flow then calls neither create-company nor reject-company.
+
+    EventApplicationCreated:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - $ref: '#/components/schemas/EventApplicationFields'
+        - $ref: '#/components/schemas/EventExistingCompany'
+        - type: object
+          properties:
+            eventType: { const: ApplicationCreated }
+
+    EventApplicationSubmitted:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - $ref: '#/components/schemas/EventApplicationFields'
+        - $ref: '#/components/schemas/EventExistingCompany'
+        - type: object
+          required: [applicantSub]
+          properties:
+            eventType: { const: ApplicationSubmitted }
+            applicantSub:
+              type: string
+              description: sub of the applicant; for C2-M2 assign-company-admin.
+
+    EventApplicationWithdrawn:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - $ref: '#/components/schemas/EventApplicationFields'
+        - $ref: '#/components/schemas/EventExistingCompany'
+        - type: object
+          properties:
+            eventType: { const: ApplicationWithdrawn }
+
+    EventApplicationCompleted:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - $ref: '#/components/schemas/EventApplicationFields'
+        - type: object
+          properties:
+            eventType: { const: ApplicationCompleted }
+
+    EventAgreementVersionActivated:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [agreementKey, version, party, reconsentRequired]
+          properties:
+            eventType: { const: AgreementVersionActivated }
+            agreementKey: { $ref: '#/components/schemas/AgreementKey' }
+            version: { type: string }
+            party: { $ref: '#/components/schemas/AgreementParty' }
+            reconsentRequired: { type: boolean }
+            reconsentDueAt: { type: [string, 'null'], format: date-time }
+
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Identifier, e.g. urn:c1-m2:problem:attestation-invalid (list in README section 12).
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        retryable:
+          type: boolean
+          description: Only for steps; true = temporary error.
+        errors:
+          type: array
+          description: For validation; one entry per invalid field.
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: { type: string }
+              message: { type: string }
+        reason:
+          type: string
+          description: For attestation-invalid (README 6.4).
+          enum: [format, algorithm, issuer, signature, audience, expired, not-yet-valid, version, purpose, claims, client, person]
+        fields:
+          type: array
+          description: For attestation-mismatch; differing fixed fields.
+          items:
+            type: string
+            enum: [EBWOID, EUID, COUNTRY]
+        missing:
+          type: array
+          description: For consents-incomplete; missing consents with the expected version.
+          items: { $ref: '#/components/schemas/AgreementRef' }
+        missingDocumentTypes:
+          type: array
+          description: For documents-incomplete; missing required supporting documents.
+          items: { $ref: '#/components/schemas/DocumentType' }
+        representationDeclarationMissing:
+          type: boolean
+          description: For documents-incomplete; declaration of representation missing.
+        existingApplicationId:
+          type: string
+          format: uuid
+          description: For open-application-exists; open application of the person.
+        companyStatus:
+          type: string
+          description: For company-not-eligible; status of the company in C3-M1, missing for an unknown company.
+        reviewStatus: { $ref: '#/components/schemas/ReviewStatus' }

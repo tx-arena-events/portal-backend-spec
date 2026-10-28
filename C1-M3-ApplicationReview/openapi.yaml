@@ -1,6 +1,722 @@
 openapi: 3.1.0
 info:
   title: C1-M3 Application Review
-  version: 0.0.0
-  description: To be specified.
-paths: {}
+  version: 0.2.0
+  description: |
+    Review case per submitted application, automatic pre-check with a result per
+    check (including duplicate checks in the installation and at the CSP),
+    decision by OSP staff, four-eyes principle in defined cases. Behaviour in
+    README.md.
+
+    - OSP staff call over HTTP with their token from the OSP's Portal IAM
+      (portal role OSP Reviewer). The required permission per operation is in
+      `x-permission`, the scope in `x-permission-scope` (FRAMEWORK 4.3).
+    - Process Orchestration calls the steps `open-review` and `close-review` in
+      the same process; the HTTP paths describe the same contract.
+    - The module reads application data through the queries of C1-M2, companies
+      of the installation through C3-M1, and the CSP through C3-M2.
+    - Errors as Problem Details (RFC 9457), identifiers in README section 12.
+    - Events of the module under `components/schemas` (names start with
+      `Event`), see README section 10.
+servers:
+  - url: /api/c1-m3
+security:
+  - portalIam: []
+tags:
+  - name: OSP
+    description: Tasks of OSP staff (scope osp)
+  - name: Queries
+    description: For other modules
+  - name: Steps
+    description: For Process Orchestration
+
+paths:
+  /review-cases:
+    get:
+      tags: [OSP]
+      operationId: listReviewCases
+      summary: List review cases
+      description: |
+        README 7.1. Without the filter `status`, only review cases in OPEN and
+        AWAITING_SECOND_APPROVAL. Sorted by openedAt ascending (oldest
+        first). Name, country and roles from C1-M2.
+      x-permission: view_reviews
+      x-permission-scope: osp
+      parameters:
+        - name: status
+          in: query
+          description: May be repeated. Default OPEN and AWAITING_SECOND_APPROVAL.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/ReviewStatus' }
+          style: form
+          explode: true
+        - name: kind
+          in: query
+          description: May be repeated.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/ApplicationKind' }
+          style: form
+          explode: true
+        - name: verification
+          in: query
+          description: May be repeated.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/Verification' }
+          style: form
+          explode: true
+        - name: applicationId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Page of review cases
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewCasePage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /review-cases/{reviewCaseId}:
+    parameters:
+      - $ref: '#/components/parameters/ReviewCaseIdPath'
+    get:
+      tags: [OSP]
+      operationId: getReviewCase
+      summary: Review case with checks and application
+      description: |
+        README 7.2. The application comes unchanged from C1-M2, with the current
+        signature check, the applicant and the metadata of the supporting documents.
+      x-permission: view_reviews
+      x-permission-scope: osp
+      responses:
+        '200':
+          description: The review case
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewCase' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /review-cases/{reviewCaseId}/approve:
+    parameters:
+      - $ref: '#/components/parameters/ReviewCaseIdPath'
+    post:
+      tags: [OSP]
+      operationId: approveReviewCase
+      summary: Approve the application
+      description: |
+        README 6.4, 6.5, 7.3. Every enabled check needs a result PASSED, FAILED
+        or NOT_APPLICABLE; for TRANSFER and REACTIVATION, CSP_MATCH_EXPECTED must
+        be PASSED. With FAILED, a comment is required at the first approval. In a
+        four-eyes case the first approval is recorded as pending
+        (AWAITING_SECOND_APPROVAL); the second must come from another person.
+        Never on one's own application. Event ApplicationApproved at the final
+        approval. Repeated approval by the same person: 200, nothing changed.
+      x-permission: review_application
+      x-permission-scope: osp
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApproveRequest' }
+      responses:
+        '200':
+          description: Approved or recorded as pending (without application)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewCase' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /review-cases/{reviewCaseId}/decline:
+    parameters:
+      - $ref: '#/components/parameters/ReviewCaseIdPath'
+    post:
+      tags: [OSP]
+      operationId: declineReviewCase
+      summary: Decline the application
+      description: |
+        README 6.5, 7.4. Reason required; independent of the check results.
+        Never on one's own application. Event ApplicationDeclined with the reason.
+        Repeated decline: 200, nothing changed.
+      x-permission: review_application
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeclineRequest' }
+      responses:
+        '200':
+          description: Declined (without application)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewCase' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/open-review:
+    post:
+      tags: [Steps]
+      operationId: stepOpenReview
+      summary: 'Step: create the review case and run the pre-check'
+      description: |
+        README 8.1. Precondition: application SUBMITTED in C1-M2 (for a new review
+        case); for a withdrawn application without a review case, a review case
+        CLOSED is created. Idempotent by applicationId; runs only checks without a
+        result or with ERROR. If a check has ERROR, what was stored stays and the
+        step answers 502 with retryable true. With automatic approval, event
+        ApplicationApproved.
+      x-permission: execute_steps_c1_m3
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepOpenReview' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultOpenReview' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/close-review:
+    post:
+      tags: [Steps]
+      operationId: stepCloseReview
+      summary: 'Step: close the review case after withdrawal'
+      description: |
+        README 8.2. After ApplicationWithdrawn. OPEN and AWAITING_SECOND_APPROVAL
+        become CLOSED; without a review case, one is created in status CLOSED.
+        CLOSED and DECLINED stay. APPROVED: 409 invalid-state with retryable false.
+        No event.
+      x-permission: execute_steps_c1_m3
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepCloseReview' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultCloseReview' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /internal/review-cases:
+    get:
+      tags: [Queries]
+      operationId: getReviewStatusByApplication
+      summary: Status of the review case for an application
+      description: README 9.1. For C1-M2. No review case for this application 404.
+      x-permission: query_c1_m3
+      x-permission-scope: osp
+      parameters:
+        - name: applicationId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Status of the review case
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewStatusInfo' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    portalIam:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token of a person from the OSP's Portal IAM (sign-in with the EUDI Wallet
+        through the EBW-Connector). Contains `sub` and the permissions under
+        `resource_access.portal-core.roles`. Steps and queries over HTTP: token
+        of a service account with `execute_steps_c1_m3` or `query_c1_m3`.
+
+  parameters:
+    ReviewCaseIdPath:
+      name: reviewCaseId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    Problem:
+      description: Error (RFC 9457), identifiers in README section 12
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    ReviewStatus:
+      type: string
+      enum: [OPEN, AWAITING_SECOND_APPROVAL, APPROVED, DECLINED, CLOSED]
+      description: |
+        OPEN = in review; AWAITING_SECOND_APPROVAL = first approval recorded,
+        second person missing; APPROVED = approved (final); DECLINED = declined
+        (final); CLOSED = application withdrawn (final).
+
+    ApplicationKind:
+      type: string
+      enum: [ONBOARDING, REACTIVATION, TRANSFER]
+      description: Application kind from C1-M2 (README 6.2 there).
+
+    Verification:
+      type: string
+      enum: [EBW, DOCUMENTS]
+      description: Verification path from C1-M2; DOCUMENTS = supporting documents, checked by hand.
+
+    CheckKey:
+      type: string
+      enum: [ATTESTATION_VALID, REPRESENTATION_CONFIRMED, COMPANY_DATA_MATCH, NO_DUPLICATE, CSP_MATCH_EXPECTED, CONSENTS_COMPLETE]
+      description: |
+        ATTESTATION_VALID = verification attestation valid and not expired at submission;
+        REPRESENTATION_CONFIRMED = representation confirmed; COMPANY_DATA_MATCH = comparison
+        of the company data without a difference; NO_DUPLICATE = no duplicate in the
+        installation (C3-M1); CSP_MATCH_EXPECTED = CSP matches fit the
+        application kind (C3-M2); CONSENTS_COMPLETE = consents complete. Rules in
+        README 6.2, 6.3.
+
+    CheckResult:
+      type: string
+      enum: [PASSED, FAILED, NOT_APPLICABLE, ERROR]
+      description: |
+        NOT_APPLICABLE = check does not fit the verification path (DOCUMENTS); ERROR = check
+        could not run, for example because a neighbour was not reachable.
+
+    FourEyesCase:
+      type: string
+      enum: [CHECK_FAILED, DOCUMENTS, ALWAYS]
+      description: Reason for a second approval (README 6.4).
+
+    CspOutcome:
+      type: string
+      enum: [NO_MATCH, EXPECTED_MATCH, REGISTERED_HERE, REGISTERED_AT_OTHER_OSP, MULTIPLE_MATCHES, NAME_MATCH_ONLY, BPN_MISMATCH]
+      description: Evaluation of the CSP matches per application kind (README 6.3).
+
+    CspMatch:
+      type: object
+      required: [bpn, matchedBy, homeOspId, homeIsThisOsp, expected]
+      description: CSP match, merged per BPN.
+      properties:
+        bpn: { type: string, pattern: '^BPNL[A-Z0-9]{12}$' }
+        matchedBy:
+          type: array
+          items:
+            type: string
+            enum: [EBWOID, EUID, NAME]
+        homeOspId: { type: string, format: uuid }
+        homeOspName: { type: [string, 'null'] }
+        homeIsThisOsp: { type: boolean }
+        memberActive: { type: [boolean, 'null'] }
+        expected:
+          type: boolean
+          description: true if this is the expected match for the application kind.
+
+    ComparedField:
+      type: string
+      enum: [EBWOID, EUID, COUNTRY, LEGAL_NAME, STREET, POSTAL_CODE, CITY]
+
+    CheckDetails:
+      type: object
+      description: |
+        Finding depending on the check (README 6.2, 6.3); without names of people and
+        without values of the application's identifiers.
+      properties:
+        signatureCheck:
+          type: string
+          enum: [VALID, INVALID, UNAVAILABLE]
+        expiredAtSubmission: { type: boolean }
+        representationReasons:
+          type: array
+          description: Reasons of the EBW-Connector if the representation is not confirmed.
+          items: { type: string, examples: [COMPANY_MISMATCH] }
+        mismatchedFields:
+          type: array
+          items: { $ref: '#/components/schemas/ComparedField' }
+        unverifiedFields:
+          type: array
+          items: { $ref: '#/components/schemas/ComparedField' }
+        duplicates:
+          type: array
+          items:
+            type: object
+            required: [companyId, companyStatus, matchedOn]
+            properties:
+              companyId: { type: string, format: uuid }
+              companyStatus: { type: string, examples: [ACTIVE, REQUESTED, INACTIVE] }
+              matchedOn:
+                type: array
+                description: Matching identifier types.
+                items: { type: string, examples: [EUID] }
+        cspOutcome: { $ref: '#/components/schemas/CspOutcome' }
+        cspMatches:
+          type: array
+          items: { $ref: '#/components/schemas/CspMatch' }
+        missing:
+          type: array
+          items:
+            type: object
+            required: [agreementKey, version]
+            properties:
+              agreementKey: { type: string }
+              version: { type: string }
+        error:
+          type: string
+          description: Short cause with ERROR.
+
+    ReviewCheck:
+      type: object
+      required: [checkKey, result, checkedAt, attempts]
+      properties:
+        checkKey: { $ref: '#/components/schemas/CheckKey' }
+        result: { $ref: '#/components/schemas/CheckResult' }
+        details: { $ref: '#/components/schemas/CheckDetails' }
+        checkedAt: { type: string, format: date-time }
+        attempts: { type: integer, minimum: 1 }
+
+    CheckCounts:
+      type: object
+      required: [passed, failed, notApplicable, error]
+      properties:
+        passed: { type: integer, minimum: 0 }
+        failed: { type: integer, minimum: 0 }
+        notApplicable: { type: integer, minimum: 0 }
+        error: { type: integer, minimum: 0 }
+
+    ApplicationBrief:
+      type: object
+      required: [legalName, countryCode, companyRoles]
+      description: Summary of the application from C1-M2 (ApplicationSummary there).
+      properties:
+        legalName: { type: string }
+        countryCode: { type: string, pattern: '^[A-Z]{2}$' }
+        companyRoles:
+          type: array
+          items: { type: string }
+        submittedAt: { type: [string, 'null'], format: date-time }
+
+    FirstApproval:
+      type: object
+      required: [approvedBy, approvedAt, fourEyesReasons]
+      description: Pending first approval in a four-eyes case.
+      properties:
+        approvedBy:
+          type: string
+          description: sub of the first reviewer.
+        approvedAt: { type: string, format: date-time }
+        comment: { type: [string, 'null'] }
+        fourEyesReasons:
+          type: array
+          items: { $ref: '#/components/schemas/FourEyesCase' }
+
+    Decision:
+      type: object
+      required: [decidedAt, autoApproved]
+      properties:
+        decidedAt: { type: string, format: date-time }
+        comment:
+          type: [string, 'null']
+          description: Reason for the decline or comment on the approval.
+        decidedBy:
+          type: [string, 'null']
+          description: sub of the reviewer; empty for automatic approval.
+        autoApproved: { type: boolean }
+
+    Closure:
+      type: object
+      required: [closedAt, reason]
+      properties:
+        closedAt: { type: string, format: date-time }
+        reason:
+          type: string
+          enum: [WITHDRAWN]
+
+    ReviewCaseSummary:
+      type: object
+      required: [id, applicationId, companyId, kind, verification, status, openedAt, checkCounts]
+      properties:
+        id: { type: string, format: uuid }
+        applicationId: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/ApplicationKind' }
+        verification: { $ref: '#/components/schemas/Verification' }
+        status: { $ref: '#/components/schemas/ReviewStatus' }
+        openedAt: { type: string, format: date-time }
+        decidedAt: { type: [string, 'null'], format: date-time }
+        checkCounts: { $ref: '#/components/schemas/CheckCounts' }
+        application: { $ref: '#/components/schemas/ApplicationBrief' }
+
+    ReviewCasePage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ReviewCaseSummary' }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+
+    ReviewCase:
+      type: object
+      required: [id, applicationId, companyId, kind, existingCompany, verification, applicantSub, status, openedAt, checks]
+      properties:
+        id: { type: string, format: uuid }
+        applicationId: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/ApplicationKind' }
+        existingCompany: { type: boolean }
+        verification: { $ref: '#/components/schemas/Verification' }
+        applicantSub:
+          type: string
+          description: sub of the applicant; the user interface uses it to block the decision on one's own application.
+        status: { $ref: '#/components/schemas/ReviewStatus' }
+        openedAt: { type: string, format: date-time }
+        cspBpn:
+          type: [string, 'null']
+          description: BPN of the expected CSP match (TRANSFER, REACTIVATION).
+        checks:
+          type: array
+          description: In the order of README 6.2.
+          items: { $ref: '#/components/schemas/ReviewCheck' }
+        firstApproval:
+          oneOf:
+            - $ref: '#/components/schemas/FirstApproval'
+            - type: 'null'
+        decision:
+          oneOf:
+            - $ref: '#/components/schemas/Decision'
+            - type: 'null'
+        closure:
+          oneOf:
+            - $ref: '#/components/schemas/Closure'
+            - type: 'null'
+        application:
+          type: object
+          description: |
+            Only with GET /review-cases/{reviewCaseId}: the application unchanged from C1-M2
+            (schema ApplicationInternal in the openapi.yaml of C1-M2), with the current
+            signature check.
+          additionalProperties: true
+
+    ApproveRequest:
+      type: object
+      properties:
+        comment:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: Required at the first approval if a check is FAILED.
+
+    DeclineRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: Reason; reaches the applicant. Without names of people.
+
+    ReviewStatusInfo:
+      type: object
+      required: [reviewCaseId, applicationId, status]
+      properties:
+        reviewCaseId: { type: string, format: uuid }
+        applicationId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/ReviewStatus' }
+        decidedAt: { type: [string, 'null'], format: date-time }
+
+    StepRequest:
+      type: object
+      required: [processId, stepRunId]
+      properties:
+        processId:
+          type: string
+          format: uuid
+          description: Process in Process Orchestration; for the audit log only.
+        stepRunId:
+          type: string
+          format: uuid
+          description: This run of the step; for the audit log only.
+
+    StepOpenReview:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [applicationId]
+          properties:
+            applicationId: { type: string, format: uuid }
+
+    StepCloseReview:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [applicationId, reason]
+          properties:
+            applicationId: { type: string, format: uuid }
+            reason:
+              type: string
+              enum: [WITHDRAWN]
+
+    StepResultOpenReview:
+      type: object
+      required: [stepRunId, state, result]
+      properties:
+        stepRunId: { type: string, format: uuid }
+        state:
+          type: string
+          enum: [DONE]
+          description: The step ends with its call.
+        result:
+          type: object
+          required: [reviewCaseId, applicationId, status, checks]
+          properties:
+            reviewCaseId: { type: string, format: uuid }
+            applicationId: { type: string, format: uuid }
+            status: { $ref: '#/components/schemas/ReviewStatus' }
+            checks:
+              type: array
+              description: Empty for a review case CLOSED without a pre-check.
+              items:
+                type: object
+                required: [checkKey, result]
+                properties:
+                  checkKey: { $ref: '#/components/schemas/CheckKey' }
+                  result: { $ref: '#/components/schemas/CheckResult' }
+
+    StepResultCloseReview:
+      type: object
+      required: [stepRunId, state, result]
+      properties:
+        stepRunId: { type: string, format: uuid }
+        state:
+          type: string
+          enum: [DONE]
+        result:
+          type: object
+          required: [reviewCaseId, applicationId, status]
+          properties:
+            reviewCaseId: { type: string, format: uuid }
+            applicationId: { type: string, format: uuid }
+            status: { $ref: '#/components/schemas/ReviewStatus' }
+
+    EventBase:
+      type: object
+      required: [eventId, eventType, occurredAt]
+      description: Common fields of every event. No secrets, no names of people.
+      properties:
+        eventId: { type: string, format: uuid }
+        eventType: { type: string }
+        occurredAt: { type: string, format: date-time }
+
+    EventApplicationFields:
+      type: object
+      required: [applicationId, companyId, kind, existingCompany]
+      properties:
+        applicationId: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/ApplicationKind' }
+        existingCompany:
+          type: boolean
+          description: true = existing company; no reject-company after a decline.
+
+    EventApplicationApproved:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - $ref: '#/components/schemas/EventApplicationFields'
+        - type: object
+          properties:
+            eventType: { const: ApplicationApproved }
+            bpn:
+              type: string
+              pattern: '^BPNL[A-Z0-9]{12}$'
+              description: Only for TRANSFER and REACTIVATION; BPN of the expected CSP match.
+
+    EventApplicationDeclined:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - $ref: '#/components/schemas/EventApplicationFields'
+        - type: object
+          required: [reason]
+          properties:
+            eventType: { const: ApplicationDeclined }
+            reason:
+              type: string
+              minLength: 1
+              maxLength: 1000
+
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Identifier, e.g. urn:c1-m3:problem:checks-incomplete (list in README section 12).
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        retryable:
+          type: boolean
+          description: Only for steps; true = temporary error.
+        errors:
+          type: array
+          description: With validation; one entry per invalid field.
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: { type: string }
+              message: { type: string }
+        pendingChecks:
+          type: array
+          description: With checks-incomplete; checks without a result or with ERROR.
+          items: { $ref: '#/components/schemas/CheckKey' }
+        failedChecks:
+          type: array
+          description: With comment-required; checks with FAILED.
+          items: { $ref: '#/components/schemas/CheckKey' }
+        cspOutcome: { $ref: '#/components/schemas/CspOutcome' }

@@ -1,39 +1,614 @@
 openapi: 3.1.0
 info:
-  title: C2-M2 App Access
-  version: 0.1.0
+  title: C2-M2 Users and App Access
+  version: 0.2.0
   description: |
-    Manages the clients of apps in the Portal IAM and the app roles on them:
-    one client template per app, one instance client per instance.
-    The behaviour of every step and query is described in README.md, sections 7 and 8.
+    Manages, in the Portal IAM of the OSP, the accounts of people (binding to a
+    company, portal roles, app roles, deactivation), invitations, the OSP staff
+    and the clients of the apps (one client template per app, one instance
+    client per instance) with their app roles. The Portal IAM creates accounts
+    by itself at the first login (C2-M5). The behaviour of every operation is
+    described in README.md, sections 6 to 9.
 
-    - Process Orchestration and other modules call these operations in the same
-      process through the module's public interface. The HTTP paths describe the
-      same contract for running the module as a service of its own.
-    - Via HTTP, every call carries a token of the Portal IAM. The required
-      permission is given per operation in `x-permission`.
-    - There are no operations for the UI.
-    - Errors as Problem Details (RFC 9457), identifiers in README section 12.
-    - The events the module publishes are described under `components/schemas`
-      (names starting with `Event`), see README section 9.
+    - People call the paths with the tags `Company` and `OSP` via HTTP, with
+      their token from the Portal IAM. The required permission of each
+      operation is in `x-permission`, the scope in `x-permission-scope`
+      (FRAMEWORK 4.3): `company` = only the company from `company_id` in the
+      token, equal to `{companyId}` in the path; `osp` = OSP staff, all
+      companies; `own` = only the caller's own account (`sub`).
+    - Process Orchestration and other modules call the paths under `/steps` and
+      `/internal` in the same process through the public interface of the
+      module. The HTTP form applies when the module runs as a separate service.
+    - Invitation codes appear only in the response that creates them; the
+      module stores only their hash. Codes go in only in the body, never in the
+      path or query.
+    - Errors as Problem Details (RFC 9457), identifiers in README section 12;
+      for steps with `retryable`.
+    - The events of the module are under `components/schemas` (names start
+      with `Event`), see README section 10.
 servers:
   - url: /api/c2-m2
 security:
   - portalIam: []
 tags:
+  - name: Company
+    description: Calls by people of a company; also the acceptance of an invitation by a person without a company
+  - name: OSP
+    description: Tasks of the OSP staff
   - name: Queries
     description: For other modules
   - name: Steps
     description: For Process Orchestration
 
 paths:
+  /companies/{companyId}/users:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+    get:
+      tags: [Company]
+      operationId: listCompanyUsers
+      summary: List the people of the company
+      description: |
+        README 7.1. Bindings of the company, sorted by family name and given name.
+        Without the filter `status`: ACTIVE and DISABLED. Portal roles per entry
+        read from the Portal IAM.
+      x-permission: view_company_users
+      x-permission-scope: company
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - name: status
+          in: query
+          description: May be given several times.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/BindingStatus' }
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: One page of the list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompanyUserPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /companies/{companyId}/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Company]
+      operationId: getCompanyUser
+      summary: One person of the company with portal roles and app roles
+      description: README 7.2. Only bindings ACTIVE or DISABLED; roles from the Portal IAM.
+      x-permission: view_company_users
+      x-permission-scope: company
+      responses:
+        '200':
+          description: The person
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompanyUserDetail' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [Company]
+      operationId: removeCompanyUser
+      summary: Remove a person from the company
+      description: |
+        README 7.4 and 6.12.3. Unbinds the account: attributes, company portal
+        roles and app roles are removed, sessions are ended. The account remains
+        without a company. Not for the last Company Admin. A person who has
+        already been removed also gives 204.
+      x-permission: manage_company_users
+      x-permission-scope: company
+      responses:
+        '204':
+          description: Removed
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /companies/{companyId}/users/{userId}/portal-roles:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+      - $ref: '#/components/parameters/UserId'
+    put:
+      tags: [Company]
+      operationId: setCompanyUserPortalRoles
+      summary: Set the portal roles of a person in the company
+      description: |
+        README 7.3. Complete new list, not empty, only company portal roles
+        (COMPANY_PORTAL_ROLES). The last Company Admin does not lose the role
+        (409 last-company-admin).
+      x-permission: manage_company_users
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PortalRolesInput' }
+      responses:
+        '200':
+          description: Set
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompanyUser' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /companies/{companyId}/users/{userId}/apps/{appId}/roles:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/AppId'
+    put:
+      tags: [Company]
+      operationId: setUserAppRoles
+      summary: Set the app roles of a person for an app
+      description: |
+        README 7.5. Complete new list; an empty list removes all app roles of
+        the app. Applies on all instance clients of the company's active
+        subscriptions to this app (README 6.10). Every change is logged.
+      x-permission: assign_app_roles
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AppRolesInput' }
+      responses:
+        '200':
+          description: Set
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppRolesResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /companies/{companyId}/apps/{appId}/roles:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+      - $ref: '#/components/parameters/AppId'
+    get:
+      tags: [Company]
+      operationId: getCompanyAppRoles
+      summary: App roles of an app and whether the company can assign them
+      description: |
+        README 7.6. Roles from the template; `assignable` is true if the
+        company has at least one target client (active subscription, active
+        instance client).
+      x-permission: view_app_roles
+      x-permission-scope: company
+      parameters:
+        - $ref: '#/components/parameters/Lang'
+      responses:
+        '200':
+          description: Roles of the app
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompanyAppRoles' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /companies/{companyId}/invitations:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+    get:
+      tags: [Company]
+      operationId: listInvitations
+      summary: List the invitations of the company
+      description: |
+        README 7.8. Newest first. Without the filter `status`: OPEN. Expired open
+        invitations appear as EXPIRED. Names only for OPEN; never a code.
+      x-permission: manage_company_users
+      x-permission-scope: company
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/InvitationStatusFilter'
+      responses:
+        '200':
+          description: One page of the list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvitationPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [Company]
+      operationId: createInvitation
+      summary: Invite a person to the company
+      description: |
+        README 7.7. Generates a single-use, time-limited code. The response
+        contains it exactly once; the module stores only its hash. The UI
+        passes it on as a link (code in the fragment recommended).
+      x-permission: manage_company_users
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvitationCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvitationWithCode' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /companies/{companyId}/invitations/{invitationId}:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+      - $ref: '#/components/parameters/InvitationId'
+    delete:
+      tags: [Company]
+      operationId: revokeInvitation
+      summary: Revoke an open invitation
+      description: README 7.9. An invitation that has already been revoked also gives 204.
+      x-permission: manage_company_users
+      x-permission-scope: company
+      responses:
+        '204':
+          description: Revoked
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /invitations/accept:
+    post:
+      tags: [Company]
+      operationId: acceptInvitation
+      summary: Accept an invitation with the code
+      description: |
+        README 7.10. Acts only on the caller's own account (`sub`). An invitation
+        of kind COMPANY can be accepted only by an account without a company.
+        The names in the token must match the names of the invitation.
+        Afterwards the UI fetches a new token. The same invitation by the same
+        account again: 200 with the same result.
+      x-permission: accept_invitation
+      x-permission-scope: own
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AcceptInvitationInput' }
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AcceptInvitationResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /osp/users:
+    get:
+      tags: [OSP]
+      operationId: listUsers
+      summary: List the people of all companies
+      description: README 7.11. Without the filter `status`, ACTIVE and DISABLED apply.
+      x-permission: view_users
+      x-permission-scope: osp
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - name: companyId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          description: May be given several times.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/BindingStatus' }
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: One page of the list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompanyUserPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /osp/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [OSP]
+      operationId: getUserAccount
+      summary: Any account of the installation, also without a company
+      description: README 7.12. Account, binding, portal roles, staff roles, app roles.
+      x-permission: view_users
+      x-permission-scope: osp
+      responses:
+        '200':
+          description: The account
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserAccount' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /osp/companies/{companyId}/users/{userId}/portal-roles:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+      - $ref: '#/components/parameters/UserId'
+    put:
+      tags: [OSP]
+      operationId: setUserPortalRolesAsOsp
+      summary: Set the portal roles of a person in any company
+      description: README 7.13. As setCompanyUserPortalRoles, without the limit "last Company Admin".
+      x-permission: manage_users
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PortalRolesInput' }
+      responses:
+        '200':
+          description: Set
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompanyUser' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /osp/companies/{companyId}/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+      - $ref: '#/components/parameters/UserId'
+    delete:
+      tags: [OSP]
+      operationId: removeUserAsOsp
+      summary: Remove a person from any company
+      description: |
+        README 7.14. As removeCompanyUser, without the limit "last Company Admin".
+        Bindings DISABLED as well; afterwards the account is enabled, without a company.
+      x-permission: manage_users
+      x-permission-scope: osp
+      responses:
+        '204':
+          description: Removed
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /osp/companies/{companyId}/invitations:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+    get:
+      tags: [OSP]
+      operationId: listInvitationsAsOsp
+      summary: List the invitations of any company
+      description: README 7.21. As listInvitations for any company.
+      x-permission: view_users
+      x-permission-scope: osp
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/InvitationStatusFilter'
+      responses:
+        '200':
+          description: One page of the list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvitationPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [OSP]
+      operationId: createInvitationAsOsp
+      summary: Invite a person to any company
+      description: |
+        README 7.20. As createInvitation for any company, e.g. the first Company
+        Admin of the OSP company. If the company is missing in the module's own
+        database, the module reads it from C3-M1 (README 6.6).
+      x-permission: manage_users
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvitationCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvitationWithCode' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /osp/companies/{companyId}/invitations/{invitationId}:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+      - $ref: '#/components/parameters/InvitationId'
+    delete:
+      tags: [OSP]
+      operationId: revokeInvitationAsOsp
+      summary: Revoke an open invitation of any company
+      description: README 7.22. As revokeInvitation for any company.
+      x-permission: manage_users
+      x-permission-scope: osp
+      responses:
+        '204':
+          description: Revoked
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /osp/staff:
+    get:
+      tags: [OSP]
+      operationId: listStaff
+      summary: List the OSP staff
+      description: README 7.15. Accounts with at least one staff role, from the Portal IAM.
+      x-permission: view_users
+      x-permission-scope: osp
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: One page of the list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaffMemberPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /osp/staff/{userId}/roles:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    put:
+      tags: [OSP]
+      operationId: setStaffRoles
+      summary: Set the staff roles of an account
+      description: |
+        README 7.16. Complete new list from STAFF_PORTAL_ROLES; empty = no longer
+        staff. New staff accounts only from the OSP company, otherwise an
+        invitation. The last OSP Admin does not lose the role.
+      x-permission: manage_osp_staff
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StaffRolesInput' }
+      responses:
+        '200':
+          description: Set
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaffMember' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /osp/staff-invitations:
+    get:
+      tags: [OSP]
+      operationId: listStaffInvitations
+      summary: List the staff invitations
+      description: README 7.18. As listInvitations for invitations of kind STAFF.
+      x-permission: manage_osp_staff
+      x-permission-scope: osp
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/InvitationStatusFilter'
+      responses:
+        '200':
+          description: One page of the list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvitationPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [OSP]
+      operationId: createStaffInvitation
+      summary: Invite a person as OSP staff
+      description: README 7.17. As createInvitation with kind STAFF; the response contains the code exactly once.
+      x-permission: manage_osp_staff
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StaffInvitationCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvitationWithCode' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /osp/staff-invitations/{invitationId}:
+    parameters:
+      - $ref: '#/components/parameters/InvitationId'
+    delete:
+      tags: [OSP]
+      operationId: revokeStaffInvitation
+      summary: Revoke an open staff invitation
+      description: README 7.19. An invitation that has already been revoked also gives 204.
+      x-permission: manage_osp_staff
+      x-permission-scope: osp
+      responses:
+        '204':
+          description: Revoked
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
   /internal/app-roles:
     get:
       tags: [Queries]
       operationId: listAppRoles
-      summary: App roles of one or more apps, read from their templates
-      description: See README 8.1. The order of the apps follows the request.
-      x-permission: view_app_clients_internal
+      summary: App roles of one or more apps, from their templates
+      description: README 9.1. The order of the apps follows the request.
+      x-permission: query_c2_m2
+      x-permission-scope: osp
       parameters:
         - name: appId
           in: query
@@ -46,10 +621,7 @@ paths:
             items: { type: string, format: uuid }
           style: form
           explode: true
-        - name: lang
-          in: query
-          description: Language of `description`; otherwise English, otherwise the first one.
-          schema: { type: string, pattern: '^[a-z]{2}$', default: en, examples: [de, en] }
+        - $ref: '#/components/parameters/Lang'
       responses:
         '200':
           description: Roles per app
@@ -68,9 +640,11 @@ paths:
       operationId: listAppInstanceClients
       summary: Instance clients by app, subscription or customer
       description: |
-        See README 8.2. At least one of appId and offerSubscriptionId is required.
-        Without filter status: PENDING and ACTIVE. Reads only the module's own table.
-      x-permission: view_app_clients_internal
+        README 9.2. At least one of appId and offerSubscriptionId is required.
+        Without the filter status: PENDING and ACTIVE. Reads only the module's
+        own table.
+      x-permission: query_c2_m2
+      x-permission-scope: osp
       parameters:
         - name: appId
           in: query
@@ -110,7 +684,9 @@ paths:
       tags: [Queries]
       operationId: getAppInstanceClient
       summary: One instance client
-      x-permission: view_app_clients_internal
+      description: README 9.3.
+      x-permission: query_c2_m2
+      x-permission-scope: osp
       responses:
         '200':
           description: The instance client
@@ -120,13 +696,55 @@ paths:
         '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
 
+  /internal/company-users:
+    get:
+      tags: [Queries]
+      operationId: listCompanyUserRefs
+      summary: People of a company, optionally with a portal role
+      description: |
+        README 9.4. E.g. for notifications. Without the filter status: ACTIVE.
+        Without names.
+      x-permission: query_c2_m2
+      x-permission-scope: osp
+      parameters:
+        - name: companyId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: portalRole
+          in: query
+          description: A company portal role, e.g. `Company Admin`.
+          schema: { $ref: '#/components/schemas/PortalRoleName' }
+        - name: status
+          in: query
+          description: May be given several times.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/BindingStatus' }
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: Matching people
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CompanyUserRef' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
   /steps/create-client-template:
     post:
       tags: [Steps]
       operationId: stepCreateClientTemplate
       summary: 'Step: create the client template of an approved app'
-      description: See README 7.1. Repeatable; the template is found again by the app ID.
-      x-permission: execute_app_client_steps
+      description: |
+        README 8.1. Preconditions: none in the module. Repeatable; the template
+        is found again by the app ID.
+      x-permission: execute_steps_c2_m2
+      x-permission-scope: osp
       requestBody:
         required: true
         content:
@@ -148,10 +766,12 @@ paths:
       operationId: stepCreateInstanceClient
       summary: 'Step: create an instance client from the template, disabled'
       description: |
-        See README 7.2. SINGLE for a single-instance app (at approval), SUBSCRIPTION
-        for a subscription to a multi-instance app. Repeatable; the row is found
-        again by offerSubscriptionId or, for SINGLE, by appId.
-      x-permission: execute_app_client_steps
+        README 8.2. Precondition: template of the app created. SINGLE for a
+        single-instance app (at the approval), SUBSCRIPTION for a subscription
+        to a multi-instance app. Repeatable; the row is found again by
+        offerSubscriptionId or, for SINGLE, by appId.
+      x-permission: execute_steps_c2_m2
+      x-permission-scope: osp
       requestBody:
         required: true
         content:
@@ -173,8 +793,11 @@ paths:
       tags: [Steps]
       operationId: stepEnableInstanceClient
       summary: 'Step: enable an instance client'
-      description: See README 7.3. PENDING becomes ACTIVE; ACTIVE stays; DISABLED gives 409.
-      x-permission: execute_app_client_steps
+      description: |
+        README 8.3. Precondition: instance client created, status PENDING or
+        ACTIVE. PENDING becomes ACTIVE; ACTIVE stays; DISABLED gives 409.
+      x-permission: execute_steps_c2_m2
+      x-permission-scope: osp
       requestBody:
         required: true
         content:
@@ -196,8 +819,11 @@ paths:
       tags: [Steps]
       operationId: stepDisableInstanceClient
       summary: 'Step: disable an instance client'
-      description: See README 7.4. PENDING or ACTIVE becomes DISABLED (final); DISABLED stays.
-      x-permission: execute_app_client_steps
+      description: |
+        README 8.4. Precondition: row of the instance client exists. PENDING or
+        ACTIVE becomes DISABLED (final); DISABLED stays.
+      x-permission: execute_steps_c2_m2
+      x-permission-scope: osp
       requestBody:
         required: true
         content:
@@ -218,8 +844,11 @@ paths:
       tags: [Steps]
       operationId: stepUpdateInstanceUrl
       summary: 'Step: change the URL of an instance'
-      description: See README 7.5. Sets baseUrl and redirect URI of the client.
-      x-permission: execute_app_client_steps
+      description: |
+        README 8.5. Precondition: instance client created, not DISABLED. Sets
+        baseUrl and the redirect URI of the client.
+      x-permission: execute_steps_c2_m2
+      x-permission-scope: osp
       requestBody:
         required: true
         content:
@@ -241,9 +870,12 @@ paths:
     post:
       tags: [Steps]
       operationId: stepAddAppRoles
-      summary: 'Step: add app roles to the template and all instance clients'
-      description: See README 7.6. Existing roles are skipped and keep their descriptions.
-      x-permission: execute_app_client_steps
+      summary: 'Step: add app roles to the template and to all instance clients'
+      description: |
+        README 8.6. Precondition: template of the app created. Existing roles
+        are skipped and keep their descriptions.
+      x-permission: execute_steps_c2_m2
+      x-permission-scope: osp
       requestBody:
         required: true
         content:
@@ -266,9 +898,12 @@ paths:
       operationId: stepUpdateRoleDescriptions
       summary: 'Step: replace the descriptions of app roles'
       description: |
-        See README 7.7. Per role the complete new list of descriptions; on the template
-        and on all instance clients. An unknown role gives 404 and nothing is changed.
-      x-permission: execute_app_client_steps
+        README 8.7. Precondition: template created, every named role exists.
+        Per role the complete new list of descriptions; on the template and on
+        all instance clients. An unknown role gives 404, and then nothing is
+        changed.
+      x-permission: execute_steps_c2_m2
+      x-permission-scope: osp
       requestBody:
         required: true
         content:
@@ -286,13 +921,99 @@ paths:
         '409': { $ref: '#/components/responses/Problem' }
         '502': { $ref: '#/components/responses/Problem' }
 
+  /steps/assign-company-admin:
+    post:
+      tags: [Steps]
+      operationId: stepAssignCompanyAdmin
+      summary: 'Step: bind the account of the applicant and make it Company Admin'
+      description: |
+        README 8.8. Preconditions: application approved, BPN assigned, account
+        of the applicant in the Portal IAM. Repeatable by companyId and
+        applicantSub. An account that is bound to another company gives 409
+        user-already-bound (retryable false).
+      x-permission: execute_steps_c2_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepAssignCompanyAdmin' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultAssignCompanyAdmin' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/disable-company-users:
+    post:
+      tags: [Steps]
+      operationId: stepDisableCompanyUsers
+      summary: 'Step: remove company and roles from the accounts of a deactivated company'
+      description: |
+        README 8.9. Precondition: company deactivated (CompanyDeactivated).
+        Accounts stay enabled but lose the company, the company portal roles and
+        the app roles (saved in suspended_roles); sessions ended; open
+        invitations revoked. Not for the OSP company. Repeatable; the event
+        CompanyUsersDisabled exactly once.
+      x-permission: execute_steps_c2_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepCompanyRef' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultCompanyUsers' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/enable-company-users:
+    post:
+      tags: [Steps]
+      operationId: stepEnableCompanyUsers
+      summary: 'Step: give company and roles back to the accounts of a reactivated company'
+      description: |
+        README 8.10. Precondition: company reactivated (CompanyReactivated).
+        Accounts with binding DISABLED get the company and the saved roles back.
+        Repeatable; the event CompanyUsersEnabled exactly once.
+      x-permission: execute_steps_c2_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepCompanyRef' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultCompanyUsers' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
 components:
   securitySchemes:
     portalIam:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Token of the Portal IAM (only when called via HTTP).
+      description: |
+        Token of the Portal IAM of the OSP (only when called via HTTP). For people
+        with `sub`, `company_id` and `bpn` (only for a bound account), `given_name`,
+        `family_name` and the permissions on the client portal-core (FRAMEWORK 4.2).
 
   parameters:
     Id:
@@ -300,6 +1021,50 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    CompanyId:
+      name: companyId
+      in: path
+      required: true
+      description: Company; in scope company equal to `company_id` in the token, otherwise 404.
+      schema: { type: string, format: uuid }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: ID of the account in the Portal IAM, also `sub` in the person's token.
+      schema: { type: string, format: uuid }
+    AppId:
+      name: appId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    InvitationId:
+      name: invitationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    InvitationStatusFilter:
+      name: status
+      in: query
+      description: May be given several times; default OPEN.
+      schema:
+        type: array
+        items: { $ref: '#/components/schemas/InvitationStatus' }
+      style: form
+      explode: true
+    Lang:
+      name: lang
+      in: query
+      description: Language of `description`; otherwise English, otherwise the first one.
+      schema: { type: string, pattern: '^[a-z]{2}$', default: en, examples: [de, en] }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
 
   responses:
     Problem:
@@ -311,12 +1076,39 @@ components:
   schemas:
     InstanceKind:
       type: string
-      description: SINGLE = the one instance of a single-instance app; SUBSCRIPTION = the instance of one subscription to a multi-instance app.
+      description: SINGLE = the one instance of a single-instance app; SUBSCRIPTION = the instance of a subscription to a multi-instance app.
       enum: [SINGLE, SUBSCRIPTION]
     InstanceClientStatus:
       type: string
       description: PENDING = created, client disabled; ACTIVE = client enabled; DISABLED = client disabled, final.
       enum: [PENDING, ACTIVE, DISABLED]
+    BindingStatus:
+      type: string
+      description: |
+        ACTIVE = bound; DISABLED = company deactivated, account without company
+        and roles (saved); REMOVED = binding removed, final for this row.
+      enum: [ACTIVE, DISABLED, REMOVED]
+    JoinedVia:
+      type: string
+      description: ONBOARDING = step assign-company-admin; INVITATION = invitation accepted.
+      enum: [ONBOARDING, INVITATION]
+    RemovalReason:
+      type: string
+      description: |
+        REMOVED_BY_COMPANY = removed by the Company Admin; REMOVED_BY_OSP = removed
+        by the OSP staff; ACCOUNT_DELETED = account missing in the Portal IAM.
+      enum: [REMOVED_BY_COMPANY, REMOVED_BY_OSP, ACCOUNT_DELETED]
+    InvitationKind:
+      type: string
+      description: COMPANY = binds to a company; STAFF = assigns staff roles.
+      enum: [COMPANY, STAFF]
+    InvitationStatus:
+      type: string
+      enum: [OPEN, ACCEPTED, REVOKED, EXPIRED]
+    InvitationEndReason:
+      type: string
+      description: Reason for REVOKED.
+      enum: [REVOKED, COMPANY_DISABLED, TOO_MANY_ATTEMPTS]
 
     InstanceUrl:
       type: string
@@ -330,7 +1122,29 @@ components:
       type: string
       minLength: 1
       maxLength: 255
+      description: Name of an app role.
       examples: [Viewer]
+
+    PortalRoleName:
+      type: string
+      minLength: 1
+      maxLength: 255
+      description: |
+        Name of a portal role on the client portal-core. In the company from
+        COMPANY_PORTAL_ROLES, for the staff from STAFF_PORTAL_ROLES.
+      examples: [Company Admin, IT Admin, Member, OSP Reviewer, OSP Admin]
+
+    PersonName:
+      type: string
+      minLength: 1
+      maxLength: 255
+      pattern: '^[^\x00-\x1F\x7F]+$'
+      description: Given name or family name, without control characters.
+
+    BpnL:
+      type: string
+      pattern: '^BPNL[0-9A-Z]{12}$'
+      examples: [BPNLIUK2REMLK3F4]
 
     RoleDescription:
       type: object
@@ -376,6 +1190,21 @@ components:
           description: Sorted by name. Empty if templateExists is false.
           items: { $ref: '#/components/schemas/AppRole' }
 
+    CompanyAppRoles:
+      allOf:
+        - $ref: '#/components/schemas/AppRoles'
+        - type: object
+          required: [companyId, assignable, instanceClients]
+          properties:
+            companyId: { type: string, format: uuid }
+            assignable:
+              type: boolean
+              description: true if the company has at least one target client (README 6.10).
+            instanceClients:
+              type: array
+              description: Target clients of the company for this app.
+              items: { $ref: '#/components/schemas/InstanceClientRef' }
+
     AppInstanceClient:
       type: object
       required: [id, appId, instanceKind, iamClientId, instanceUrl, status, createdAt]
@@ -393,6 +1222,308 @@ components:
         createdAt: { type: string, format: date-time }
         changedAt: { type: string, format: date-time }
 
+    InstanceClientRef:
+      type: object
+      required: [appInstanceClientId, iamClientId]
+      properties:
+        appInstanceClientId: { type: string, format: uuid }
+        iamClientId: { type: string }
+
+    UserClientRoles:
+      type: object
+      required: [appId, appInstanceClientId, iamClientId, instanceClientStatus, roles]
+      properties:
+        appId: { type: string, format: uuid }
+        appInstanceClientId: { type: string, format: uuid }
+        iamClientId: { type: string }
+        instanceClientStatus: { $ref: '#/components/schemas/InstanceClientStatus' }
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/RoleName' }
+
+    CompanyUser:
+      type: object
+      required: [userId, companyId, status, joinedVia, portalRoles, createdAt]
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: ID of the account in the Portal IAM (`sub`).
+        companyId: { type: string, format: uuid }
+        givenName:
+          type: [string, 'null']
+          description: From the PID, copied at binding; empty for REMOVED.
+        familyName:
+          type: [string, 'null']
+          description: From the PID, copied at binding; empty for REMOVED.
+        status: { $ref: '#/components/schemas/BindingStatus' }
+        joinedVia: { $ref: '#/components/schemas/JoinedVia' }
+        portalRoles:
+          type: array
+          description: Company portal roles, read from the Portal IAM; empty for REMOVED.
+          items: { $ref: '#/components/schemas/PortalRoleName' }
+        removalReason:
+          oneOf:
+            - $ref: '#/components/schemas/RemovalReason'
+            - type: 'null'
+        createdAt: { type: string, format: date-time }
+        changedAt: { type: string, format: date-time }
+        removedAt: { type: [string, 'null'], format: date-time }
+
+    CompanyUserPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CompanyUser' }
+        page: { type: integer }
+        size: { type: integer }
+        total: { type: integer }
+
+    CompanyUserDetail:
+      allOf:
+        - $ref: '#/components/schemas/CompanyUser'
+        - type: object
+          required: [appRoles]
+          properties:
+            appRoles:
+              type: array
+              description: Role assignments per instance client of this module, read from the Portal IAM.
+              items: { $ref: '#/components/schemas/UserClientRoles' }
+
+    CompanyUserRef:
+      type: object
+      required: [userId, status]
+      description: Without names.
+      properties:
+        userId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/BindingStatus' }
+
+    UserAccount:
+      type: object
+      required: [userId, enabled, portalRoles, staffRoles, appRoles]
+      properties:
+        userId: { type: string, format: uuid }
+        givenName:
+          type: [string, 'null']
+          description: firstName of the account in the Portal IAM (from the PID).
+        familyName:
+          type: [string, 'null']
+          description: lastName of the account in the Portal IAM (from the PID).
+        enabled: { type: boolean }
+        createdAt:
+          type: [string, 'null']
+          format: date-time
+          description: Creation of the account in the Portal IAM (first login).
+        binding:
+          description: Binding ACTIVE or DISABLED; null for an account without a company.
+          oneOf:
+            - $ref: '#/components/schemas/CompanyUser'
+            - type: 'null'
+        portalRoles:
+          type: array
+          description: Company portal roles.
+          items: { $ref: '#/components/schemas/PortalRoleName' }
+        staffRoles:
+          type: array
+          description: Staff portal roles.
+          items: { $ref: '#/components/schemas/PortalRoleName' }
+        appRoles:
+          type: array
+          items: { $ref: '#/components/schemas/UserClientRoles' }
+
+    PortalRolesInput:
+      type: object
+      required: [portalRoles]
+      additionalProperties: false
+      properties:
+        portalRoles:
+          type: array
+          minItems: 1
+          description: Complete new list of company portal roles, names unique.
+          items: { $ref: '#/components/schemas/PortalRoleName' }
+
+    AppRolesInput:
+      type: object
+      required: [roles]
+      additionalProperties: false
+      properties:
+        roles:
+          type: array
+          description: Complete new list, names unique. Empty = remove all app roles of the app.
+          items: { $ref: '#/components/schemas/RoleName' }
+
+    AppRolesResult:
+      type: object
+      required: [userId, appId, roles, addedRoles, removedRoles, instanceClients]
+      properties:
+        userId: { type: string, format: uuid }
+        appId: { type: string, format: uuid }
+        roles:
+          type: array
+          description: App roles now valid on all target clients.
+          items: { $ref: '#/components/schemas/RoleName' }
+        addedRoles:
+          type: array
+          description: Added on at least one target client.
+          items: { $ref: '#/components/schemas/RoleName' }
+        removedRoles:
+          type: array
+          description: Removed on at least one target client.
+          items: { $ref: '#/components/schemas/RoleName' }
+        instanceClients:
+          type: array
+          description: Target clients (README 6.10).
+          items: { $ref: '#/components/schemas/InstanceClientRef' }
+
+    InvitationCreate:
+      type: object
+      required: [givenName, familyName, portalRoles]
+      additionalProperties: false
+      properties:
+        givenName: { $ref: '#/components/schemas/PersonName' }
+        familyName: { $ref: '#/components/schemas/PersonName' }
+        portalRoles:
+          type: array
+          minItems: 1
+          description: Company portal roles the person receives; names unique.
+          items: { $ref: '#/components/schemas/PortalRoleName' }
+
+    StaffInvitationCreate:
+      type: object
+      required: [givenName, familyName, staffRoles]
+      additionalProperties: false
+      properties:
+        givenName: { $ref: '#/components/schemas/PersonName' }
+        familyName: { $ref: '#/components/schemas/PersonName' }
+        staffRoles:
+          type: array
+          minItems: 1
+          description: Staff roles from STAFF_PORTAL_ROLES; names unique.
+          items: { $ref: '#/components/schemas/PortalRoleName' }
+
+    Invitation:
+      type: object
+      required: [id, kind, roles, status, expiresAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/InvitationKind' }
+        companyId:
+          type: [string, 'null']
+          format: uuid
+          description: For COMPANY.
+        givenName:
+          type: [string, 'null']
+          description: Only for OPEN.
+        familyName:
+          type: [string, 'null']
+          description: Only for OPEN.
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/PortalRoleName' }
+        status: { $ref: '#/components/schemas/InvitationStatus' }
+        endReason:
+          oneOf:
+            - $ref: '#/components/schemas/InvitationEndReason'
+            - type: 'null'
+        expiresAt: { type: string, format: date-time }
+        createdBy:
+          type: [string, 'null']
+          format: uuid
+          description: sub of the inviting person; empty for the bootstrap.
+        createdAt: { type: string, format: date-time }
+        acceptedBy: { type: [string, 'null'], format: uuid }
+        acceptedAt: { type: [string, 'null'], format: date-time }
+
+    InvitationWithCode:
+      allOf:
+        - $ref: '#/components/schemas/Invitation'
+        - type: object
+          required: [code]
+          properties:
+            code:
+              $ref: '#/components/schemas/InvitationCode'
+
+    InvitationCode:
+      type: string
+      pattern: '^[A-Za-z0-9_-]{43}$'
+      description: |
+        Invitation code, 32 random bytes base64url without padding. Returned
+        exactly once; the module stores only the SHA-256 hash.
+
+    InvitationPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Invitation' }
+        page: { type: integer }
+        size: { type: integer }
+        total: { type: integer }
+
+    AcceptInvitationInput:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code: { $ref: '#/components/schemas/InvitationCode' }
+
+    AcceptInvitationResult:
+      type: object
+      required: [invitationId, kind, userId, roles]
+      description: Afterwards the UI fetches a new token; only this token contains company_id, bpn and the new permissions.
+      properties:
+        invitationId: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/InvitationKind' }
+        userId: { type: string, format: uuid }
+        companyId:
+          type: [string, 'null']
+          format: uuid
+          description: For COMPANY.
+        roles:
+          type: array
+          description: Portal roles assigned with the invitation.
+          items: { $ref: '#/components/schemas/PortalRoleName' }
+
+    StaffMember:
+      type: object
+      required: [userId, enabled, staffRoles]
+      properties:
+        userId: { type: string, format: uuid }
+        givenName: { type: [string, 'null'] }
+        familyName: { type: [string, 'null'] }
+        enabled: { type: boolean }
+        staffRoles:
+          type: array
+          items: { $ref: '#/components/schemas/PortalRoleName' }
+        companyId:
+          type: [string, 'null']
+          format: uuid
+          description: Binding ACTIVE or DISABLED, otherwise null.
+
+    StaffMemberPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/StaffMember' }
+        page: { type: integer }
+        size: { type: integer }
+        total: { type: integer }
+
+    StaffRolesInput:
+      type: object
+      required: [staffRoles]
+      additionalProperties: false
+      properties:
+        staffRoles:
+          type: array
+          description: Complete new list from STAFF_PORTAL_ROLES; empty = no longer staff.
+          items: { $ref: '#/components/schemas/PortalRoleName' }
+
     StepRequest:
       type: object
       required: [processId, stepRunId]
@@ -400,11 +1531,11 @@ components:
         processId:
           type: string
           format: uuid
-          description: Process in Process Orchestration; for logging only.
+          description: Flow in Process Orchestration; only for the audit log.
         stepRunId:
           type: string
           format: uuid
-          description: This execution of the step; for logging only.
+          description: This run of the step; only for the audit log.
 
     StepCreateClientTemplate:
       allOf:
@@ -433,11 +1564,11 @@ components:
             offerSubscriptionId:
               type: string
               format: uuid
-              description: Required with SUBSCRIPTION, not allowed with SINGLE.
+              description: Required for SUBSCRIPTION, not allowed for SINGLE.
             customerCompanyId:
               type: string
               format: uuid
-              description: Required with SUBSCRIPTION, not allowed with SINGLE.
+              description: Required for SUBSCRIPTION, not allowed for SINGLE.
 
     StepInstanceClientRef:
       allOf:
@@ -480,6 +1611,27 @@ components:
               description: Per role the complete new list of descriptions.
               items: { $ref: '#/components/schemas/RoleInput' }
 
+    StepAssignCompanyAdmin:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [companyId, bpn, applicantSub]
+          properties:
+            companyId: { type: string, format: uuid }
+            bpn: { $ref: '#/components/schemas/BpnL' }
+            applicantSub:
+              type: string
+              format: uuid
+              description: sub of the applicant in the Portal IAM, from the application (C1-M2).
+
+    StepCompanyRef:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [companyId]
+          properties:
+            companyId: { type: string, format: uuid }
+
     StepResult:
       type: object
       required: [stepRunId, state]
@@ -487,8 +1639,8 @@ components:
         stepRunId: { type: string, format: uuid }
         state:
           type: string
-          description: A step is finished when it returns.
-          enum: [DONE]
+          description: Common contract of the steps (FRAMEWORK 4.4). All steps of this module answer with DONE.
+          enum: [DONE, RUNNING]
 
     StepResultTemplate:
       allOf:
@@ -551,10 +1703,45 @@ components:
                   type: array
                   items: { $ref: '#/components/schemas/RoleName' }
 
+    StepResultAssignCompanyAdmin:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          required: [result]
+          properties:
+            result:
+              type: object
+              required: [companyId, userId, portalRoles]
+              properties:
+                companyId: { type: string, format: uuid }
+                userId: { type: string, format: uuid }
+                portalRoles:
+                  type: array
+                  description: Company portal roles after the step.
+                  items: { $ref: '#/components/schemas/PortalRoleName' }
+
+    StepResultCompanyUsers:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          required: [result]
+          properties:
+            result:
+              type: object
+              required: [companyId, userIds]
+              properties:
+                companyId: { type: string, format: uuid }
+                userIds:
+                  type: array
+                  description: |
+                    disable-company-users: all bindings of the company with status
+                    DISABLED; enable-company-users: all with status ACTIVE.
+                  items: { type: string, format: uuid }
+
     EventBase:
       type: object
       required: [eventId, eventType, occurredAt]
-      description: Common fields of every event. Events never contain secrets.
+      description: Common fields of every event. Events never contain secrets, invitation codes or names.
       properties:
         eventId: { type: string, format: uuid }
         eventType: { type: string }
@@ -588,6 +1775,15 @@ components:
             iamClientId: { type: string }
             instanceUrl: { $ref: '#/components/schemas/InstanceUrl' }
 
+    EventInstanceClientFields:
+      type: object
+      required: [appInstanceClientId, appId, iamClientId]
+      properties:
+        appInstanceClientId: { type: string, format: uuid }
+        appId: { type: string, format: uuid }
+        offerSubscriptionId: { type: [string, 'null'], format: uuid }
+        iamClientId: { type: string }
+
     EventAppInstanceClientEnabled:
       allOf:
         - $ref: '#/components/schemas/EventBase'
@@ -603,15 +1799,6 @@ components:
         - type: object
           properties:
             eventType: { const: AppInstanceClientDisabled }
-
-    EventInstanceClientFields:
-      type: object
-      required: [appInstanceClientId, appId, iamClientId]
-      properties:
-        appInstanceClientId: { type: string, format: uuid }
-        appId: { type: string, format: uuid }
-        offerSubscriptionId: { type: [string, 'null'], format: uuid }
-        iamClientId: { type: string }
 
     EventAppInstanceUrlUpdated:
       allOf:
@@ -649,13 +1836,102 @@ components:
               type: array
               items: { $ref: '#/components/schemas/RoleName' }
 
+    EventUserAssignedToCompany:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [userId, companyId, via, portalRoles]
+          properties:
+            eventType: { const: UserAssignedToCompany }
+            userId: { type: string, format: uuid }
+            companyId: { type: string, format: uuid }
+            via: { $ref: '#/components/schemas/JoinedVia' }
+            portalRoles:
+              type: array
+              items: { $ref: '#/components/schemas/PortalRoleName' }
+
+    EventUserRemovedFromCompany:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [userId, companyId, reason]
+          properties:
+            eventType: { const: UserRemovedFromCompany }
+            userId: { type: string, format: uuid }
+            companyId: { type: string, format: uuid }
+            reason: { $ref: '#/components/schemas/RemovalReason' }
+
+    EventUserRolesChanged:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [userId, companyId, addedRoles, removedRoles]
+          properties:
+            eventType: { const: UserRolesChanged }
+            userId: { type: string, format: uuid }
+            companyId: { type: string, format: uuid }
+            appId:
+              type: [string, 'null']
+              format: uuid
+              description: Only for app roles; missing or null for company portal roles.
+            addedRoles:
+              type: array
+              items: { type: string }
+            removedRoles:
+              type: array
+              items: { type: string }
+
+    EventCompanyUsersDisabled:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [companyId, userIds]
+          properties:
+            eventType: { const: CompanyUsersDisabled }
+            companyId: { type: string, format: uuid }
+            userIds:
+              type: array
+              items: { type: string, format: uuid }
+
+    EventCompanyUsersEnabled:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [companyId, userIds]
+          properties:
+            eventType: { const: CompanyUsersEnabled }
+            companyId: { type: string, format: uuid }
+            userIds:
+              type: array
+              items: { type: string, format: uuid }
+
+    EventOspStaffRolesChanged:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [userId, addedRoles, removedRoles]
+          description: Addition to the framework (open-points.md).
+          properties:
+            eventType: { const: OspStaffRolesChanged }
+            userId: { type: string, format: uuid }
+            addedRoles:
+              type: array
+              items: { $ref: '#/components/schemas/PortalRoleName' }
+            removedRoles:
+              type: array
+              items: { $ref: '#/components/schemas/PortalRoleName' }
+
     Problem:
       type: object
+      required: [type, title, status]
       properties:
         type:
           type: string
-          description: Identifier, e.g. urn:c2-m2:problem:template-missing (list in README section 12).
+          description: Identifier, e.g. urn:c2-m2:problem:last-company-admin (list in README section 12).
         title: { type: string }
         status: { type: integer }
         detail: { type: string }
         instance: { type: string }
+        retryable:
+          type: boolean
+          description: Only for steps; true = temporary, false = permanent (FRAMEWORK 4.4).

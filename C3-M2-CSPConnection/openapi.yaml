@@ -1,0 +1,343 @@
+openapi: 3.1.0
+info:
+  title: C3-M2 CSP Connection
+  version: 0.1.0
+  description: |
+    The only place through which an installation uses the core services of the CSP:
+    register companies (BPN, home OSP), duplicate check, membership,
+    directory BPN → DID, transfer. Behaviour in README.md, sections 7 to 9.
+
+    - Calls carry a token of the Portal IAM; required permission in `x-permission`,
+      scope in `x-permission-scope` (FRAMEWORK 4.3).
+    - Process Orchestration and other modules call the paths under `/steps` and `/internal`.
+    - The CSP calls `/csp-notifications` with its service account.
+    - Errors as Problem Details (RFC 9457), identifiers in README section 12.
+servers:
+  - url: /api/c3-m2
+security:
+  - portalIam: []
+tags:
+  - name: OSP
+    description: For OSP staff
+  - name: CSP
+    description: Callbacks from the CSP
+  - name: Queries
+    description: For other modules
+  - name: Steps
+    description: For Process Orchestration
+
+paths:
+  /companies/{companyId}:
+    get:
+      tags: [OSP]
+      operationId: getCspRegistration
+      summary: Status of a company at the CSP
+      x-permission: view_csp_registration
+      x-permission-scope: osp
+      parameters:
+        - $ref: '#/components/parameters/CompanyId'
+      responses:
+        '200':
+          description: Status of the registration (README 7.1)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CspRegistration' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /csp-notifications:
+    post:
+      tags: [CSP]
+      operationId: receiveCspNotification
+      summary: Notification from the CSP
+      description: README 7.2. A known `notificationId` is acknowledged and not processed again.
+      x-permission: report_csp_notification
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CspNotification' }
+      responses:
+        '200': { description: Accepted }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /internal/find-companies:
+    get:
+      tags: [Queries]
+      operationId: findCompanies
+      summary: Duplicate check at the CSP
+      description: README section 9. At least `ebwoid`, `euid`, or `legalName` with `country`.
+      x-permission: query_c3_m2
+      x-permission-scope: osp
+      parameters:
+        - { name: ebwoid, in: query, schema: { type: string } }
+        - { name: euid, in: query, schema: { type: string } }
+        - { name: legalName, in: query, schema: { type: string } }
+        - { name: country, in: query, schema: { type: string, pattern: '^[A-Z]{2}$' } }
+      responses:
+        '200':
+          description: Matches; an empty list if there is no match
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CspCompanyMatch' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/register-company:
+    post:
+      tags: [Steps]
+      operationId: stepRegisterCompany
+      summary: Register a company with the CSP
+      description: README 8.1
+      x-permission: execute_steps_c3_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterCompanyInput' }
+      responses:
+        '200': { $ref: '#/components/responses/StepResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/transfer-company:
+    post:
+      tags: [Steps]
+      operationId: stepTransferCompany
+      summary: Transfer a company to this OSP
+      description: README 8.2
+      x-permission: execute_steps_c3_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransferCompanyInput' }
+      responses:
+        '200': { $ref: '#/components/responses/StepResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/register-did:
+    post:
+      tags: [Steps]
+      operationId: stepRegisterDid
+      summary: Enter the DID in the directory BPN → DID
+      description: README 8.3
+      x-permission: execute_steps_c3_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterDidInput' }
+      responses:
+        '200': { $ref: '#/components/responses/StepResult' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/update-company:
+    post:
+      tags: [Steps]
+      operationId: stepUpdateCompany
+      summary: Pass changed core data to the CSP
+      description: README 8.4
+      x-permission: execute_steps_c3_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateCompanyInput' }
+      responses:
+        '200': { $ref: '#/components/responses/StepResult' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/register-membership:
+    post:
+      tags: [Steps]
+      operationId: stepRegisterMembership
+      summary: Register the membership at the CSP
+      description: README 8.5
+      x-permission: execute_steps_c3_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepInput' }
+      responses:
+        '200': { $ref: '#/components/responses/StepResult' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/deregister-membership:
+    post:
+      tags: [Steps]
+      operationId: stepDeregisterMembership
+      summary: Deregister the membership at the CSP
+      description: README 8.5
+      x-permission: execute_steps_c3_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepInput' }
+      responses:
+        '200': { $ref: '#/components/responses/StepResult' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    portalIam:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token of the Portal IAM of the OSP
+
+  parameters:
+    CompanyId:
+      name: companyId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Problem:
+      description: Problem Details (README section 12)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    StepResult:
+      description: Result of the step (FRAMEWORK 4.4)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/StepResult' }
+
+  schemas:
+    StepInput:
+      type: object
+      required: [processId, stepRunId, companyId]
+      properties:
+        processId: { type: string, format: uuid }
+        stepRunId: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+
+    RegisterCompanyInput:
+      allOf:
+        - $ref: '#/components/schemas/StepInput'
+        - type: object
+          required: [legalName, ebwoid, country]
+          properties:
+            legalName: { type: string }
+            ebwoid: { type: string }
+            euid: { type: string }
+            country: { type: string, pattern: '^[A-Z]{2}$' }
+            address: { $ref: '#/components/schemas/Address' }
+
+    TransferCompanyInput:
+      allOf:
+        - $ref: '#/components/schemas/StepInput'
+        - type: object
+          required: [bpn, ebwoid]
+          properties:
+            bpn: { type: string }
+            ebwoid: { type: string }
+
+    UpdateCompanyInput:
+      allOf:
+        - $ref: '#/components/schemas/StepInput'
+        - type: object
+          required: [legalName]
+          properties:
+            legalName: { type: string }
+            euid: { type: string }
+            address: { $ref: '#/components/schemas/Address' }
+
+    RegisterDidInput:
+      allOf:
+        - $ref: '#/components/schemas/StepInput'
+        - type: object
+          required: [did]
+          properties:
+            did: { type: string }
+
+    StepResult:
+      type: object
+      required: [stepRunId, state]
+      properties:
+        stepRunId: { type: string, format: uuid }
+        state: { type: string, enum: [DONE, RUNNING] }
+        result:
+          type: object
+          properties:
+            bpn: { type: string }
+            did: { type: string }
+
+    CspRegistration:
+      type: object
+      required: [companyId, status, membership]
+      properties:
+        companyId: { type: string, format: uuid }
+        bpn: { type: string }
+        status: { type: string, enum: [PENDING, REGISTERED, FAILED, TRANSFERRED_AWAY] }
+        failureReason: { type: string }
+        did: { type: string }
+        membership: { type: string, enum: [NONE, REGISTERED, DEREGISTERED] }
+        registeredAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CspCompanyMatch:
+      type: object
+      required: [bpn, legalName, country, matchedBy, homeOspId, homeIsThisOsp]
+      properties:
+        bpn: { type: string }
+        legalName: { type: string }
+        country: { type: string }
+        matchedBy: { type: string, enum: [EBWOID, EUID, NAME] }
+        homeOspId: { type: string, format: uuid }
+        homeOspName: { type: string }
+        homeIsThisOsp: { type: boolean }
+        memberActive: { type: boolean }
+
+    CspNotification:
+      type: object
+      required: [notificationId, type]
+      properties:
+        notificationId: { type: string }
+        type: { type: string, enum: [OperationCompleted, CompanyTransferredAway] }
+        bpn: { type: string }
+        operationId: { type: string }
+        outcome: { type: string, enum: [SUCCEEDED, FAILED] }
+        reason: { type: string }
+
+    Address:
+      type: object
+      properties:
+        streetAddress: { type: string }
+        postalCode: { type: string }
+        locality: { type: string }
+        country: { type: string }
+
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        retryable: { type: boolean }

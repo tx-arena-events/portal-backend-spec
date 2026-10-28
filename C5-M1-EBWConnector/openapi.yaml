@@ -16,7 +16,7 @@ servers:
   - url: /
 tags:
   - name: OpenID Connect
-    description: For clients (OSP portals, Business Wallets)
+    description: For clients (Portal IAM and user interface of an OSP, Business Wallets)
   - name: Wallet
     description: For EUDI Wallets and Business Wallets (OpenID4VP)
   - name: Pages

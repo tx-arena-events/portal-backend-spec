@@ -3,7 +3,7 @@
 **Version:** 0.2, as of 2026-10-28
 **Capability:** C5 Business Wallet
 **Kind:** Provided (built before the hackathon; a reference implementation is provided for the hackathon)
-**Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface)
+**Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
 
 This README and the OpenAPI description are sufficient to build the module. Modules from other parts of the spec are referred to by name.
 
@@ -24,7 +24,8 @@ Callers:
 
 | Who | What for |
 |---|---|
-| OSP portal (OIDC client) | sign-in of people; onboarding of a company with verification attestation |
+| Portal IAM of an OSP (OIDC client, identity provider) | sign-in of people at the OSP's portal |
+| User interface of an OSP (OIDC client) | onboarding of a company with verification attestation |
 | Business Wallet (OIDC client) | sign-in of the company's employees |
 | EUDI Wallet of the person | fetch the request, send the response (OpenID4VP) |
 | Business Wallet of the company (as wallet) | fetch the request, send the response (OpenID4VP) |
@@ -49,7 +50,7 @@ Callers:
 | Transaction | one sign-in or onboarding, from the authorization request of the client to the redeemed code |
 | Step | one presentation from one wallet within a transaction: `person` (EUDI Wallet) or `company` (Business Wallet) |
 | Verification attestation | JWT signed by the EBW-Connector about a successful onboarding transaction (section 9) |
-| Client | registered OIDC client: OSP portal or Business Wallet |
+| Client | registered OIDC client: Portal IAM or user interface of an OSP, Business Wallet |
 | Same-device, cross-device | wallet on the same device as the browser (link) or on another device (QR code) |
 | DCQL | Digital Credentials Query Language of OpenID4VP |
 | KB-JWT | key binding JWT: proof of the wallet that it holds the key the credential is bound to |
@@ -148,7 +149,7 @@ Typical requests:
 
 | Use | Scopes | Steps |
 |---|---|---|
-| Sign-in at an OSP portal | `openid profile representation` | `person` |
+| Sign-in at an OSP's portal (Portal IAM as client) | `openid profile` | `person` |
 | Sign-in at a Business Wallet | `openid profile representation` | `person` |
 | Onboarding a company at an OSP | `openid profile representation company attestation` | `person`, `company` |
 
@@ -189,7 +190,7 @@ Failure reasons (`failure_reason`):
 
 For every presented credential, in this order. The first error ends the check and the transaction becomes `FAILED` with the reason.
 
-1. Exactly one presentation per credential in the query, format `dc+sd-jwt`; otherwise `INVALID_RESPONSE` or `UNSUPPORTED_FORMAT`.
+1. At least one presentation per credential in the query, format `dc+sd-jwt`; otherwise `INVALID_RESPONSE` or `UNSUPPORTED_FORMAT`. Lenient for the hackathon (OP-43): a presentation may come as a string instead of a list (the form of earlier OpenID4VP drafts). With several presentations per credential, the first one that passes all checks counts for PID and LPID. For the mandate, the EBW-Connector chooses according to 6.5: first one with result `CONFIRMED`, otherwise a trusted one, otherwise the first. This may become strict again later: exactly one presentation, always as a list.
 2. Header: `typ` `dc+sd-jwt` (for a transition also `vc+sd-jwt`), `alg` `ES256`; never `none`.
 3. `vct` is the one configured for the credential type; otherwise `MISSING_CREDENTIAL`.
 4. Signature and trust: the signature verifies with a key of a trust list entry for this credential type (11.3). If the entry names `iss`, the credential's `iss` must be equal. Without a matching entry: `UNTRUSTED_ISSUER`; signature wrong: `INVALID_SIGNATURE`. For the mandate, see below.
@@ -385,7 +386,7 @@ Form (`application/x-www-form-urlencoded`) with `response` (JWE, with `direct_po
 1. Step of `requestId` open and transaction `PENDING`; otherwise 400 `invalid_request`.
 2. `error` and matching `state`: `FAILED`, `WALLET_ERROR`.
 3. With `direct_post.jwt`: decrypt `response` with the private key of the step (ECDH-ES with `A128GCM` or `A256GCM`); check `state`. Errors: `FAILED`, `INVALID_RESPONSE`.
-4. `vp_token`: JSON object with the credential IDs of the query (`pid`, `mandate`, `lpid`) as keys and a list with one presentation each.
+4. `vp_token`: JSON object with the credential IDs of the query (`pid`, `mandate`, `lpid`) as keys and a list of presentations each; for the hackathon also a single presentation as a string (6.3 check 1, OP-43). A JWE header with `"apu": null` counts as one without `apu`.
 5. Check every credential per 6.3.
 6. After the last step: representation check per 6.5, build the result, status `VERIFIED`, write the audit entry. Otherwise the next step becomes open. `vp_token` is discarded.
 7. Response 200 `{ "redirect_uri": "{PUBLIC_URL}/transactions/{id}" }`, also after `FAILED`.

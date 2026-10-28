@@ -32,44 +32,56 @@ Today's portal is a monolith: the user interface owns orchestration and business
 
 - the central portal core with APIs for all OSPs;
 - PSP Admission (C1-M1): OSPs are admitted through the trust list of the CSP;
-- Delegation (C2-M4): an OSP and its portal are one.
+- Delegation (C2-M4): an OSP and its portal are one;
+- Sign-in Services (C2-M1): the Portal IAM of an OSP has exactly one identity provider, the EBW-Connector.
+
+### New
+
+- CSP Connection (C3-M2): the only module that calls the core services of the CSP.
 
 ### Flows and data
 
 - Every step of a flow, such as onboarding, runs through Process Orchestration and is event-driven. Modules call each other directly only for queries.
 - Each module has its own database. No module reads or writes the database of another module; it uses that module's interface. Events go out through an outbox per module and never carry secrets.
 
+## Framework and open points
+
+- [FRAMEWORK.md](FRAMEWORK.md): binding rules for all module specs: architecture, conventions for paths, tokens, permissions and scopes, steps and errors, the flows across modules (onboarding, persons, deactivation, reactivation, transfer, technical users, apps), and the catalogues of events and steps.
+- [open-points.md](open-points.md): open questions that concern several modules (OP-xx), with their status.
+
 ## Modules
 
-| Module | Status |
-|---|---|
-| [C1-M1 PSP Admission](C1-M1-PSPAdmission/) | dropped with OSP 2.0: admission through the trust list of the CSP |
-| [C1-M2 Registration](C1-M2-Registration/) | to be specified |
-| [C1-M3 Application Review](C1-M3-ApplicationReview/) | to be specified |
-| [C2-M1 Sign-in Services](C2-M1-SignInService/) | to be specified |
-| [C2-M2 App Access](C2-M2-AppAccess/) | draft 0.1 (app clients and roles; app users to be added) |
-| [C2-M3 Technical Users](C2-M3-TechnicalUser/) | draft 0.1 (to be updated for PSPs) |
-| [C2-M4 Delegation](C2-M4-Delegation/) | dropped with OSP 2.0 |
-| [C2-M5 Portal IAM](C2-M5-PortalIAM/) | configuration, to be specified |
-| [C3-M1 Company Profile](C3-M1-CompanyProfile/) | to be specified |
-| [C4-M1 Credentials](C4-M1-Credentials/) | to be specified |
-| [C4-M2 Dataspace Wallet Interface](C4-M2-DataspaceWalletInterface/) | to be specified |
-| [C5-M1 EBW-Connector](C5-M1-EBWConnector/) | draft 0.2 (two wallets, OSP 2.0) |
+All modules are at version 0.2 for OSP 2.0, as of 28 Oct 2026. Every decision that is not yet agreed is marked as provisional in the module's `open-points.md`.
+
+| Module | Kind | Status |
+|---|---|---|
+| [C1-M1 PSP Admission](C1-M1-PSPAdmission/) | – | dropped with OSP 2.0: OSPs are admitted through the trust list of the CSP |
+| [C1-M2 Registration](C1-M2-Registration/) | Hackathon | draft 0.2 |
+| [C1-M3 Application Review](C1-M3-ApplicationReview/) | Hackathon | draft 0.2 |
+| [C2-M1 Sign-in Services](C2-M1-SignInService/) | – | dropped with OSP 2.0: the only identity provider (EBW-Connector) is configuration in C2-M5 |
+| [C2-M2 Users and App Access](C2-M2-AppAccess/) | Hackathon | draft 0.2 |
+| [C2-M3 Technical Users](C2-M3-TechnicalUser/) | Hackathon | draft 0.2 |
+| [C2-M4 Delegation](C2-M4-Delegation/) | – | dropped with OSP 2.0 |
+| [C2-M5 Portal IAM](C2-M5-PortalIAM/) | Configuration | draft 0.2 |
+| [C3-M1 Company Profile](C3-M1-CompanyProfile/) | Hackathon | draft 0.2 |
+| [C3-M2 CSP Connection](C3-M2-CSPConnection/) | Hackathon | draft 0.1 (new with OSP 2.0) |
+| [C4-M1 Credentials](C4-M1-Credentials/) | Hackathon | draft 0.2 |
+| [C4-M2 Dataspace Wallet Interface](C4-M2-DataspaceWalletInterface/) | Hackathon | draft 0.2 |
+| [C5-M1 EBW-Connector](C5-M1-EBWConnector/) | Provided | draft 0.2 (two wallets, OSP 2.0; lenient for the hackathon, OP-43) |
 
 Modules from the other part of the spec (Process Orchestration, Offers, Subscriptions, Connectors, Notifications, MCP server) are referred to by name.
 
-Modules written for the Portal Service Provider architecture, such as C2-M1, C2-M3 and C2-M5, are to be reviewed for OSP 2.0.
-
-The module numbers changed with the Portal Service Provider architecture. The former C2-M6 App Clients and Roles is now part of C2-M2 App Access.
+The module numbers changed with the Portal Service Provider architecture. The former C2-M6 App Clients and Roles is now part of C2-M2. The versions written for the Portal Service Provider architecture are in the git history of this repository.
 
 ## Format
 
-Each module has its own folder, named after its identifier, with two files:
+Each module has its own folder, named after its identifier, with three files:
 
-- `README.md` – the behaviour: purpose, data, rules, every operation step by step, calls to other modules, errors, acceptance criteria and test data
+- `README.md` – the behaviour: purpose, data, rules, every operation step by step, steps for Process Orchestration, queries, events, calls to other modules, errors, acceptance criteria and test data
 - `openapi.yaml` – the interface (OpenAPI 3.1)
+- `open-points.md` – provisional decisions, deviations from the framework, assumptions about other modules and open questions
 
-A team should be able to implement a module from these two files alone.
+A team should be able to implement a module from these files and [FRAMEWORK.md](FRAMEWORK.md). A dropped module keeps its folder with a short README.
 
 Modules are grouped into capabilities: `C2-M3` is module 3 of capability C2.
 

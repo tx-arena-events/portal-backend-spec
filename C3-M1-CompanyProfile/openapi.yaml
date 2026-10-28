@@ -1,6 +1,1715 @@
 openapi: 3.1.0
 info:
   title: C3-M1 Company Profile
-  version: 0.0.0
-  description: To be specified.
-paths: {}
+  version: 0.2.0
+  description: |
+    Record of every company in the installation of an OSP (OSP 2.0), from the
+    application to the deactivation: master data, identifiers, source of the core
+    data, company identifier (BPN, assigned by the CSP), status, company roles with
+    consents, change requests with supporting documents. The behaviour is described
+    in README.md.
+
+    - People call through the UI with their token from the Portal IAM of the OSP.
+      The required permission per operation is in `x-permission`, the scope in
+      `x-permission-scope` (FRAMEWORK 4.3): `company` = only the company from the claim
+      `company_id` (otherwise 404), `osp` = OSP staff, all companies.
+    - Process Orchestration and other modules call steps (`/steps`) and queries
+      (`/internal`) in the same process. The HTTP paths describe the same contract;
+      over HTTP the check is the same as in the scope `osp` (only the permission).
+    - Errors as Problem Details (RFC 9457), identifiers in README section 12.
+    - Events under `components/schemas` (names start with `Event`), README section 10.
+servers:
+  - url: /api/c3-m1
+security:
+  - portalIam: []
+tags:
+  - name: Company
+    description: Calls by people of a company, only for their own company
+  - name: OSP
+    description: Tasks of OSP staff
+  - name: Queries
+    description: For other modules
+  - name: Steps
+    description: For Process Orchestration
+
+paths:
+  /companies/{companyId}:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+    get:
+      tags: [Company]
+      operationId: getCompany
+      summary: Read own company
+      description: README 7.1.
+      x-permission: view_company
+      x-permission-scope: company
+      responses:
+        '200':
+          description: The company
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Company' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    patch:
+      tags: [Company]
+      operationId: updateCompany
+      summary: Change the short name
+      description: |
+        README 7.2. Only with status ACTIVE. Only shortName is allowed; other fields
+        give 409 field-locked.
+      x-permission: edit_company
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompanyUpdate' }
+      responses:
+        '200':
+          description: The company after the change
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Company' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /companies/{companyId}/attestation-updates:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+    post:
+      tags: [Company]
+      operationId: updateCompanyFromAttestation
+      summary: Change core data with a new verification attestation
+      description: |
+        README 7.3 and 6.7. Verification attestation of the EBW-Connector of the
+        installation, same EBWOID, same country, representation confirmed. Takes effect
+        immediately, without OSP staff. Each verification attestation is valid once.
+      x-permission: edit_company
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttestationUpdate' }
+      responses:
+        '200':
+          description: Changed fields and the company
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttestationUpdateResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /companies/{companyId}/change-requests:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+    get:
+      tags: [Company]
+      operationId: listOwnChangeRequests
+      summary: Change requests of the own company
+      description: README 7.5. Newest first. Without the content of the supporting documents.
+      x-permission: view_company
+      x-permission-scope: company
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: One page of the list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeRequestPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [Company]
+      operationId: createChangeRequest
+      summary: Submit a change request with supporting documents
+      description: |
+        README 7.4. For the path without Business Wallet and for further identifiers.
+        With source EBW, name and address are excluded (409 attestation-required).
+        At most one open change request per company.
+      x-permission: edit_company
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/ChangeRequestUpload' }
+            encoding:
+              data:
+                contentType: application/json
+              documents:
+                contentType: application/pdf, image/png, image/jpeg
+      responses:
+        '201':
+          description: The created change request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeRequest' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /companies/{companyId}/change-requests/{changeRequestId}/withdraw:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+      - $ref: '#/components/parameters/ChangeRequestId'
+    post:
+      tags: [Company]
+      operationId: withdrawChangeRequest
+      summary: Withdraw a change request
+      description: README 7.6. Only OPEN; WITHDRAWN stays without change.
+      x-permission: edit_company
+      x-permission-scope: company
+      responses:
+        '200':
+          description: The change request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeRequest' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /companies/{companyId}/company-roles:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+    get:
+      tags: [Company]
+      operationId: listCompanyRolesOfCompany
+      summary: Company roles of the own company with consents
+      description: |
+        README 7.7. All roles with assignableBy COMPANY and all roles that the company
+        has or had.
+      x-permission: view_company
+      x-permission-scope: company
+      parameters:
+        - $ref: '#/components/parameters/Lang'
+      responses:
+        '200':
+          description: Roles with status and consents
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CompanyRoleState' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [Company]
+      operationId: addCompanyRole
+      summary: Add a company role with consents
+      description: |
+        README 7.8. Only roles with assignableBy COMPANY, only with status ACTIVE.
+        agreementIds must contain all terms of the role. The time of the consent is
+        the call.
+      x-permission: edit_company_roles
+      x-permission-scope: company
+      parameters:
+        - $ref: '#/components/parameters/Lang'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompanyRoleAdd' }
+      responses:
+        '200':
+          description: Roles after the change
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CompanyRoleState' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /companies/{companyId}/company-roles/{companyRole}:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+      - name: companyRole
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/CompanyRoleName' }
+    delete:
+      tags: [Company]
+      operationId: removeCompanyRole
+      summary: Remove a company role
+      description: |
+        README 7.9. Consents to the terms of the role become INACTIVE, unless the
+        terms also belong to another active role. The last active role with
+        assignableBy COMPANY stays (409 last-role).
+      x-permission: edit_company_roles
+      x-permission-scope: company
+      parameters:
+        - $ref: '#/components/parameters/Lang'
+      responses:
+        '200':
+          description: Roles after the change
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CompanyRoleState' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /osp/companies:
+    get:
+      tags: [OSP]
+      operationId: listCompanies
+      summary: Search and list companies of the installation
+      description: README 7.10. Sorted by createdAt descending.
+      x-permission: view_companies
+      x-permission-scope: osp
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - name: status
+          in: query
+          description: Repeatable.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/CompanyStatus' }
+          style: form
+          explode: true
+        - name: name
+          in: query
+          description: Part of the name, case-insensitive.
+          schema: { type: string, minLength: 1, maxLength: 160 }
+        - name: bpn
+          in: query
+          schema: { $ref: '#/components/schemas/Bpn' }
+        - name: hasBpn
+          in: query
+          description: true = only companies with BPN; false = only without.
+          schema: { type: boolean }
+        - name: companyRole
+          in: query
+          description: Only companies with this active role.
+          schema: { $ref: '#/components/schemas/CompanyRoleName' }
+        - name: coreDataSource
+          in: query
+          schema: { $ref: '#/components/schemas/CoreDataSource' }
+      responses:
+        '200':
+          description: One page of the list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompanyPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /osp/companies/{companyId}:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+    get:
+      tags: [OSP]
+      operationId: getCompanyDetail
+      summary: Read a company with all fields
+      description: README 7.11.
+      x-permission: view_companies
+      x-permission-scope: osp
+      responses:
+        '200':
+          description: The company
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompanyDetail' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    patch:
+      tags: [OSP]
+      operationId: correctCompany
+      summary: Correct company data
+      description: |
+        README 7.12. README 6.6 defines what may be changed. identifiers is the
+        complete new list of the identifiers with source DECLARED; identifiers with
+        source BUSINESS_WALLET stay. If name or address change with source EBW, the
+        source becomes MANUAL.
+      x-permission: manage_companies
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompanyCorrection' }
+      responses:
+        '200':
+          description: The corrected company
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompanyDetail' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /osp/companies/{companyId}/deactivate:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+    post:
+      tags: [OSP]
+      operationId: deactivateCompany
+      summary: Deactivate a company manually
+      description: |
+        README 7.13. ACTIVE becomes INACTIVE with reason MANUAL, event CompanyDeactivated.
+        The justification is only in the audit log. The flow in FRAMEWORK 5.4 controls
+        the consequences.
+      x-permission: manage_companies
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Reason' }
+      responses:
+        '200':
+          description: The deactivated company
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompanyDetail' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /osp/change-requests:
+    get:
+      tags: [OSP]
+      operationId: listChangeRequests
+      summary: Change requests of all companies
+      description: README 7.14. Sorted by createdAt ascending (oldest first).
+      x-permission: review_company_changes
+      x-permission-scope: osp
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - name: status
+          in: query
+          description: Repeatable.
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/ChangeRequestStatus' }
+          style: form
+          explode: true
+        - name: companyId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: One page of the list
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeRequestPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /osp/change-requests/{changeRequestId}:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    get:
+      tags: [OSP]
+      operationId: getChangeRequest
+      summary: Change request with the current state of the company
+      description: README 7.15.
+      x-permission: review_company_changes
+      x-permission-scope: osp
+      responses:
+        '200':
+          description: The change request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeRequestDetail' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /osp/change-requests/{changeRequestId}/documents/{documentId}:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+      - name: documentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [OSP]
+      operationId: getChangeRequestDocument
+      summary: Download a supporting document of a change request
+      description: |
+        README 7.16. Content with the stored Content-Type and
+        Content-Disposition attachment. Every read is written to the audit log.
+      x-permission: review_company_changes
+      x-permission-scope: osp
+      responses:
+        '200':
+          description: Content of the supporting document
+          headers:
+            Content-Disposition:
+              description: attachment with the file name
+              schema: { type: string }
+          content:
+            application/pdf:
+              schema: { type: string, contentMediaType: application/pdf }
+            image/png:
+              schema: { type: string, contentMediaType: image/png }
+            image/jpeg:
+              schema: { type: string, contentMediaType: image/jpeg }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /osp/change-requests/{changeRequestId}/approve:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    post:
+      tags: [OSP]
+      operationId: approveChangeRequest
+      summary: Approve a change request
+      description: |
+        README 7.17. Checks the rules again against the current state and applies the
+        changes. Nobody approves their own request (409 same-person).
+      x-permission: review_company_changes
+      x-permission-scope: osp
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ApprovalInput' }
+      responses:
+        '200':
+          description: The change request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeRequest' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /osp/change-requests/{changeRequestId}/decline:
+    parameters:
+      - $ref: '#/components/parameters/ChangeRequestId'
+    post:
+      tags: [OSP]
+      operationId: declineChangeRequest
+      summary: Decline a change request
+      description: README 7.18. The Company Admin sees the justification.
+      x-permission: review_company_changes
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeclineInput' }
+      responses:
+        '200':
+          description: The change request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChangeRequest' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /internal/companies/{companyId}:
+    parameters:
+      - $ref: '#/components/parameters/CompanyId'
+    get:
+      tags: [Queries]
+      operationId: queryCompany
+      summary: One company
+      description: README 9.1.
+      x-permission: query_c3_m1
+      x-permission-scope: osp
+      responses:
+        '200':
+          description: The company
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompanyInternal' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /internal/companies:
+    get:
+      tags: [Queries]
+      operationId: queryCompanies
+      summary: Many companies at once, by ID or BPN
+      description: |
+        README 9.2. Exactly one of the parameters id and bpn, with 1 to
+        QUERY_MAX_COMPANIES (default 100) values. items in the order of the request.
+      x-permission: query_c3_m1
+      x-permission-scope: osp
+      parameters:
+        - name: id
+          in: query
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 100
+            items: { type: string, format: uuid }
+          style: form
+          explode: true
+        - name: bpn
+          in: query
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 100
+            items: { $ref: '#/components/schemas/Bpn' }
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: Companies found and values not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompanyLookupResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /internal/companies/identifier-matches:
+    post:
+      tags: [Queries]
+      operationId: findIdentifierMatches
+      summary: Find companies of the installation with the same identifiers
+      description: |
+        README 9.3. Complements the duplicate check at the CSP (C3-M2 find-companies).
+        Changes nothing; POST only because of the list in the body. C1-M3 decides
+        whether a match is a duplicate.
+      x-permission: query_c3_m1
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IdentifierMatchQuery' }
+      responses:
+        '200':
+          description: Matches, sorted by number of matches descending
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IdentifierMatchResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /internal/company-roles:
+    get:
+      tags: [Queries]
+      operationId: queryCompanyRoleCatalog
+      summary: Role catalogue
+      description: README 9.4. For C1-M2 and C2-M3.
+      x-permission: query_c3_m1
+      x-permission-scope: osp
+      parameters:
+        - $ref: '#/components/parameters/Lang'
+      responses:
+        '200':
+          description: All company roles of the catalogue
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CompanyRoleDefinition' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /steps/create-company:
+    post:
+      tags: [Steps]
+      operationId: stepCreateCompany
+      summary: 'Step: create the company from the application (REQUESTED)'
+      description: |
+        README 8.1. For applications of kind ONBOARDING and TRANSFER. Reads the data of
+        the application at C1-M2. Idempotent through the companyId.
+      x-permission: execute_steps_c3_m1
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepCompanyApplication' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultCompanyState' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/assign-identifier:
+    post:
+      tags: [Steps]
+      operationId: stepAssignIdentifier
+      summary: 'Step: take over the BPN from the CSP'
+      description: |
+        README 8.2. Input is the BPN from CompanyRegisteredAtCsp (C3-M2). The same
+        BPN gives DONE without event; a different one gives 409 bpn-mismatch.
+      x-permission: execute_steps_c3_m1
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepAssignIdentifier' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultIdentifier' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /steps/activate-company:
+    post:
+      tags: [Steps]
+      operationId: stepActivateCompany
+      summary: 'Step: activate the company'
+      description: |
+        README 8.3. Precondition: BPN present. Takes over the consents of the application
+        from C1-M2 and sets ACTIVE. Does not register a membership (C3-M2 does that).
+      x-permission: execute_steps_c3_m1
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepCompanyApplication' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultActivation' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/reject-company:
+    post:
+      tags: [Steps]
+      operationId: stepRejectCompany
+      summary: 'Step: reject the company'
+      description: README 8.4. REQUESTED becomes REJECTED; REJECTED stays.
+      x-permission: execute_steps_c3_m1
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepCompanyRef' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultCompanyState' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /steps/deactivate-company:
+    post:
+      tags: [Steps]
+      operationId: stepDeactivateCompany
+      summary: 'Step: deactivate the company'
+      description: |
+        README 8.5. Mainly in a transfer to another OSP (reason TRANSFERRED, after
+        CompanyTransferredAway). ACTIVE becomes INACTIVE; INACTIVE stays.
+      x-permission: execute_steps_c3_m1
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepDeactivateCompany' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultDeactivation' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /steps/reactivate-company:
+    post:
+      tags: [Steps]
+      operationId: stepReactivateCompany
+      summary: 'Step: reactivate the company'
+      description: |
+        README 8.6. After the approval of an application of kind REACTIVATION (reason
+        MANUAL) or on return with kind TRANSFER (reason TRANSFERRED). Takes over the
+        core data from the application.
+      x-permission: execute_steps_c3_m1
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepCompanyApplication' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultReactivation' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    portalIam:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Token from the Portal IAM of the OSP (aud contains portal-core). Token of a person
+        with sub, company_id (if bound to a company) and the permissions under
+        resource_access.portal-core.roles.
+
+  parameters:
+    CompanyId:
+      name: companyId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ChangeRequestId:
+      name: changeRequestId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Lang:
+      name: lang
+      in: query
+      description: Language of the descriptions and names; otherwise English, otherwise the first available.
+      schema: { type: string, pattern: '^[a-z]{2}$', default: en, examples: [de, en] }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    Problem:
+      description: Error (RFC 9457), identifiers in README section 12
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    CompanyStatus:
+      type: string
+      description: REQUESTED = applied for; ACTIVE = activated; REJECTED = rejected (final); INACTIVE = deactivated.
+      enum: [REQUESTED, ACTIVE, REJECTED, INACTIVE]
+
+    CoreDataSource:
+      type: string
+      description: |
+        Source of the core data (name, address with country, EUID, EBWOID). EBW = from
+        the LPID of a verification attestation of the EBW-Connector; MANUAL = checked
+        by OSP staff against supporting documents.
+      enum: [EBW, MANUAL]
+
+    DeactivationReason:
+      type: string
+      description: MANUAL = deactivated by OSP staff; TRANSFERRED = transferred to another OSP.
+      enum: [MANUAL, TRANSFERRED]
+
+    Bpn:
+      type: string
+      description: Company identifier, today BPN (BPNL); assigned by the CSP. Stored in upper case.
+      pattern: '^[Bb][Pp][Nn][Ll][A-Za-z0-9]{12}$'
+      examples: [BPNLIUK2REMLK3F4]
+
+    CompanyRoleName:
+      type: string
+      description: |
+        Company role from the role catalogue of the installation (README 6.5).
+        Initial values ACTIVE_PARTICIPANT, APP_PROVIDER, SERVICE_PROVIDER,
+        ONBOARDING_SERVICE_PROVIDER.
+      pattern: '^[A-Z][A-Z0-9_]{1,63}$'
+      examples: [ACTIVE_PARTICIPANT]
+
+    AssignableBy:
+      type: string
+      description: COMPANY = selectable in the application and changeable by the Company Admin; SEED = seed data only.
+      enum: [COMPANY, SEED]
+
+    IdentifierType:
+      type: string
+      description: Identifier type (README 6.4). EBWOID = identifier of the owner of a Business Wallet (from the LPID).
+      enum: [EUID, EBWOID, VAT_ID, COMMERCIAL_REG_NUMBER, LEI_CODE, EORI]
+
+    IdentifierSource:
+      type: string
+      description: BUSINESS_WALLET = from the verification attestation; DECLARED = declared.
+      enum: [BUSINESS_WALLET, DECLARED]
+
+    Identifier:
+      type: object
+      required: [type, value, source]
+      properties:
+        type: { $ref: '#/components/schemas/IdentifierType' }
+        value:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Format per type and country as in README 6.4.
+          examples: [DE123456789]
+        source: { $ref: '#/components/schemas/IdentifierSource' }
+
+    DeclaredIdentifier:
+      type: object
+      required: [type, value]
+      description: Identifier with source DECLARED (change request, correction).
+      properties:
+        type: { $ref: '#/components/schemas/IdentifierType' }
+        value: { type: string, minLength: 1, maxLength: 255 }
+
+    AddressFields:
+      type: object
+      required: [street, city]
+      properties:
+        street: { type: string, minLength: 1, maxLength: 255, examples: [Musterstraße] }
+        houseNumber: { type: [string, 'null'], maxLength: 50, examples: ['1'] }
+        addressAddition: { type: [string, 'null'], maxLength: 255 }
+        postalCode: { type: [string, 'null'], maxLength: 12, examples: ['70569'] }
+        city: { type: string, minLength: 1, maxLength: 255, examples: [Stuttgart] }
+        region:
+          type: [string, 'null']
+          pattern: '^[A-Z0-9]{1,3}$'
+          description: Part after the hyphen of an ISO 3166-2 code.
+          examples: [BW]
+
+    Address:
+      allOf:
+        - $ref: '#/components/schemas/AddressFields'
+        - type: object
+          required: [countryCode]
+          properties:
+            countryCode:
+              type: string
+              pattern: '^[A-Z]{2}$'
+              description: ISO 3166-1 alpha-2.
+              examples: [DE]
+
+    CompanyName:
+      type: string
+      minLength: 1
+      maxLength: 160
+      pattern: '^\S(.*\S)?$'
+      description: No spaces at the start or end.
+      examples: [Beispiel Maschinenbau GmbH]
+
+    CompanyRoleAssignment:
+      type: object
+      required: [companyRole, status]
+      properties:
+        companyRole: { $ref: '#/components/schemas/CompanyRoleName' }
+        status:
+          type: string
+          description: REQUESTED = requested with the application; ACTIVE = active; INACTIVE = removed.
+          enum: [REQUESTED, ACTIVE, INACTIVE]
+        activatedAt: { type: [string, 'null'], format: date-time }
+        deactivatedAt: { type: [string, 'null'], format: date-time }
+
+    Company:
+      type: object
+      description: Company as seen by its people.
+      required: [id, name, address, identifiers, coreDataSource, status, companyRoles, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { $ref: '#/components/schemas/CompanyName' }
+        shortName: { type: [string, 'null'], maxLength: 100 }
+        address: { $ref: '#/components/schemas/Address' }
+        identifiers:
+          type: array
+          items: { $ref: '#/components/schemas/Identifier' }
+        coreDataSource: { $ref: '#/components/schemas/CoreDataSource' }
+        coreDataVerifiedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Last verification of the core data (verification attestation or approval by OSP staff).
+        bpn:
+          description: Empty until taken over from the CSP (assign-identifier).
+          oneOf:
+            - $ref: '#/components/schemas/Bpn'
+            - type: 'null'
+        status: { $ref: '#/components/schemas/CompanyStatus' }
+        companyRoles:
+          type: array
+          items: { $ref: '#/components/schemas/CompanyRoleAssignment' }
+        dataspaceName:
+          type: [string, 'null']
+          description: Name of the dataspace of the installation (setting dataspace.name).
+          examples: [Catena-X]
+        createdAt: { type: string, format: date-time }
+        changedAt: { type: string, format: date-time }
+        activatedAt: { type: [string, 'null'], format: date-time }
+
+    CompanyDetail:
+      description: Company as seen by OSP staff, with all fields.
+      allOf:
+        - $ref: '#/components/schemas/Company'
+        - type: object
+          properties:
+            applicationId: { type: [string, 'null'], format: uuid }
+            verificationRef:
+              type: [string, 'null']
+              maxLength: 200
+              description: jti of the verification attestation the core data is based on; empty with MANUAL.
+            bpnAssignedAt: { type: [string, 'null'], format: date-time }
+            deactivationReason:
+              oneOf:
+                - $ref: '#/components/schemas/DeactivationReason'
+                - type: 'null'
+            rejectedAt: { type: [string, 'null'], format: date-time }
+            deactivatedAt: { type: [string, 'null'], format: date-time }
+            reactivatedAt: { type: [string, 'null'], format: date-time }
+            openChangeRequestId: { type: [string, 'null'], format: uuid }
+
+    CompanySummary:
+      type: object
+      required: [id, name, status, coreDataSource, countryCode, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { $ref: '#/components/schemas/CompanyName' }
+        status: { $ref: '#/components/schemas/CompanyStatus' }
+        bpn:
+          oneOf:
+            - $ref: '#/components/schemas/Bpn'
+            - type: 'null'
+        coreDataSource: { $ref: '#/components/schemas/CoreDataSource' }
+        countryCode: { type: string, pattern: '^[A-Z]{2}$' }
+        companyRoles:
+          type: array
+          description: Active roles only.
+          items: { $ref: '#/components/schemas/CompanyRoleName' }
+        createdAt: { type: string, format: date-time }
+
+    CompanyPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CompanySummary' }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+
+    CompanyUpdate:
+      type: object
+      description: |
+        Change by the Company Admin. Only shortName; further fields (for example name,
+        address, identifiers) give 409 field-locked.
+      minProperties: 1
+      properties:
+        shortName: { type: [string, 'null'], maxLength: 100 }
+      additionalProperties: true
+
+    AttestationUpdate:
+      type: object
+      required: [attestation]
+      properties:
+        attestation:
+          type: string
+          description: Verification attestation of the EBW-Connector of the installation as compact JWS (C5-M1 section 9).
+          pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+          maxLength: 20000
+
+    AttestationUpdateResult:
+      type: object
+      required: [changedFields, company]
+      properties:
+        changedFields:
+          type: array
+          description: Names of the changed fields; empty if the data was already correct.
+          items: { type: string }
+        company: { $ref: '#/components/schemas/Company' }
+
+    CompanyCorrection:
+      type: object
+      description: Correction by OSP staff (README 6.6, 7.12).
+      required: [reason]
+      properties:
+        name: { $ref: '#/components/schemas/CompanyName' }
+        shortName: { type: [string, 'null'], maxLength: 100 }
+        address: { $ref: '#/components/schemas/Address' }
+        identifiers:
+          type: array
+          description: Complete new list of the identifiers with source DECLARED.
+          items: { $ref: '#/components/schemas/DeclaredIdentifier' }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+
+    Reason:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Justification; only in the audit log, not in the event.
+
+    ChangeRequestStatus:
+      type: string
+      description: OPEN = awaiting decision; APPROVED = approved; DECLINED = declined; WITHDRAWN = withdrawn.
+      enum: [OPEN, APPROVED, DECLINED, WITHDRAWN]
+
+    ChangeRequestChanges:
+      type: object
+      description: Requested values; only the parts given change.
+      properties:
+        name: { $ref: '#/components/schemas/CompanyName' }
+        address: { $ref: '#/components/schemas/AddressFields' }
+        identifiers:
+          type: array
+          description: Complete new list of the identifiers with source DECLARED.
+          items: { $ref: '#/components/schemas/DeclaredIdentifier' }
+
+    ChangeRequestData:
+      description: Part data of a change request (README 7.4). At least one of name, address, identifiers.
+      allOf:
+        - $ref: '#/components/schemas/ChangeRequestChanges'
+        - type: object
+          required: [comment]
+          properties:
+            comment:
+              type: string
+              minLength: 1
+              maxLength: 1000
+              description: Justification for OSP staff.
+          anyOf:
+            - required: [name]
+            - required: [address]
+            - required: [identifiers]
+
+    ChangeRequestUpload:
+      type: object
+      required: [data, documents]
+      properties:
+        data: { $ref: '#/components/schemas/ChangeRequestData' }
+        documents:
+          type: array
+          description: Supporting documents, PDF, PNG or JPEG; number and size as in CHANGE_REQUEST_MAX_DOCUMENTS and CHANGE_REQUEST_MAX_DOCUMENT_BYTES.
+          minItems: 1
+          maxItems: 10
+          items:
+            type: string
+            contentMediaType: application/octet-stream
+
+    DocumentInfo:
+      type: object
+      required: [id, fileName, mediaType, sizeBytes]
+      properties:
+        id: { type: string, format: uuid }
+        fileName: { type: string, maxLength: 200 }
+        mediaType:
+          type: string
+          enum: [application/pdf, image/png, image/jpeg]
+        sizeBytes: { type: integer, minimum: 1 }
+
+    ChangeRequest:
+      type: object
+      required: [id, companyId, status, changes, comment, documents, requestedBy, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        companyName:
+          description: Only in the list for OSP staff.
+          $ref: '#/components/schemas/CompanyName'
+        status: { $ref: '#/components/schemas/ChangeRequestStatus' }
+        changes: { $ref: '#/components/schemas/ChangeRequestChanges' }
+        comment: { type: string, maxLength: 1000 }
+        documents:
+          type: array
+          items: { $ref: '#/components/schemas/DocumentInfo' }
+        requestedBy:
+          type: string
+          description: sub of the person who submitted the request.
+        decidedBy:
+          type: [string, 'null']
+          description: sub of the deciding person; only in responses to OSP staff.
+        decisionReason:
+          type: [string, 'null']
+          maxLength: 1000
+          description: Justification of the decline.
+        createdAt: { type: string, format: date-time }
+        closedAt: { type: [string, 'null'], format: date-time }
+
+    ChangeRequestDetail:
+      description: Change request with the current state of the company for comparison.
+      allOf:
+        - $ref: '#/components/schemas/ChangeRequest'
+        - type: object
+          required: [company]
+          properties:
+            company:
+              type: object
+              required: [id, name, address, identifiers, coreDataSource, status]
+              properties:
+                id: { type: string, format: uuid }
+                name: { $ref: '#/components/schemas/CompanyName' }
+                address: { $ref: '#/components/schemas/Address' }
+                identifiers:
+                  type: array
+                  items: { $ref: '#/components/schemas/Identifier' }
+                coreDataSource: { $ref: '#/components/schemas/CoreDataSource' }
+                status: { $ref: '#/components/schemas/CompanyStatus' }
+
+    ChangeRequestPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ChangeRequest' }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+
+    ApprovalInput:
+      type: object
+      properties:
+        comment:
+          type: string
+          maxLength: 1000
+          description: Note on the approval; only in the audit log.
+
+    DeclineInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: Justification; the Company Admin sees it.
+
+    LocalizedText:
+      type: object
+      description: Text per language; the key is the language code.
+      additionalProperties: { type: string, minLength: 1, maxLength: 2000 }
+      examples:
+        - { de: Nutzungsbedingungen Teilnehmer, en: Terms & Conditions - Active Participant }
+
+    AgreementDefinition:
+      type: object
+      required: [agreementId, name, names, documentUrl]
+      properties:
+        agreementId: { type: string, format: uuid }
+        name:
+          type: string
+          description: In the requested language.
+        names: { $ref: '#/components/schemas/LocalizedText' }
+        documentUrl: { type: string, format: uri }
+
+    CompanyRoleDefinition:
+      type: object
+      required: [companyRole, assignableBy, description, descriptions, agreements]
+      properties:
+        companyRole: { $ref: '#/components/schemas/CompanyRoleName' }
+        assignableBy: { $ref: '#/components/schemas/AssignableBy' }
+        description:
+          type: string
+          description: In the requested language.
+        descriptions: { $ref: '#/components/schemas/LocalizedText' }
+        agreements:
+          type: array
+          description: Terms that must be consented to for the role.
+          items: { $ref: '#/components/schemas/AgreementDefinition' }
+
+    ConsentStatus:
+      type: string
+      description: ACTIVE = given; INACTIVE = withdrawn.
+      enum: [ACTIVE, INACTIVE]
+
+    AgreementConsent:
+      allOf:
+        - $ref: '#/components/schemas/AgreementDefinition'
+        - type: object
+          properties:
+            consentStatus:
+              description: Empty if the company has never made a declaration.
+              oneOf:
+                - $ref: '#/components/schemas/ConsentStatus'
+                - type: 'null'
+            consentedAt: { type: [string, 'null'], format: date-time }
+
+    CompanyRoleState:
+      type: object
+      required: [companyRole, assignableBy, status, description, agreements]
+      properties:
+        companyRole: { $ref: '#/components/schemas/CompanyRoleName' }
+        assignableBy: { $ref: '#/components/schemas/AssignableBy' }
+        status:
+          type: string
+          description: NONE = the company never had the role.
+          enum: [NONE, REQUESTED, ACTIVE, INACTIVE]
+        description: { type: string }
+        agreements:
+          type: array
+          items: { $ref: '#/components/schemas/AgreementConsent' }
+
+    CompanyRoleAdd:
+      type: object
+      required: [companyRole, agreementIds]
+      properties:
+        companyRole: { $ref: '#/components/schemas/CompanyRoleName' }
+        agreementIds:
+          type: array
+          description: Terms of the role that the Company Admin consents to for the company. All terms of the role must be included.
+          uniqueItems: true
+          items: { type: string, format: uuid }
+
+    CompanyInternal:
+      type: object
+      description: Company for other modules and Process Orchestration.
+      required: [id, name, address, identifiers, coreDataSource, status, companyRoles, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { $ref: '#/components/schemas/CompanyName' }
+        shortName: { type: [string, 'null'], maxLength: 100 }
+        address: { $ref: '#/components/schemas/Address' }
+        identifiers:
+          type: array
+          items: { $ref: '#/components/schemas/Identifier' }
+        coreDataSource: { $ref: '#/components/schemas/CoreDataSource' }
+        status: { $ref: '#/components/schemas/CompanyStatus' }
+        bpn:
+          oneOf:
+            - $ref: '#/components/schemas/Bpn'
+            - type: 'null'
+        companyRoles:
+          type: array
+          description: Active roles only.
+          items: { $ref: '#/components/schemas/CompanyRoleName' }
+        deactivationReason:
+          oneOf:
+            - $ref: '#/components/schemas/DeactivationReason'
+            - type: 'null'
+        createdAt: { type: string, format: date-time }
+        activatedAt: { type: [string, 'null'], format: date-time }
+        deactivatedAt: { type: [string, 'null'], format: date-time }
+
+    CompanyLookupResult:
+      type: object
+      required: [items, notFound]
+      properties:
+        items:
+          type: array
+          description: In the order of the request.
+          items: { $ref: '#/components/schemas/CompanyInternal' }
+        notFound:
+          type: array
+          description: Requested IDs or BPNs without a match.
+          items: { type: string }
+
+    IdentifierMatchQuery:
+      type: object
+      required: [identifiers]
+      properties:
+        identifiers:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            type: object
+            required: [type, value]
+            properties:
+              type:
+                type: string
+                description: Identifier type or BPN.
+                enum: [EUID, EBWOID, VAT_ID, COMMERCIAL_REG_NUMBER, LEI_CODE, EORI, BPN]
+              value: { type: string, minLength: 1, maxLength: 255 }
+        name: { $ref: '#/components/schemas/CompanyName' }
+        excludeCompanyId:
+          type: string
+          format: uuid
+          description: Do not report this company as a match, for example the company of the application itself.
+        statuses:
+          type: array
+          description: Default REQUESTED, ACTIVE, INACTIVE.
+          items: { $ref: '#/components/schemas/CompanyStatus' }
+
+    IdentifierMatchResult:
+      type: object
+      required: [matches]
+      properties:
+        matches:
+          type: array
+          items:
+            type: object
+            required: [companyId, name, status, matchedOn]
+            properties:
+              companyId: { type: string, format: uuid }
+              name: { $ref: '#/components/schemas/CompanyName' }
+              status: { $ref: '#/components/schemas/CompanyStatus' }
+              bpn:
+                oneOf:
+                  - $ref: '#/components/schemas/Bpn'
+                  - type: 'null'
+              matchedOn:
+                type: array
+                description: Matching identifier types, BPN or NAME.
+                items:
+                  type: string
+                  enum: [EUID, EBWOID, VAT_ID, COMMERCIAL_REG_NUMBER, LEI_CODE, EORI, BPN, NAME]
+
+    StepRequest:
+      type: object
+      required: [processId, stepRunId]
+      properties:
+        processId:
+          type: string
+          format: uuid
+          description: Flow in Process Orchestration; for the audit log only.
+        stepRunId:
+          type: string
+          format: uuid
+          description: This run of the step; for the audit log only.
+
+    StepCompanyRef:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [companyId]
+          properties:
+            companyId: { type: string, format: uuid }
+
+    StepCompanyApplication:
+      allOf:
+        - $ref: '#/components/schemas/StepCompanyRef'
+        - type: object
+          required: [applicationId]
+          properties:
+            applicationId:
+              type: string
+              format: uuid
+              description: Application at C1-M2; the module reads data or consents there.
+
+    StepAssignIdentifier:
+      allOf:
+        - $ref: '#/components/schemas/StepCompanyRef'
+        - type: object
+          required: [bpn]
+          properties:
+            bpn:
+              description: BPN from CompanyRegisteredAtCsp (C3-M2).
+              $ref: '#/components/schemas/Bpn'
+
+    StepDeactivateCompany:
+      allOf:
+        - $ref: '#/components/schemas/StepCompanyRef'
+        - type: object
+          required: [reason]
+          properties:
+            reason: { $ref: '#/components/schemas/DeactivationReason' }
+
+    StepResult:
+      type: object
+      required: [stepRunId, state]
+      properties:
+        stepRunId: { type: string, format: uuid }
+        state:
+          type: string
+          description: DONE = done. All steps of this module are short; RUNNING does not occur.
+          enum: [DONE, RUNNING]
+
+    StepResultCompanyState:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          required: [result]
+          properties:
+            state: { const: DONE }
+            result:
+              type: object
+              required: [companyId, status]
+              properties:
+                companyId: { type: string, format: uuid }
+                status: { $ref: '#/components/schemas/CompanyStatus' }
+                bpn:
+                  oneOf:
+                    - $ref: '#/components/schemas/Bpn'
+                    - type: 'null'
+                coreDataSource: { $ref: '#/components/schemas/CoreDataSource' }
+
+    StepResultIdentifier:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          required: [result]
+          properties:
+            state: { const: DONE }
+            result:
+              type: object
+              required: [companyId, status, bpn]
+              properties:
+                companyId: { type: string, format: uuid }
+                status: { $ref: '#/components/schemas/CompanyStatus' }
+                bpn: { $ref: '#/components/schemas/Bpn' }
+
+    StepResultActivation:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          required: [result]
+          properties:
+            state: { const: DONE }
+            result:
+              type: object
+              required: [companyId, status, bpn, companyRoles, pendingCompanyRoles]
+              properties:
+                companyId: { type: string, format: uuid }
+                status: { $ref: '#/components/schemas/CompanyStatus' }
+                bpn: { $ref: '#/components/schemas/Bpn' }
+                companyRoles:
+                  type: array
+                  description: Active roles.
+                  items: { $ref: '#/components/schemas/CompanyRoleName' }
+                pendingCompanyRoles:
+                  type: array
+                  description: Requested roles for which a consent is missing; they stay REQUESTED.
+                  items: { $ref: '#/components/schemas/CompanyRoleName' }
+
+    StepResultDeactivation:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          required: [result]
+          properties:
+            state: { const: DONE }
+            result:
+              type: object
+              required: [companyId, status, deactivationReason]
+              properties:
+                companyId: { type: string, format: uuid }
+                status: { $ref: '#/components/schemas/CompanyStatus' }
+                deactivationReason: { $ref: '#/components/schemas/DeactivationReason' }
+
+    StepResultReactivation:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          required: [result]
+          properties:
+            state: { const: DONE }
+            result:
+              type: object
+              required: [companyId, status, bpn, companyRoles, changedFields]
+              properties:
+                companyId: { type: string, format: uuid }
+                status: { $ref: '#/components/schemas/CompanyStatus' }
+                bpn: { $ref: '#/components/schemas/Bpn' }
+                companyRoles:
+                  type: array
+                  description: Active roles.
+                  items: { $ref: '#/components/schemas/CompanyRoleName' }
+                changedFields:
+                  type: array
+                  description: Fields changed from the application; empty if nothing was changed.
+                  items: { type: string }
+
+    EventBase:
+      type: object
+      required: [eventId, eventType, occurredAt, companyId]
+      description: Common fields of every event. Events never contain secrets or personal data.
+      properties:
+        eventId: { type: string, format: uuid }
+        eventType: { type: string }
+        occurredAt: { type: string, format: date-time }
+        companyId: { type: string, format: uuid }
+
+    EventCompanyCreated:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [applicationId, coreDataSource]
+          properties:
+            eventType: { const: CompanyCreated }
+            applicationId: { type: string, format: uuid }
+            coreDataSource: { $ref: '#/components/schemas/CoreDataSource' }
+
+    EventCompanyIdentifierAssigned:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [bpn]
+          properties:
+            eventType: { const: CompanyIdentifierAssigned }
+            bpn: { $ref: '#/components/schemas/Bpn' }
+
+    EventCompanyActivated:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [bpn, companyRoles]
+          properties:
+            eventType: { const: CompanyActivated }
+            bpn: { $ref: '#/components/schemas/Bpn' }
+            companyRoles:
+              type: array
+              items: { $ref: '#/components/schemas/CompanyRoleName' }
+
+    EventCompanyRejected:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          properties:
+            eventType: { const: CompanyRejected }
+
+    EventCompanyDeactivated:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [reason]
+          properties:
+            eventType: { const: CompanyDeactivated }
+            reason: { $ref: '#/components/schemas/DeactivationReason' }
+
+    EventCompanyReactivated:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [bpn, companyRoles]
+          properties:
+            eventType: { const: CompanyReactivated }
+            bpn: { $ref: '#/components/schemas/Bpn' }
+            companyRoles:
+              type: array
+              items: { $ref: '#/components/schemas/CompanyRoleName' }
+
+    EventCompanyRolesChanged:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [companyRoles]
+          properties:
+            eventType: { const: CompanyRolesChanged }
+            companyRoles:
+              type: array
+              description: All active roles after the change.
+              items: { $ref: '#/components/schemas/CompanyRoleName' }
+
+    EventCompanyDataChanged:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [changedFields, coreDataChanged, coreDataSource]
+          properties:
+            eventType: { const: CompanyDataChanged }
+            changedFields:
+              type: array
+              description: Names of the changed fields, without values, for example shortName, name, address, identifiers, coreDataSource.
+              items: { type: string }
+            coreDataChanged:
+              type: boolean
+              description: true if core data was changed; Process Orchestration then passes it to the CSP through C3-M2.
+            coreDataSource: { $ref: '#/components/schemas/CoreDataSource' }
+
+    EventCompanyChangeRequestSubmitted:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [changeRequestId]
+          properties:
+            eventType: { const: CompanyChangeRequestSubmitted }
+            changeRequestId: { type: string, format: uuid }
+
+    EventCompanyChangeRequestClosed:
+      allOf:
+        - $ref: '#/components/schemas/EventBase'
+        - type: object
+          required: [changeRequestId, outcome]
+          properties:
+            eventType: { const: CompanyChangeRequestClosed }
+            changeRequestId: { type: string, format: uuid }
+            outcome:
+              type: string
+              enum: [APPROVED, DECLINED, WITHDRAWN]
+
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          description: Identifier, for example urn:c3-m1:problem:attestation-invalid (list in README section 12).
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        retryable:
+          type: boolean
+          description: Only for steps. true = temporary, a retry is worthwhile.
+        reason:
+          type: string
+          description: With attestation-invalid, the reason as in README 6.7.
+          enum: [format, algorithm, issuer, signature, audience, expired, not-yet-valid, claims, too-old]
+        fields:
+          type: array
+          description: With field-locked and company-mismatch, the affected fields.
+          items: { type: string }
+        missing:
+          type: array
+          description: With consent-missing, the missing agreementIds.
+          items: { type: string, format: uuid }
+        errors:
+          type: array
+          description: With validation, the individual errors.
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: { type: string }
+              message: { type: string }

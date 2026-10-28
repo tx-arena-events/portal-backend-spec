@@ -1,6 +1,452 @@
 openapi: 3.1.0
 info:
-  title: C2-M5 Portal IAM
-  version: 0.0.0
-  description: To be specified.
-paths: {}
+  title: C2-M5 Portal IAM (endpoints of the product in use, Keycloak)
+  version: 0.2.0
+  description: |
+    **Reference, not an implementation of its own.** This file describes the endpoints of the
+    Portal IAM of an OSP on which the modules, the UI and external systems
+    rely. They are endpoints of the product in use, Keycloak, in the realm of the installation
+    (`IAM_REALM`). The Keycloak documentation for the version in use is authoritative;
+    this file only states what is used and what the configuration of C2-M5 (README) defines.
+
+    - OIDC discovery and JWKS: for the token validation library and for the EBW-Connector
+      (check of the client assertion of the Portal IAM).
+    - Token endpoint: authorization code with PKCE for the UI (`portal-ui`) and apps;
+      client credentials for service accounts with `private_key_jwt` (RFC 7523) or secret and for
+      technical users with secret.
+    - Under `components/schemas` you also find the claims of the access tokens (README 7.5),
+      so that the library, the UI and external systems share the same contract.
+    - The sign-in and sign-out endpoints, the return path from the EBW-Connector and the Admin API of
+      Keycloak (for C2-M2 and C2-M3) are not part of this file.
+servers:
+  - url: '{iamUrl}'
+    description: Portal IAM of the OSP (IAM_URL)
+    variables:
+      iamUrl:
+        default: https://iam.osp-a.example.org/auth
+        description: Base address of the Portal IAM with path /auth; test installation http://localhost:8080/auth
+tags:
+  - name: Token
+    description: Get tokens (UI, apps, service accounts, technical users)
+  - name: Queries
+    description: Metadata and keys for validating tokens
+
+paths:
+  /realms/{realm}/.well-known/openid-configuration:
+    parameters:
+      - $ref: '#/components/parameters/Realm'
+    get:
+      tags: [Queries]
+      operationId: getOpenIdConfiguration
+      summary: OIDC discovery of the realm (Keycloak endpoint)
+      description: |
+        Metadata as in OpenID Connect Discovery 1.0. Used are issuer, jwks_uri,
+        authorization_endpoint, token_endpoint and the supported methods. Available without
+        sign-in. The response may be cached.
+      security: []
+      responses:
+        '200':
+          description: Metadata of the realm
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OpenIdConfiguration' }
+              examples:
+                ospA:
+                  summary: Excerpt; lists shortened
+                  value:
+                    issuer: https://iam.osp-a.example.org/auth/realms/CX-Central
+                    authorization_endpoint: https://iam.osp-a.example.org/auth/realms/CX-Central/protocol/openid-connect/auth
+                    token_endpoint: https://iam.osp-a.example.org/auth/realms/CX-Central/protocol/openid-connect/token
+                    jwks_uri: https://iam.osp-a.example.org/auth/realms/CX-Central/protocol/openid-connect/certs
+                    grant_types_supported: [authorization_code, client_credentials, refresh_token]
+                    code_challenge_methods_supported: [plain, S256]
+                    token_endpoint_auth_methods_supported: [private_key_jwt, client_secret_basic, client_secret_post, client_secret_jwt, tls_client_auth]
+                    token_endpoint_auth_signing_alg_values_supported: [ES256, PS256, RS256]
+                    id_token_signing_alg_values_supported: [RS256, ES256]
+        '404':
+          description: Realm unknown
+
+  /realms/{realm}/protocol/openid-connect/certs:
+    parameters:
+      - $ref: '#/components/parameters/Realm'
+    get:
+      tags: [Queries]
+      operationId: getJwks
+      summary: Public keys of the realm (JWKS, Keycloak endpoint)
+      description: |
+        JSON Web Key Set (RFC 7517) with the active and passive keys of the realm
+        (README 5.3): RSA for tokens (RS256), EC P-256 for the client assertion towards the
+        EBW-Connector (ES256). Verifiers select the key by kid and reload the JWKS for an
+        unknown kid. Available without sign-in.
+      security: []
+      responses:
+        '200':
+          description: Keys of the realm
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JwkSet' }
+        '404':
+          description: Realm unknown
+
+  /realms/{realm}/protocol/openid-connect/token:
+    parameters:
+      - $ref: '#/components/parameters/Realm'
+    post:
+      tags: [Token]
+      operationId: requestToken
+      summary: Get a token (Keycloak endpoint)
+      description: |
+        README 7.2 to 7.4.
+        - UI and apps: authorization_code with code_verifier (PKCE S256).
+        - Service accounts with private_key_jwt (CSP, issuers, wallets): client_credentials with
+          client_assertion_type and client_assertion (RFC 7523); Keycloak checks the signature
+          with the stored JWKS address, exp, aud and the one-time use of jti.
+        - Service accounts with secret and technical users: client_credentials with client_id and
+          client_secret in the form or through HTTP Basic.
+        With client_credentials, no refresh token. The password flow is switched off.
+      security:
+        - {}
+        - clientSecretBasic: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/TokenRequestAuthorizationCode'
+                - $ref: '#/components/schemas/TokenRequestPrivateKeyJwt'
+                - $ref: '#/components/schemas/TokenRequestClientSecret'
+            examples:
+              portalUi:
+                summary: UI after the sign-in
+                value:
+                  grant_type: authorization_code
+                  client_id: portal-ui
+                  code: 3f2c9a1e-7d4b-4c8e-a1f0-5b6d7e8f9a0b.abc
+                  redirect_uri: https://portal.osp-a.example.org/callback
+                  code_verifier: dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
+              csp:
+                summary: Service account of the CSP with private_key_jwt
+                value:
+                  grant_type: client_credentials
+                  client_assertion_type: urn:ietf:params:oauth:client-assertion-type:jwt-bearer
+                  client_assertion: eyJhbGciOiJFUzI1NiIsImtpZCI6ImNzcC0yMDI2LTEifQ.eyJpc3MiOiJzYS1jc3AifQ.c2lnbmF0dXJl
+              technicalUser:
+                summary: Technical user with secret
+                value:
+                  grant_type: client_credentials
+                  client_id: sa-test-u1
+                  client_secret: '<Secret>'
+      responses:
+        '200':
+          description: Token
+          headers:
+            Cache-Control:
+              description: no-store
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400':
+          description: Request rejected (RFC 6749 section 5.2), for example invalid_request, invalid_grant, unauthorized_client, unsupported_grant_type
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+        '401':
+          description: Client not authenticated (RFC 6749 section 5.2), for example invalid_client
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+
+components:
+  securitySchemes:
+    clientSecretBasic:
+      type: http
+      scheme: basic
+      description: Client ID and secret as HTTP Basic; only technical users and service accounts without private_key_jwt.
+
+  parameters:
+    Realm:
+      name: realm
+      in: path
+      required: true
+      description: Realm of the installation (IAM_REALM), default CX-Central.
+      schema:
+        type: string
+        examples: [CX-Central]
+
+  schemas:
+    OpenIdConfiguration:
+      type: object
+      description: Excerpt of the metadata; Keycloak returns further fields.
+      required: [issuer, authorization_endpoint, token_endpoint, jwks_uri]
+      additionalProperties: true
+      properties:
+        issuer:
+          type: string
+          format: uri
+          description: '{IAM_URL}/realms/{IAM_REALM}; must equal iss of the tokens.'
+        authorization_endpoint: { type: string, format: uri }
+        token_endpoint: { type: string, format: uri }
+        jwks_uri: { type: string, format: uri }
+        grant_types_supported:
+          type: array
+          items: { type: string }
+        code_challenge_methods_supported:
+          type: array
+          description: Contains S256.
+          items: { type: string }
+        token_endpoint_auth_methods_supported:
+          type: array
+          description: Contains private_key_jwt.
+          items: { type: string }
+        token_endpoint_auth_signing_alg_values_supported:
+          type: array
+          items: { type: string }
+        id_token_signing_alg_values_supported:
+          type: array
+          items: { type: string }
+
+    Jwk:
+      type: object
+      description: Public key (RFC 7517). RSA for tokens, EC P-256 for the client assertion.
+      required: [kty, kid]
+      additionalProperties: true
+      properties:
+        kid: { type: string }
+        kty:
+          type: string
+          enum: [RSA, EC]
+        alg:
+          type: string
+          examples: [RS256, ES256]
+        use:
+          type: string
+          enum: [sig, enc]
+        n:
+          type: string
+          description: Modulus (RSA), Base64url
+        e:
+          type: string
+          description: Exponent (RSA), Base64url
+        crv:
+          type: string
+          description: Curve (EC)
+          examples: [P-256]
+        x: { type: string }
+        y: { type: string }
+        x5c:
+          type: array
+          items: { type: string }
+        x5t: { type: string }
+        'x5t#S256': { type: string }
+
+    JwkSet:
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items: { $ref: '#/components/schemas/Jwk' }
+
+    TokenRequestAuthorizationCode:
+      type: object
+      description: Authorization code with PKCE (UI, apps).
+      required: [grant_type, client_id, code, redirect_uri, code_verifier]
+      properties:
+        grant_type:
+          type: string
+          const: authorization_code
+        client_id:
+          type: string
+          examples: [portal-ui]
+        code: { type: string }
+        redirect_uri: { type: string, format: uri }
+        code_verifier:
+          type: string
+          description: PKCE (S256), required for portal-ui.
+
+    TokenRequestPrivateKeyJwt:
+      type: object
+      description: Client credentials with private_key_jwt (service accounts, README 7.4).
+      required: [grant_type, client_assertion_type, client_assertion]
+      properties:
+        grant_type:
+          type: string
+          const: client_credentials
+        client_assertion_type:
+          type: string
+          const: urn:ietf:params:oauth:client-assertion-type:jwt-bearer
+        client_assertion:
+          type: string
+          description: Signed client assertion in compact form; claims in ClientAssertionClaims.
+        client_id:
+          type: string
+          description: Optional; if given, equal to iss and sub of the assertion.
+
+    TokenRequestClientSecret:
+      type: object
+      description: Client credentials with secret (technical users, service accounts during the transition); alternatively HTTP Basic.
+      required: [grant_type]
+      properties:
+        grant_type:
+          type: string
+          const: client_credentials
+        client_id: { type: string }
+        client_secret: { type: string }
+
+    TokenResponse:
+      type: object
+      required: [access_token, expires_in, token_type]
+      additionalProperties: true
+      properties:
+        access_token:
+          type: string
+          description: JWT, signed by the realm (RS256); claims per kind in the schemas *AccessTokenClaims.
+        id_token:
+          type: string
+          description: Only for authorization_code with scope openid.
+        refresh_token:
+          type: string
+          description: Only for authorization_code; never for client_credentials.
+        expires_in:
+          type: integer
+          description: Validity in seconds, 300.
+          examples: [300]
+        refresh_expires_in: { type: integer }
+        token_type:
+          type: string
+          examples: [Bearer]
+        not-before-policy: { type: integer }
+        session_state: { type: string }
+        scope: { type: string }
+
+    OAuthError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Error code as in RFC 6749 section 5.2; the exact code depends on the Keycloak version.
+          examples: [invalid_client, unauthorized_client, invalid_request, unsupported_grant_type, invalid_grant]
+        error_description: { type: string }
+
+    ClientAssertionClaims:
+      type: object
+      description: |
+        Payload of the client assertion of a service account (README 7.4). Header with alg (ES256,
+        PS256 or RS256) and kid from the stored JWKS.
+      required: [iss, sub, aud, jti, iat, exp]
+      properties:
+        iss:
+          type: string
+          description: Client ID of the service account, for example sa-csp.
+        sub:
+          type: string
+          description: Client ID, equal to iss.
+        aud:
+          type: string
+          description: Issuer of the realm or token endpoint.
+        jti:
+          type: string
+          description: New, random identifier per assertion; can be used only once.
+        iat: { type: integer }
+        exp:
+          type: integer
+          description: At most 60 seconds after iat.
+
+    ResourceAccess:
+      type: object
+      description: Client roles per client ID.
+      additionalProperties:
+        type: object
+        required: [roles]
+        properties:
+          roles:
+            type: array
+            items: { type: string }
+
+    CommonAccessTokenClaims:
+      type: object
+      required: [iss, aud, azp, sub, exp, iat, jti, typ]
+      properties:
+        iss:
+          type: string
+          description: '{IAM_URL}/realms/{IAM_REALM} of the installation'
+        aud:
+          description: String or list.
+          oneOf:
+            - type: string
+            - type: array
+              items: { type: string }
+        azp:
+          type: string
+          description: Client ID of the client that got the token.
+        sub:
+          type: string
+          description: ID of the account or of the service account user in the Portal IAM.
+        exp: { type: integer }
+        iat: { type: integer }
+        jti: { type: string }
+        typ:
+          type: string
+          const: Bearer
+        resource_access: { $ref: '#/components/schemas/ResourceAccess' }
+
+    PersonAccessTokenClaims:
+      description: |
+        Access token of a person for portal-ui (README 7.5). aud contains portal-core;
+        portal roles and permissions under resource_access.portal-core.roles. company_id and
+        bpn only for a bound account. Without birth date and e-mail address.
+      allOf:
+        - $ref: '#/components/schemas/CommonAccessTokenClaims'
+        - type: object
+          required: [given_name, family_name, resource_access]
+          properties:
+            given_name: { type: string }
+            family_name: { type: string }
+            company_id: { type: string, format: uuid }
+            bpn:
+              type: string
+              pattern: '^BPNL[0-9A-Z]{12}$'
+            sid: { type: string }
+
+    ServiceAccountAccessTokenClaims:
+      description: |
+        Access token of a service account for callbacks or HTTP between modules (README 5.9,
+        7.5). aud contains portal-core; under resource_access.portal-core.roles only the permissions
+        of the service account, exactly one for callbacks. Without names, company_id and bpn.
+      allOf:
+        - $ref: '#/components/schemas/CommonAccessTokenClaims'
+        - type: object
+          required: [resource_access]
+
+    TechnicalUserAccessTokenClaims:
+      description: |
+        Access token of a technical user (README 7.5). aud contains the clients of the
+        central services whose roles are in the token, never portal-core.
+      allOf:
+        - $ref: '#/components/schemas/CommonAccessTokenClaims'
+        - type: object
+          required: [company_id, bpn]
+          properties:
+            company_id: { type: string, format: uuid }
+            bpn:
+              type: string
+              pattern: '^BPNL[0-9A-Z]{12}$'
+
+    AppUserAccessTokenClaims:
+      description: |
+        Access token of a person for an app client (README 7.3, 7.5). aud contains the
+        client ID of the app client, app roles under resource_access.<client ID>.roles. No
+        name, no e-mail address (FRAMEWORK 4.6).
+      allOf:
+        - $ref: '#/components/schemas/CommonAccessTokenClaims'
+        - type: object
+          required: [company_id, bpn]
+          properties:
+            company_id: { type: string, format: uuid }
+            bpn:
+              type: string
+              pattern: '^BPNL[0-9A-Z]{12}$'
+            sid: { type: string }
