@@ -4,28 +4,35 @@ Module specifications for a modernized Eclipse Tractus-X portal backend, prepare
 
 > **Status:** work in progress. Feedback and proposals are welcome via issues and pull requests.
 
-## Architecture: Portal Service Providers in front, portal core with APIs
+## Architecture: OSP 2.0, every OSP runs its portal, the CSP provides trust
 
-![Architecture: Portal Service Providers in front, portal core with APIs](architecture-overview.png)
+![OSP 2.0: every OSP runs its portal, the CSP provides trust](architecture-overview.png)
+
+Decided on 28 Oct 2026. This replaces the earlier picture of Portal Service Providers in front of a central portal core with APIs.
 
 ### Why
 
-Today's portal is a monolith: the user interface owns orchestration and business rules, and a third party cannot use a capability without the portal UI. In practice, participants use it mostly once, during onboarding. The new architecture splits the portal into modules with clear interfaces and makes these interfaces the only way in.
+Today's portal is a monolith: the user interface owns orchestration and business rules, and a third party cannot use a capability without the portal UI. In practice, participants use it mostly once, during onboarding. The new architecture splits the portal into modules with clear interfaces and makes these interfaces the only way in. No single party should run the portal for all participants of a dataspace.
 
-### Portal core and Portal Service Providers
+### OSP 2.0 and the CSP
 
-- **The portal core offers APIs only.** It has no user interface of its own.
-- **Every user interface is a Portal Service Provider (PSP).** A PSP provides the portal functions to its customers: onboarding, identity check and sign-in, users, technical users, connectors and subscriptions. It uses the core APIs of the portal modules on their behalf.
-- **Every PSP is an onboarding service provider (OSP).** The PSP extends today's OSP beyond onboarding.
-- **The operator runs its own PSP** for companies without one. The operator's tasks, such as reviewing applications, are rights of this PSP. The operator's PSP is built at the hackathon.
+- **Every onboarding service provider (OSP) runs the portal modules itself** and configures its own portal. Its Helm chart decides which service runs where.
+- **The core service provider (CSP) provides trust** through central core services: the trust list of admitted OSPs and issuers, the company identifier (BPN) with the home OSP of each company, the directory from BPN to DID (BDRS), discovery, and common rules. The OSPs feed these services through the OSP–CSP interface.
+- **The CSP may offer further services**, such as an issuer or a dataspace wallet. An OSP uses them through a facade or runs its own.
+- **Hackathon scenario:** one CSP and two OSPs. OSP A issues credentials itself, OSP B uses the CSP's issuer.
+- **Later:** several CSPs with federation, and connectivity between dataspaces.
 
-### How the core controls access
+### Identity
 
-- **Admission:** the operator admits a new PSP after a review (C1-M1). On approval, the PSP gets its API access as a technical user (C2-M3) and its sign-in service in the Portal IAM (C2-M1). The operator can suspend a PSP.
-- **Delegation:** the core records which PSP may act for which company, and for what (C2-M4). A call on behalf of a company carries a token of the PSP; the module checks the rights in the token and the delegation.
-- **Sign-in:** people sign in at their PSP. Where the Portal IAM is needed, for example to open an app, it forwards to the sign-in service of the PSP. There are no passwords at the operator; today's Company IAM with one realm per company is removed.
-- **Portal IAM (C2-M5):** the central IAM is configured only (Keycloak, no extensions). It holds the rights of the PSPs at the core APIs, the sign-in to apps with app roles (app users, C2-M2), and tokens for central services (technical users, C2-M3).
-- **Business Wallet:** the EBW-Connector (C5-M1) verifies proofs from the European Business Wallet. PSPs use it for onboarding and sign-in.
+- **Two wallets.** The EUDI Wallet of the person, on the phone, holds the PID and the mandate. The Business Wallet of the company, in the browser, holds the LPID and issues mandates to employees.
+- **EBW-Connector (C5-M1)** at every OSP and at the Business Wallet. Onboarding asks the EUDI Wallet for PID and mandate, then the Business Wallet for the LPID; the mandate is required. The EBW-Connector and a Business Wallet are provided for the hackathon.
+- **Sign-in** at the OSP's portal with the EUDI Wallet. There are no passwords; today's Company IAM with one realm per company is removed.
+
+### Dropped
+
+- the central portal core with APIs for all OSPs;
+- PSP Admission (C1-M1): OSPs are admitted through the trust list of the CSP;
+- Delegation (C2-M4): an OSP and its portal are one.
 
 ### Flows and data
 
@@ -36,13 +43,13 @@ Today's portal is a monolith: the user interface owns orchestration and business
 
 | Module | Status |
 |---|---|
-| [C1-M1 PSP Admission](C1-M1-PSPAdmission/) | to be specified |
+| [C1-M1 PSP Admission](C1-M1-PSPAdmission/) | dropped with OSP 2.0: admission through the trust list of the CSP |
 | [C1-M2 Registration](C1-M2-Registration/) | to be specified |
 | [C1-M3 Application Review](C1-M3-ApplicationReview/) | to be specified |
 | [C2-M1 Sign-in Services](C2-M1-SignInService/) | to be specified |
 | [C2-M2 App Access](C2-M2-AppAccess/) | draft 0.1 (app clients and roles; app users to be added) |
 | [C2-M3 Technical Users](C2-M3-TechnicalUser/) | draft 0.1 (to be updated for PSPs) |
-| [C2-M4 Delegation](C2-M4-Delegation/) | to be specified |
+| [C2-M4 Delegation](C2-M4-Delegation/) | dropped with OSP 2.0 |
 | [C2-M5 Portal IAM](C2-M5-PortalIAM/) | configuration, to be specified |
 | [C3-M1 Company Profile](C3-M1-CompanyProfile/) | to be specified |
 | [C4-M1 Credentials](C4-M1-Credentials/) | to be specified |
@@ -50,6 +57,8 @@ Today's portal is a monolith: the user interface owns orchestration and business
 | [C5-M1 EBW-Connector](C5-M1-EBWConnector/) | to be specified |
 
 Modules from the other part of the spec (Process Orchestration, Offers, Subscriptions, Connectors, Notifications, MCP server) are referred to by name.
+
+Modules written for the Portal Service Provider architecture, such as C2-M1, C2-M3 and C2-M5, are to be reviewed for OSP 2.0.
 
 The module numbers changed with the Portal Service Provider architecture. The former C2-M6 App Clients and Roles is now part of C2-M2 App Access.
 
