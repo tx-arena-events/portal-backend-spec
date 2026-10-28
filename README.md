@@ -54,7 +54,7 @@ Today's portal is a monolith: the user interface owns orchestration and business
 | [C3-M1 Company Profile](C3-M1-CompanyProfile/) | to be specified |
 | [C4-M1 Credentials](C4-M1-Credentials/) | to be specified |
 | [C4-M2 Dataspace Wallet Interface](C4-M2-DataspaceWalletInterface/) | to be specified |
-| [C5-M1 EBW-Connector](C5-M1-EBWConnector/) | to be specified |
+| [C5-M1 EBW-Connector](C5-M1-EBWConnector/) | draft 0.2 (two wallets, OSP 2.0) |
 
 Modules from the other part of the spec (Process Orchestration, Offers, Subscriptions, Connectors, Notifications, MCP server) are referred to by name.
 

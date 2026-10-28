@@ -1,6 +1,414 @@
 openapi: 3.1.0
 info:
   title: C5-M1 EBW-Connector
-  version: 0.0.0
-  description: To be specified.
-paths: {}
+  version: 0.2.0
+  description: |
+    Identifies a person with the EUDI Wallet and, where needed, the company with
+    its Business Wallet. Clients use OpenID Connect; wallets use OpenID4VP 1.0.
+    The behaviour of every operation is described in README.md, section 7.
+
+    - OIDC endpoints follow OpenID Connect Core; clients authenticate with
+      `private_key_jwt` (RFC 7523), PKCE `S256` is required.
+    - OpenID4VP endpoints are called by the wallets.
+    - Pages are HTML for the browser of the person.
+    - Errors follow the respective standard (README section 12).
+servers:
+  - url: /
+tags:
+  - name: OpenID Connect
+    description: For clients (OSP portals, Business Wallets)
+  - name: Wallet
+    description: For EUDI Wallets and Business Wallets (OpenID4VP)
+  - name: Pages
+    description: For the browser of the person
+
+paths:
+  /.well-known/openid-configuration:
+    get:
+      tags: [OpenID Connect]
+      operationId: getDiscovery
+      summary: OpenID Provider metadata
+      responses:
+        '200':
+          description: Metadata (README 7.1)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderMetadata'
+
+  /jwks:
+    get:
+      tags: [OpenID Connect]
+      operationId: getJwks
+      summary: Public signing key for ID tokens and verification attestations
+      responses:
+        '200':
+          description: JWKS
+          headers:
+            Cache-Control:
+              schema: { type: string, example: max-age=3600 }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Jwks'
+
+  /authorize:
+    get:
+      tags: [OpenID Connect]
+      operationId: authorize
+      summary: Start a transaction (authorization code flow)
+      description: |
+        Creates the transaction, sets the cookie `ebw_tx` and redirects to the
+        page of the transaction (README 7.2).
+      parameters:
+        - { name: response_type, in: query, required: true, schema: { type: string, const: code } }
+        - { name: client_id, in: query, required: true, schema: { type: string } }
+        - { name: redirect_uri, in: query, required: true, schema: { type: string, format: uri } }
+        - name: scope
+          in: query
+          required: true
+          description: Space-separated; `openid` required (README 6.1)
+          schema: { type: string, example: openid profile representation company attestation }
+        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: nonce, in: query, required: true, schema: { type: string } }
+        - { name: code_challenge, in: query, required: true, schema: { type: string } }
+        - { name: code_challenge_method, in: query, required: true, schema: { type: string, const: S256 } }
+        - { name: ui_locales, in: query, required: false, schema: { type: string, enum: [de, en] } }
+      responses:
+        '302':
+          description: |
+            To `/transactions/{id}` with cookie `ebw_tx`; on errors after the
+            client and `redirect_uri` are known, to `redirect_uri` with
+            `error`, `state` and `iss`.
+          headers:
+            Location: { schema: { type: string, format: uri } }
+            Set-Cookie: { schema: { type: string } }
+        '400':
+          description: Unknown client or `redirect_uri`; HTML error page, no redirect
+          content:
+            text/html:
+              schema: { type: string }
+
+  /token:
+    post:
+      tags: [OpenID Connect]
+      operationId: token
+      summary: Redeem the code
+      description: README 7.6
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        '200':
+          description: Tokens; `ebw_attestation` only with scope `attestation`
+          headers:
+            Cache-Control:
+              schema: { type: string, example: no-store }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: '`invalid_request`, `invalid_grant`, `unsupported_grant_type`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '401':
+          description: '`invalid_client`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+
+  /userinfo:
+    get:
+      tags: [OpenID Connect]
+      operationId: userinfo
+      summary: Claims of the person (README 6.7)
+      security:
+        - accessToken: []
+      responses:
+        '200':
+          description: Claims per scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Claims'
+        '401':
+          description: Token unknown or expired
+          headers:
+            WWW-Authenticate:
+              schema: { type: string, example: 'Bearer error="invalid_token"' }
+
+  /transactions/{id}:
+    get:
+      tags: [Pages]
+      operationId: getTransactionPage
+      summary: Page of the transaction
+      description: |
+        With the cookie `ebw_tx`: the open step and how to invoke the wallet
+        (README 6.6, 7.3). Without the cookie: neutral page without data.
+      parameters:
+        - $ref: '#/components/parameters/TransactionId'
+      responses:
+        '200':
+          description: HTML page
+          content:
+            text/html:
+              schema: { type: string }
+        '302':
+          description: Transaction finished; to `/transactions/{id}/complete`
+        '404':
+          description: Unknown transaction
+
+  /transactions/{id}/status:
+    get:
+      tags: [Pages]
+      operationId: getTransactionStatus
+      summary: Status for the page (polling)
+      parameters:
+        - $ref: '#/components/parameters/TransactionId'
+      responses:
+        '200':
+          description: Status and open step
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { $ref: '#/components/schemas/TransactionStatus' }
+                  step: { type: string, enum: [person, company] }
+        '404':
+          description: Unknown transaction or cookie missing
+
+  /transactions/{id}/complete:
+    get:
+      tags: [Pages]
+      operationId: completeTransaction
+      summary: Return to the client
+      description: README 7.4
+      parameters:
+        - $ref: '#/components/parameters/TransactionId'
+      responses:
+        '302':
+          description: |
+            `VERIFIED`: to `redirect_uri?code=…&state=…&iss=…`.
+            `FAILED`, `EXPIRED`: to `redirect_uri?error=access_denied&error_description=…&state=…&iss=…`.
+            `PENDING`: back to the page.
+        '404':
+          description: Unknown transaction or cookie missing
+
+  /openid4vp/requests/{requestId}:
+    parameters:
+      - $ref: '#/components/parameters/RequestId'
+    get:
+      tags: [Wallet]
+      operationId: getRequestObject
+      summary: Signed request object of a step
+      description: README 7.5
+      responses:
+        '200':
+          description: Request object (JWS)
+          content:
+            application/oauth-authz-req+jwt:
+              schema: { type: string }
+        '404':
+          description: Unknown or closed step
+    post:
+      tags: [Wallet]
+      operationId: postRequestObject
+      summary: Signed request object of a step (request_uri_method=post)
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                wallet_metadata: { type: string, description: JSON }
+                wallet_nonce: { type: string }
+      responses:
+        '200':
+          description: Request object (JWS); contains `wallet_nonce` if sent
+          content:
+            application/oauth-authz-req+jwt:
+              schema: { type: string }
+        '404':
+          description: Unknown or closed step
+
+  /openid4vp/responses/{requestId}:
+    post:
+      tags: [Wallet]
+      operationId: postResponse
+      summary: Response of the wallet to a step
+      description: README 7.8
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/WalletResponse'
+      responses:
+        '200':
+          description: Received; the wallet opens `redirect_uri`
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [redirect_uri]
+                properties:
+                  redirect_uri: { type: string, format: uri }
+        '400':
+          description: Step not open, or a second response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+
+components:
+  parameters:
+    TransactionId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema: { type: string }
+
+  securitySchemes:
+    accessToken:
+      type: http
+      scheme: bearer
+      description: Access token from `/token`
+
+  schemas:
+    ProviderMetadata:
+      type: object
+      required: [issuer, authorization_endpoint, token_endpoint, userinfo_endpoint, jwks_uri]
+      properties:
+        issuer: { type: string, format: uri }
+        authorization_endpoint: { type: string, format: uri }
+        token_endpoint: { type: string, format: uri }
+        userinfo_endpoint: { type: string, format: uri }
+        jwks_uri: { type: string, format: uri }
+        response_types_supported: { type: array, items: { type: string } }
+        grant_types_supported: { type: array, items: { type: string } }
+        subject_types_supported: { type: array, items: { type: string } }
+        id_token_signing_alg_values_supported: { type: array, items: { type: string } }
+        token_endpoint_auth_methods_supported: { type: array, items: { type: string } }
+        token_endpoint_auth_signing_alg_values_supported: { type: array, items: { type: string } }
+        code_challenge_methods_supported: { type: array, items: { type: string } }
+        scopes_supported: { type: array, items: { type: string } }
+        claims_supported: { type: array, items: { type: string } }
+        authorization_response_iss_parameter_supported: { type: boolean }
+        ui_locales_supported: { type: array, items: { type: string } }
+
+    Jwks:
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items:
+            type: object
+            required: [kty, crv, x, y, kid]
+            properties:
+              kty: { type: string, const: EC }
+              crv: { type: string, const: P-256 }
+              x: { type: string }
+              y: { type: string }
+              kid: { type: string }
+              use: { type: string, const: sig }
+              alg: { type: string, const: ES256 }
+
+    TokenRequest:
+      type: object
+      required: [grant_type, code, redirect_uri, code_verifier, client_assertion_type, client_assertion]
+      properties:
+        grant_type: { type: string, const: authorization_code }
+        code: { type: string }
+        redirect_uri: { type: string, format: uri }
+        code_verifier: { type: string }
+        client_assertion_type: { type: string, const: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer' }
+        client_assertion: { type: string, description: JWT per README 6.8 }
+
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in, id_token]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, const: Bearer }
+        expires_in: { type: integer }
+        id_token: { type: string, description: 'ES256; claims per README 6.7' }
+        ebw_attestation:
+          type: string
+          description: Verification attestation, compact JWS (README section 9); only with scope `attestation`
+
+    Claims:
+      type: object
+      description: README 6.7; missing values are left out
+      properties:
+        sub: { type: string }
+        verification_id: { type: string, format: uuid }
+        given_name: { type: string }
+        family_name: { type: string }
+        birthdate: { type: string, format: date }
+        representation_result: { type: string, enum: [CONFIRMED, NOT_CONFIRMED] }
+        representation_reasons:
+          type: array
+          items:
+            type: string
+            enum: [ISSUER_NOT_TRUSTED, PERSON_MISMATCH, COMPANY_MISMATCH, TYPE_NOT_ACCEPTED, EXPIRED]
+        representation_type: { type: string, example: legal_representative }
+        representation_role: { type: string }
+        representation_valid_until: { type: string, format: date }
+        representation_company_id: { type: string }
+        representation_company_name: { type: string }
+        representation_issuer: { type: string }
+        representation_trust: { type: string, enum: [trust_list, company_key, client_key] }
+        company_legal_name: { type: string }
+        company_ebwoid: { type: string }
+        company_euid: { type: string }
+        company_country: { type: string }
+        company_address:
+          type: object
+          properties:
+            street_address: { type: string }
+            postal_code: { type: string }
+            locality: { type: string }
+            country: { type: string }
+
+    TransactionStatus:
+      type: string
+      enum: [PENDING, VERIFIED, CODE_ISSUED, COMPLETED, FAILED, EXPIRED]
+
+    WalletResponse:
+      type: object
+      description: |
+        `response` with `direct_post.jwt`; `vp_token` and `state` with
+        `direct_post`; `error`, `error_description` and `state` on wallet errors.
+      properties:
+        response: { type: string, description: 'JWE (ECDH-ES, A128GCM or A256GCM) with `vp_token` and `state`' }
+        vp_token:
+          type: string
+          description: 'JSON object: credential ID of the DCQL query -> list with one presentation'
+        state: { type: string }
+        error: { type: string }
+        error_description: { type: string }
+
+    OAuthError:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        error_description: { type: string }
