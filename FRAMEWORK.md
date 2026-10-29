@@ -1,6 +1,6 @@
 # Framework for the module specs (OSP 2.0)
 
-**As of:** 2026-10-28, switch to OSP 2.0. Binding for all module specs of this part. Modules take over what is written here and do not reinvent it. Deviations go into the module's `open-points.md`. Open questions that concern several modules are in the cross-module [open-points.md](open-points.md). The version for the PSP architecture is in the git history of this repository.
+**As of:** 2026-10-29 (switch to OSP 2.0 on 2026-10-28). Binding for all module specs of this part. Modules take over what is written here and do not reinvent it. Deviations go into the module's `open-points.md`. Open questions that concern several modules are in the cross-module [open-points.md](open-points.md). The version for the PSP architecture is in the git history of this repository.
 
 Overview graphic: [architecture-overview.png](architecture-overview.png).
 
@@ -32,7 +32,7 @@ Overview graphic: [architecture-overview.png](architecture-overview.png).
 | C2-M4 | Delegation | `C2-M4-Delegation` | dropped | an OSP and its portal are one |
 | C2-M5 | Portal IAM | `C2-M5-PortalIAM` | Configuration | realm of the OSP, identity provider EBW-Connector, client `portal-core`, permissions and portal roles, token contents |
 | C3-M1 | Company Profile | `C3-M1-CompanyProfile` | Hackathon | record of the company in the installation, company identifier (BPN) from the CSP, company roles, status |
-| C3-M2 | CSP Connection | `C3-M2-CSPConnection` | Hackathon (new) | register companies with the CSP (BPN, home OSP), duplicate check, membership, directory BPN → DID, notifications from the CSP |
+| C3-M2 | CSP Connection | `C3-M2-CSPConnection` | Hackathon (new) | register companies with the CSP (BPN, home OSP), duplicate check, membership, directory BPN → DID, connectors in the discovery, notifications from the CSP |
 | C4-M1 | Credentials | `C4-M1-Credentials` | Hackathon | trigger, track and revoke BPN and membership credentials at the issuer; own issuer or the CSP's |
 | C4-M2 | Dataspace Wallet Interface | `C4-M2-DataspaceWalletInterface` | Hackathon | vendor-neutral: dataspace wallet per company, wallet accounts for technical users; adapter per provider, also for the CSP's dataspace wallet |
 | C5-M1 | EBW-Connector | `C5-M1-EBWConnector` | Provided | checks EUDI Wallet and Business Wallet via OpenID4VP; OpenID Connect for Portal IAM, UI and Business Wallet; verification attestation for the registration |
@@ -109,7 +109,7 @@ Every permission has a scope, in the README (section 6) and in `openapi.yaml` (`
 |---|---|---|
 | `company` | applies only to the person's company | `company_id` in the token equals the company of the object; otherwise 404 (the object stays invisible) |
 | `osp` | applies to all companies of the installation: tasks of OSP staff, steps, queries and callbacks from external systems | the permission only |
-| `own` | applies only to the person's own objects without a company, such as their own application | `sub` in the token equals the person who created the object |
+| `own` | applies to the person's own objects, such as their own application or their own notifications, with or without a company | `sub` in the token equals the person who owns the object. Whether a binding to a company is allowed is up to the module (C1-M2: applications only without a company) |
 
 The permissions `execute_steps_<module>` and `query_<module>` (4.2) and the permissions of the service accounts for callbacks also have the scope `osp`; every operation in `openapi.yaml` carries `x-permission-scope`.
 
@@ -228,6 +228,10 @@ An IT Admin creates a technical user (C2-M3, scope `company`). With a wallet rol
 - Sign-in at an app: the app redirects to the OSP's Portal IAM, which forwards to the EBW-Connector. The token contains `company_id`, `bpn` and the app roles.
 - Apps across the boundaries of an OSP (marketplace) are not in focus (OP-39).
 
+### 5.9 Connectors in the discovery
+
+A company creates a connector, changes its address or deletes it (Connectors, other part) → C3-M2 `register-connector` or `deregister-connector` → `ConnectorRegisteredAtCsp` or `ConnectorDeregisteredAtCsp`. In its discovery, the CSP names only connectors of companies with an active membership; deactivation and reactivation (5.4, 5.5) therefore need no own steps.
+
 ## 6. Event catalogue
 
 Names in English in PascalCase. Content only IDs and business values, never secrets. Every event also carries `eventId`, `eventType`, `occurredAt`.
@@ -263,6 +267,7 @@ Names in English in PascalCase. Content only IDs and business values, never secr
 | C3-M2 | `CompanyUpdatedAtCsp` | `companyId`, `bpn` |
 | C3-M2 | `MembershipRegistered`, `MembershipDeregistered` | `companyId`, `bpn` |
 | C3-M2 | `CompanyTransferredAway` | `companyId`, `bpn` |
+| C3-M2 | `ConnectorRegisteredAtCsp`, `ConnectorDeregisteredAtCsp` | `companyId`, `bpn`, `connectorId` |
 | C4-M1 | `CredentialsIssued` | `companyId`, `credentialTypes` |
 | C4-M1 | `CredentialIssuanceFailed`, `CredentialRevoked` | `companyId`, `credentialType` |
 | C4-M2 | `DataspaceWalletCreated` | `companyId`, `did` |
@@ -286,6 +291,7 @@ Names in English in PascalCase. Content only IDs and business values, never secr
 | C3-M2 | `register-did` | Onboarding |
 | C3-M2 | `update-company` | Core data changed |
 | C3-M2 | `register-membership`, `deregister-membership` | Onboarding, reactivation, deactivation |
+| C3-M2 | `register-connector`, `deregister-connector` | Connectors in the discovery |
 | C4-M1 | `issue-credentials`, `revoke-credentials` | Onboarding, reactivation, deactivation |
 | C4-M2 | `create-wallet`, `create-wallet-account`, `delete-wallet-account` | Onboarding, wallet access |
 

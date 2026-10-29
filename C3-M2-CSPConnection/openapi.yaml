@@ -5,7 +5,7 @@ info:
   description: |
     The only place through which an installation uses the core services of the CSP:
     register companies (BPN, home OSP), duplicate check, membership,
-    directory BPN → DID, transfer. Behaviour in README.md, sections 7 to 9.
+    directory BPN → DID, transfer, connectors in the discovery. Behaviour in README.md, sections 7 to 9.
 
     - Calls carry a token of the Portal IAM; required permission in `x-permission`,
       scope in `x-permission-scope` (FRAMEWORK 4.3).
@@ -71,12 +71,17 @@ paths:
       tags: [Queries]
       operationId: findCompanies
       summary: Duplicate check at the CSP
-      description: README section 9. At least `ebwoid`, `euid`, or `legalName` with `country`.
+      description: README section 9. At least `ebwoid`, `euid`, `identifier`, or `legalName` with `country`.
       x-permission: query_c3_m2
       x-permission-scope: osp
       parameters:
         - { name: ebwoid, in: query, schema: { type: string } }
         - { name: euid, in: query, schema: { type: string } }
+        - name: identifier
+          in: query
+          description: identifier in the form `<type>:<value>`, such as `VAT_ID:DE123456789`; repeatable
+          schema: { type: array, items: { type: string } }
+          explode: true
         - { name: legalName, in: query, schema: { type: string } }
         - { name: country, in: query, schema: { type: string, pattern: '^[A-Z]{2}$' } }
       responses:
@@ -164,6 +169,43 @@ paths:
         '409': { $ref: '#/components/responses/Problem' }
         '502': { $ref: '#/components/responses/Problem' }
 
+  /steps/register-connector:
+    post:
+      tags: [Steps]
+      operationId: stepRegisterConnector
+      summary: Enter a connector in the discovery of the CSP
+      description: README 8.6
+      x-permission: execute_steps_c3_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterConnectorInput' }
+      responses:
+        '200': { $ref: '#/components/responses/StepResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/deregister-connector:
+    post:
+      tags: [Steps]
+      operationId: stepDeregisterConnector
+      summary: Remove a connector from the discovery of the CSP
+      description: README 8.6
+      x-permission: execute_steps_c3_m2
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConnectorInput' }
+      responses:
+        '200': { $ref: '#/components/responses/StepResult' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
   /steps/register-membership:
     post:
       tags: [Steps]
@@ -240,11 +282,15 @@ components:
       allOf:
         - $ref: '#/components/schemas/StepInput'
         - type: object
-          required: [legalName, ebwoid, country]
+          required: [legalName, country]
+          description: At least `ebwoid`, `euid` or an entry in `identifiers` (README 6.5).
           properties:
             legalName: { type: string }
             ebwoid: { type: string }
             euid: { type: string }
+            identifiers:
+              type: array
+              items: { $ref: '#/components/schemas/Identifier' }
             country: { type: string, pattern: '^[A-Z]{2}$' }
             address: { $ref: '#/components/schemas/Address' }
 
@@ -252,10 +298,14 @@ components:
       allOf:
         - $ref: '#/components/schemas/StepInput'
         - type: object
-          required: [bpn, ebwoid]
+          required: [bpn]
           properties:
             bpn: { type: string }
             ebwoid: { type: string }
+            euid: { type: string }
+            identifiers:
+              type: array
+              items: { $ref: '#/components/schemas/Identifier' }
 
     UpdateCompanyInput:
       allOf:
@@ -266,6 +316,34 @@ components:
             legalName: { type: string }
             euid: { type: string }
             address: { $ref: '#/components/schemas/Address' }
+
+    Identifier:
+      type: object
+      required: [type, value]
+      properties:
+        type:
+          type: string
+          description: identifier type from the reference data, such as VAT_ID or COMMERCIAL_REG_NUMBER
+        value: { type: string }
+
+    ConnectorInput:
+      allOf:
+        - $ref: '#/components/schemas/StepInput'
+        - type: object
+          required: [connectorId]
+          properties:
+            connectorId: { type: string, format: uuid }
+
+    RegisterConnectorInput:
+      allOf:
+        - $ref: '#/components/schemas/ConnectorInput'
+        - type: object
+          required: [endpointUrl]
+          properties:
+            endpointUrl:
+              type: string
+              format: uri
+              description: address of the connector (DSP endpoint), HTTPS
 
     RegisterDidInput:
       allOf:
@@ -286,6 +364,7 @@ components:
           properties:
             bpn: { type: string }
             did: { type: string }
+            connectorId: { type: string, format: uuid }
 
     CspRegistration:
       type: object
@@ -307,7 +386,7 @@ components:
         bpn: { type: string }
         legalName: { type: string }
         country: { type: string }
-        matchedBy: { type: string, enum: [EBWOID, EUID, NAME] }
+        matchedBy: { type: string, enum: [EBWOID, EUID, IDENTIFIER, NAME] }
         homeOspId: { type: string, format: uuid }
         homeOspName: { type: string }
         homeIsThisOsp: { type: boolean }

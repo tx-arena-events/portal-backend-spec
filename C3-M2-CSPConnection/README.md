@@ -1,6 +1,6 @@
 # C3-M2 CSP Connection
 
-**Version:** 0.1, as of 2026-10-28 (new with OSP 2.0)
+**Version:** 0.1, as of 2026-10-29 (new with OSP 2.0)
 **Capability:** C3 Company
 **Kind:** Hackathon
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
@@ -16,7 +16,8 @@ The CSP Connection is the only place through which an installation uses the core
 - registers and deregisters the membership in the dataspace;
 - enters the DID of the company in the directory BPN → DID;
 - passes changed core data of the company to the CSP;
-- transfers a company to this OSP and accepts the notification that a company has moved away.
+- transfers a company to this OSP and accepts the notification that a company has moved away;
+- enters the connectors of the companies in the discovery of the CSP and removes them again.
 
 The interface to the CSP (section 11.1) is a proposal. If the association defines it differently, only this module changes.
 
@@ -24,7 +25,7 @@ Callers:
 
 | Who | What for |
 |---|---|
-| Process Orchestration | steps: register, transfer, change core data, enter DID, register and deregister membership (section 8) |
+| Process Orchestration | steps: register, transfer, change core data, enter DID, register and deregister membership, register and deregister a connector (section 8) |
 | C1-M3 Application Review | query `find-companies` for the duplicate check (section 9) |
 | OSP staff (through the UI) | view the status of a company at the CSP |
 | CSP | notifications to the installation (callback, 7.2) |
@@ -42,6 +43,8 @@ Callers:
 | Directory BPN → DID | core service that returns the DID of the dataspace wallet for a BPN (today BDRS) |
 | `ospId` | identifier of the OSP at the CSP, from the trust list (FRAMEWORK 4.8) |
 | Operation | process at the CSP that does not finish at once; the CSP reports its end by callback |
+| Identifier | identifier of the company with type and value, such as `VAT_ID` or `COMMERCIAL_REG_NUMBER` (identifier types from the reference data, FRAMEWORK 4.8) |
+| Discovery | core service of the CSP that names the connectors of a company for a BPN |
 
 ## 3. Not part of this module
 
@@ -52,7 +55,7 @@ Callers:
 | Create the dataspace wallet of the CSP | C4-M2 Dataspace Wallet Interface (its own adapter) |
 | Read the trust list and check issuers | C5-M1 EBW-Connector |
 | Admission of the OSP to the trust list | governance and CSP (FRAMEWORK 5.1) |
-| Discovery of connectors | Connectors (other part of the spec) |
+| Keeping the connectors of the companies (address, status) | Connectors (other part of the spec); this module only enters them at the CSP (8.6) |
 | Take data, technical users and wallet along on a transfer | later work (FRAMEWORK 5.6) |
 
 ## 4. Technical frame
@@ -91,6 +94,19 @@ One row per company of the installation that is being or was registered with the
 | `membership` | text | `NONE`, `REGISTERED`, `DEREGISTERED` |
 | `registered_at`, `updated_at` | timestamptz | |
 
+### Table `csp_connector`
+
+One row per connector that the module has entered at the CSP.
+
+| Field | Type | Rule |
+|---|---|---|
+| `connector_id` | uuid | primary key; identifier from the Connectors module |
+| `company_id` | uuid | company of the connector |
+| `bpn` | text | BPN when entered |
+| `endpoint_url` | text | address of the connector (DSP endpoint) |
+| `status` | text | `REGISTERED`, `DEREGISTERED` |
+| `registered_at`, `updated_at` | timestamptz | |
+
 ### Table `csp_notification`
 
 One row per accepted notification from the CSP: `notification_id` (unique, from the CSP), `type`, `bpn`, `received_at`. Duplicate notifications are detected and processed only once.
@@ -118,7 +134,7 @@ One entry per call to the CSP and per notification: time, operation, `company_id
 
 ### 6.2 Duplicate check
 
-`find-companies` asks the CSP for companies with the same EBWOID, the same EUID or the same name in the same country (compared at the CSP). For each match, the result gives the BPN, the home OSP and whether the home OSP is this OSP. C1-M3 assesses the match, not this module.
+`find-companies` asks the CSP for companies with the same EBWOID, the same EUID, the same other identifier (type and value) or the same name in the same country (compared at the CSP). For each match, the result gives the BPN, the home OSP and whether the home OSP is this OSP. C1-M3 assesses the match, not this module.
 
 ### 6.3 Permissions
 
@@ -132,7 +148,18 @@ One entry per call to the CSP and per notification: time, operation, `company_id
 
 - `register-company` with an existing row in `REGISTERED` returns the stored BPN without calling the CSP again. With `PENDING` and a running operation, the step answers `RUNNING` without starting a second operation.
 - `register-did`, `register-membership` and `deregister-membership` call the CSP only if the value changes; the CSP also treats equal calls as idempotent (`PUT`).
+- `register-connector` calls the CSP only if the connector is new or its address has changed; `deregister-connector` for an unknown or already removed connector returns `DONE` without a call.
 - A notification with a known `notificationId` is acknowledged with 200 and not processed again.
+
+### 6.5 Identifiers
+
+Without a Business Wallet (OP-35) a company has no EBWOID. Therefore `register-company` needs at least one of `ebwoid`, `euid` or an identifier in `identifiers`. The CSP uses them for the duplicate check and to assign the BPN.
+
+### 6.6 Connectors in the discovery
+
+- A connector can be entered only for a company with status `REGISTERED`.
+- In its discovery, the CSP names only connectors of companies with an active membership. On deactivation (membership deregistered, FRAMEWORK 5.4) no own step is therefore needed; after reactivation the connectors appear again.
+- A connector is removed only when the Connectors module deletes it (`deregister-connector`).
 
 ## 7. Operations
 
@@ -157,15 +184,15 @@ Input always with `processId`, `stepRunId` and `companyId` (FRAMEWORK 4.4).
 
 ### 8.1 `POST /api/c3-m2/steps/register-company`
 
-- **Input:** in addition `legalName`, `ebwoid`, `euid` (optional), `country`, `address` (optional) from the application or from C3-M1.
-- **Precondition:** application approved (`ApplicationApproved`); no row in `REGISTERED` for another company with the same EBWOID.
+- **Input:** in addition `legalName`, `country`, `ebwoid` (optional), `euid` (optional), `identifiers` (optional; list of `type` and `value`), `address` (optional) from the application or from C3-M1. At least `ebwoid`, `euid` or an identifier in `identifiers` (6.5); otherwise 400 `validation`.
+- **Precondition:** application approved (`ApplicationApproved`); no row in `REGISTERED` for another company with the same EBWOID or EUID.
 - **Behaviour:** `POST {CSP_URL}/companies`. 201: status `REGISTERED`, store the BPN. 202: status `PENDING`, store the `operationId`. 409 (already registered with another OSP): status `FAILED`, reason `REGISTERED_AT_OTHER_OSP`.
 - **Result:** `DONE` with `bpn`, or `RUNNING`.
 - **Event:** `CompanyRegisteredAtCsp` or `CompanyRegistrationAtCspFailed`; with `RUNNING`, later through the callback (7.2).
 
 ### 8.2 `POST /api/c3-m2/steps/transfer-company`
 
-- **Input:** in addition `bpn` (from `find-companies`) and `ebwoid`.
+- **Input:** in addition `bpn` (from `find-companies`); `ebwoid`, `euid` and `identifiers` optional, for the check at the CSP.
 - **Precondition:** application of kind `TRANSFER` approved.
 - **Behaviour:** `POST {CSP_URL}/companies/{bpn}/transfer`; responses as in 8.1. The CSP notifies the previous home OSP itself.
 - **Result, event:** as in 8.1.
@@ -190,13 +217,20 @@ Input always with `processId`, `stepRunId` and `companyId` (FRAMEWORK 4.4).
 - **Behaviour:** `PUT {CSP_URL}/companies/{bpn}/membership` with `{ "member": true }` or `false`; store the value.
 - **Result:** `DONE`. **Event:** `MembershipRegistered` or `MembershipDeregistered`.
 
+### 8.6 `POST /api/c3-m2/steps/register-connector` and `deregister-connector`
+
+- **Input:** in addition `connectorId`; for `register-connector` also `endpointUrl` (address of the connector, HTTPS).
+- **Precondition:** status `REGISTERED` (otherwise 409 `invalid-state`); connector created or deleted in the Connectors module.
+- **Behaviour:** `PUT {CSP_URL}/companies/{bpn}/connectors/{connectorId}` with `endpointUrl`, or `DELETE {CSP_URL}/companies/{bpn}/connectors/{connectorId}`; store the row in `csp_connector`.
+- **Result:** `DONE` with `bpn` and `connectorId`. **Event:** `ConnectorRegisteredAtCsp` or `ConnectorDeregisteredAtCsp`, only if something changed.
+
 ## 9. Queries for other modules
 
 ### `GET /api/c3-m2/internal/find-companies`
 
-Parameters: `ebwoid`, `euid`, `legalName`, `country` (at least `ebwoid`, `euid`, or `legalName` with `country`). Calls `GET {CSP_URL}/companies` with the same parameters.
+Parameters: `ebwoid`, `euid`, `identifier` (form `<type>:<value>`, repeatable), `legalName`, `country` (at least `ebwoid`, `euid`, `identifier`, or `legalName` with `country`). Calls `GET {CSP_URL}/companies` with the same parameters.
 
-Response 200: list of `CspCompanyMatch`: `bpn`, `legalName`, `country`, `matchedBy` (`EBWOID`, `EUID`, `NAME`), `homeOspId`, `homeOspName`, `homeIsThisOsp`, `memberActive`. Empty list: no match. CSP not reachable: 502 `upstream-error`.
+Response 200: list of `CspCompanyMatch`: `bpn`, `legalName`, `country`, `matchedBy` (`EBWOID`, `EUID`, `IDENTIFIER`, `NAME`), `homeOspId`, `homeOspName`, `homeIsThisOsp`, `memberActive`. Empty list: no match. CSP not reachable: 502 `upstream-error`.
 
 ## 10. Events
 
@@ -208,6 +242,7 @@ Response 200: list of `CspCompanyMatch`: `bpn`, `legalName`, `country`, `matched
 | `CompanyUpdatedAtCsp` | changed core data passed to the CSP | `companyId`, `bpn` |
 | `MembershipRegistered`, `MembershipDeregistered` | membership registered or deregistered | `companyId`, `bpn` |
 | `CompanyTransferredAway` | the company has moved to another OSP | `companyId`, `bpn` |
+| `ConnectorRegisteredAtCsp`, `ConnectorDeregisteredAtCsp` | connector entered in or removed from the discovery | `companyId`, `bpn`, `connectorId` |
 
 ## 11. Calls to other modules and external systems
 
@@ -217,12 +252,14 @@ All calls with the access token of the CSP (4). Responses in JSON; errors as Pro
 
 | Call | Purpose | Responses |
 |---|---|---|
-| `GET /companies?ebwoid=&euid=&legalName=&country=` | duplicate check | 200 list with `bpn`, `legalName`, `country`, `matchedBy`, `homeOspId`, `homeOspName`, `memberActive` |
-| `POST /companies` with `legalName`, `ebwoid`, `euid`, `country`, `address` | register; the home OSP is the calling OSP | 201 `{ bpn }`; 202 `{ operationId }`; 409 `{ bpn, homeOspId }` if another OSP is the home OSP |
-| `POST /companies/{bpn}/transfer` with `ebwoid` | transfer to the calling OSP | as `POST /companies` |
+| `GET /companies?ebwoid=&euid=&identifier=&legalName=&country=` | duplicate check | 200 list with `bpn`, `legalName`, `country`, `matchedBy`, `homeOspId`, `homeOspName`, `memberActive` |
+| `POST /companies` with `legalName`, `country`, `ebwoid`, `euid`, `identifiers`, `address` (at least one identifier) | register; the home OSP is the calling OSP | 201 `{ bpn }`; 202 `{ operationId }`; 409 `{ bpn, homeOspId }` if another OSP is the home OSP |
+| `POST /companies/{bpn}/transfer` with `ebwoid`, `euid`, `identifiers` (optional) | transfer to the calling OSP | as `POST /companies` |
 | `PATCH /companies/{bpn}` with `legalName`, `euid`, `address` | change core data | 204 |
 | `PUT /companies/{bpn}/did` with `did` | directory BPN → DID | 204 |
 | `PUT /companies/{bpn}/membership` with `member` | membership | 204 |
+| `PUT /companies/{bpn}/connectors/{connectorId}` with `endpointUrl` | enter a connector in the discovery | 204 |
+| `DELETE /companies/{bpn}/connectors/{connectorId}` | remove a connector | 204, also if it is unknown |
 
 On every changing call, the CSP checks that the calling OSP is the home OSP (except for `transfer`), and calls back: `POST {address of the installation}/api/c3-m2/csp-notifications` (7.2). The address of the installation is in the trust list, in the entry of the OSP.
 
@@ -234,9 +271,9 @@ No calls. Process Orchestration passes the data of the company as input to the s
 
 With an empty `CSP_URL`, the module answers the calls from 11.1 itself, in memory:
 
-- `POST /companies` assigns a BPN derived from the EBWOID: `BPNL` + the first 12 characters of the Base32 hash (SHA-256) of the EBWOID, in upper case; always 201, unless the EBWOID is in `CSP_STUB_FILE` with another home OSP (then 409).
+- `POST /companies` assigns a BPN derived from the EBWOID, without an EBWOID from the EUID, otherwise from the first identifier in the form `<type>:<value>`: `BPNL` + the first 12 characters of the Base32 hash (SHA-256) of this value, in upper case; always 201, unless the company is in `CSP_STUB_FILE` with another home OSP (then 409).
 - `GET /companies` searches the module's own registrations and `CSP_STUB_FILE`.
-- `transfer`, `did`, `membership` answer at once; there are no callbacks.
+- `transfer`, `did`, `membership`, `connectors` answer at once; there are no callbacks.
 
 For the hackathon, the test tools provide a shared CSP stand-in that several installations use (FRAMEWORK 4.7); it speaks the same core services API.
 
@@ -268,6 +305,8 @@ Problem Details, `type` = `urn:c3-m2:problem:<name>`.
 8. Callback `CompanyTransferredAway`: status `TRANSFERRED_AWAY`, event `CompanyTransferredAway`.
 9. Callback without the permission `report_csp_notification`: 403. CSP not reachable: step with `upstream-error`, `retryable: true`.
 10. Authentication at the CSP: the client assertion is signed with the key of the OSP; `iss` and `sub` are the `ospId`.
+11. `register-company` without EBWOID and EUID, with `identifiers` `[{ "type": "COMMERCIAL_REG_NUMBER", "value": "HRB 200002" }]` (Beispiel Logistik GmbH): `DONE` with a BPN derived from this identifier. Without any identifier: 400 `validation`. `find-companies?identifier=COMMERCIAL_REG_NUMBER:HRB 200002` afterwards: a match with `matchedBy` `IDENTIFIER`.
+12. `register-connector` before `REGISTERED`: `invalid-state`. Afterwards with `endpointUrl`: call at the CSP, row `REGISTERED`, `ConnectorRegisteredAtCsp`; the same call again: `DONE` without a call and without an event; a new `endpointUrl`: a new call and an event. `deregister-connector`: `DEREGISTERED`, `ConnectorDeregisteredAtCsp`; again: `DONE` without an event.
 
 ## 14. Test data
 
@@ -276,6 +315,8 @@ Problem Details, `type` = `urn:c3-m2:problem:<name>`.
 | OSP A (`ospId`) | `22222222-2222-4222-8222-222222222222` |
 | OSP B (`ospId`) | `99a5685c-7397-402c-88de-b1b3a939ecc9` |
 | Test company | Beispiel Maschinenbau GmbH, `EBWOID-DE-0000000001`, EUID `DEXX001T.HRB100001`, DE |
+| Company without a Business Wallet | Beispiel Logistik GmbH, `COMMERCIAL_REG_NUMBER` `HRB 200002`, DE |
+| Connector of Beispiel Maschinenbau | `connectorId` `7c1e5a2b-4d3f-4e6a-9b8c-0d1e2f3a4b5c`, `endpointUrl` `https://edc.beispiel-maschinenbau.example/api/v1/dsp` |
 | Company at OSP B (`CSP_STUB_FILE`) | Andere Beispiel AG, `EBWOID-DE-0000000002`, BPN `BPNL00000000002B`, home OSP OSP B |
 
 `CSP_STUB_FILE`:

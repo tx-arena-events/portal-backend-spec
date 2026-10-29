@@ -1,6 +1,6 @@
 # C2-M5 Portal IAM
 
-**Version:** 0.2, as of 2026-10-28
+**Version:** 0.2, as of 2026-10-29
 **Capability:** C2 Identity and Access
 **Kind:** Configuration
 **Files:** this README (content of the configuration, tokens, acceptance), [openapi.yaml](openapi.yaml) (endpoints of the product in use, for reference only), [open-points.md](open-points.md)
@@ -364,7 +364,7 @@ Compared with today's installation (Portal 2.6.0), the following also applies: t
 
 ### 6.2 List of permissions
 
-**Status: aligned with all module specs of our own part (28 Oct 2026).** Every permission that an `x-permission` in an `openapi.yaml` requires is listed here. For modules of the other part (Connectors, Subscriptions, Offers), they are proposals.
+**Status: aligned with all module specs of our own part (28 Oct 2026); permissions of the other part added as reported by it (29 Oct 2026).** Every permission that an `x-permission` in an `openapi.yaml` requires is listed here. The rows marked "proposal" for Connectors, Subscriptions and Offers are replaced by the other part with the permissions from its specs.
 
 **Permissions of people:**
 
@@ -399,6 +399,10 @@ Compared with today's installation (Portal 2.6.0), the following also applies: t
 | `view_dataspace_wallet` | C4-M2 | `company` | Datenraum-Wallet und Wallet-Konten des Unternehmens lesen | Read the company's dataspace wallet and wallet accounts |
 | `retrieve_wallet_credentials` | C4-M2 | `company` | Zugangsdaten eines Wallet-Kontos einmal abholen | Retrieve the credentials of a wallet account once |
 | `prove_wallet_control` | C4-M2 | `own` | Kontrolle über eine eigene Datenraum-Wallet nachweisen (später) | Prove control of an own dataspace wallet (later) |
+| `view_notifications` | C11 Notifications (other part) | `own` | Eigene Benachrichtigungen im Portal lesen | Read own notifications in the portal |
+| `view_processes` | Process Orchestration (other part) | `osp` | Abläufe und ihre Schritte lesen | Read processes and their steps |
+| `retrigger_process_steps` | Process Orchestration (other part) | `osp` | Gescheiterte Schritte erneut anstoßen | Retrigger failed process steps |
+| `view_marketplace` | Marketplace (other part) | `company` | Marktplatz mit seinen Angeboten lesen | Read the marketplace and its offers |
 | `view_connectors`, `manage_connectors` | Connectors (proposal) | `company` | Connectoren des Unternehmens lesen bzw. verwalten | Read or manage the company's connectors |
 | `view_subscriptions`, `manage_subscriptions` | Subscriptions (proposal) | `company` | Abos des Unternehmens lesen bzw. abschließen und beenden | Read or manage the company's subscriptions |
 | `view_offers`, `manage_offers` | Offers (proposal) | `company` | Angebote des Unternehmens als Anbieter lesen bzw. verwalten | Read or manage the company's offers as provider |
@@ -416,8 +420,8 @@ Compared with today's installation (Portal 2.6.0), the following also applies: t
 
 | Permissions | `description.de` | `description.en` |
 |---|---|---|
-| `execute_steps_c1_m2`, `execute_steps_c1_m3`, `execute_steps_c2_m2`, `execute_steps_c2_m3`, `execute_steps_c3_m1`, `execute_steps_c3_m2`, `execute_steps_c4_m1`, `execute_steps_c4_m2` | Schritte des Moduls `<Nr.>` über HTTP ausführen | Execute the steps of module `<no.>` via HTTP |
-| `query_c1_m2`, `query_c1_m3`, `query_c2_m2`, `query_c2_m3`, `query_c3_m1`, `query_c3_m2`, `query_c4_m1`, `query_c4_m2` | Abfragen des Moduls `<Nr.>` über HTTP aufrufen | Call the queries of module `<no.>` via HTTP |
+| `execute_steps_c1_m2`, `execute_steps_c1_m3`, `execute_steps_c2_m2`, `execute_steps_c2_m3`, `execute_steps_c3_m1`, `execute_steps_c3_m2`, `execute_steps_c4_m1`, `execute_steps_c4_m2`; other part: `execute_steps_c6`, `execute_steps_c8`, `execute_steps_c10`, `execute_steps_c12` | Schritte des Moduls `<Nr.>` über HTTP ausführen | Execute the steps of module `<no.>` via HTTP |
+| `query_c1_m2`, `query_c1_m3`, `query_c2_m2`, `query_c2_m3`, `query_c3_m1`, `query_c3_m2`, `query_c4_m1`, `query_c4_m2`; other part: `query_c6`, `query_c8`, `query_c10`, `query_c12` | Abfragen des Moduls `<Nr.>` über HTTP aufrufen | Call the queries of module `<no.>` via HTTP |
 | `read_wallet_holder_access` | Zugang zur Holder-Wallet für die Ausstellung lesen | Read the holder wallet access for issuance |
 | `rotate_subscription_credentials` | Secret eines Abo-Kontos erneuern | Rotate the secret of a subscription account |
 
@@ -429,15 +433,15 @@ C5-M1 (EBW-Connector) uses its own tokens and no permissions on the client `port
 
 | Portal role | For | Contains | Assigned by |
 |---|---|---|---|
-| `Applicant` | every account of a person | `register_company`, `accept_invitation`; later `prove_wallet_control` | identity provider on the first login (5.5); always stays |
-| `Member` | person of a company | `view_company`, `view_app_roles` | C2-M2 |
+| `Applicant` | every account of a person | `register_company`, `accept_invitation`, `view_notifications`; later `prove_wallet_control` | identity provider on the first login (5.5); always stays |
+| `Member` | person of a company | `view_company`, `view_app_roles`, `view_marketplace` | C2-M2 |
 | `IT Admin` | person of a company | same as `Member`, plus `view_company_users`, `view_technical_users`, `manage_technical_users`, `delete_technical_users`, `view_credentials`, `view_dataspace_wallet`, `retrieve_wallet_credentials`, `view_connectors`, `manage_connectors`, `view_subscriptions` | C2-M2 |
 | `Company Admin` | person of a company | same as `IT Admin`, plus `edit_company`, `edit_company_roles`, `manage_company_users`, `assign_app_roles`, `manage_subscriptions`, `view_offers`, `manage_offers` | C2-M2 (`assign-company-admin` during onboarding, otherwise invitation) |
 | `OSP Reviewer` | OSP staff | `view_applications`, `view_reviews`, `review_application`, `view_companies`, `review_company_changes`, `view_users`, `view_all_technical_users` | C2-M2 (`manage_osp_staff`) |
-| `OSP Admin` | OSP staff | `view_applications`, `manage_agreements`, `view_reviews`, `view_companies`, `manage_companies`, `review_company_changes`, `view_users`, `manage_users`, `manage_osp_staff`, `view_all_technical_users`, `view_csp_registration`, `manage_credentials`, `approve_offers` | C2-M2 (bootstrap, then `manage_osp_staff`) |
+| `OSP Admin` | OSP staff | `view_applications`, `manage_agreements`, `view_reviews`, `view_companies`, `manage_companies`, `review_company_changes`, `view_users`, `manage_users`, `manage_osp_staff`, `view_all_technical_users`, `view_csp_registration`, `manage_credentials`, `approve_offers`, `view_processes`, `retrigger_process_steps` | C2-M2 (bootstrap, then `manage_osp_staff`) |
 
 - All are composite client roles on the client `portal-core` with `description.de` and `description.en`:
-  - `Applicant`: „Antrag stellen, Einladung annehmen“ / “File an application, accept an invitation”;
+  - `Applicant`: „Antrag stellen, Einladung annehmen, Benachrichtigungen lesen“ / “File an application, accept an invitation, read notifications”;
   - `Member`: „Person eines Unternehmens“ / “Person of a company”;
   - `IT Admin`: „Technik des Unternehmens verwalten“ / “Manage the company's technical setup”;
   - `Company Admin`: „Unternehmen und seine Personen verwalten“ / “Manage the company and its people”;
@@ -679,7 +683,7 @@ The configuration is done when these cases work with the test installation (sect
 1. **Import:** Keycloak starts with the test variant without errors. The realm attribute `portal.config.version` is `0.2.0`.
 2. **Discovery:** `issuer` is `{IAM_URL}/realms/CX-Central`; `token_endpoint_auth_methods_supported` contains `private_key_jwt`; `grant_types_supported` contains `authorization_code` and `client_credentials`; the JWKS contains an RSA key and an EC key (P-256).
 3. **First login:** browser to the sign-in endpoint for `portal-ui` without a session: redirect to the stand-in `TEST-EBW` without a page of the Portal IAM; the request contains `scope=openid profile`, `code_challenge_method=S256` and `nonce`. After Nina Neu signs in: back to the UI. The realm has a new account `ebw.<sub>` with `firstName` "Nina", `lastName` "Neu", the role `Applicant`, a link with `ebw-connector`, without `company_id`, without credentials. Events `REGISTER` and `LOGIN`.
-4. **Token after the first login:** the access token from case 3 has `aud` `portal-core`, `azp` `portal-ui`, `given_name`, `family_name`, under `resource_access.portal-core.roles` exactly `Applicant`, `register_company` and `accept_invitation`; no `company_id`, no `bpn`, no `birthdate`, no e-mail address.
+4. **Token after the first login:** the access token from case 3 has `aud` `portal-core`, `azp` `portal-ui`, `given_name`, `family_name`, under `resource_access.portal-core.roles` exactly `Applicant`, `register_company`, `accept_invitation` and `view_notifications`; no `company_id`, no `bpn`, no `birthdate`, no e-mail address.
 5. **Further sign-in:** Nina Neu signs in again in a new browser session: the same account; the number of accounts stays the same. After the last name is changed to "Neu-Test" in the stand-in and she signs in again: `lastName` on the account and `family_name` in the token are "Neu-Test".
 6. **Client assertion:** the token request of the Portal IAM at the stand-in uses `private_key_jwt`; the assertion is signed with ES256, its `kid` is in the JWKS of the realm. A stand-in that only allows a client secret rejects the Portal IAM (sign-in fails with an error page).
 7. **No binding through claims:** the stand-in also delivers `company_id`, `bpn` and `email` in the ID token. After the sign-in, the account has none of these attributes.
@@ -779,3 +783,4 @@ The stand-in signs its ID token with RS256, the reference implementation of the 
 - **Service accounts for callbacks** of the CSP, the issuers and the dataspace wallets with exactly one permission (5.9).
 - **Second realm key** ES256 for the client assertion towards the EBW-Connector (5.3).
 - **Test installation** with stand-in realm `TEST-EBW` and test persons instead of test PSPs.
+- **Added on 29 Oct 2026:** permissions of the other part (`view_notifications` in `Applicant`, `view_marketplace` in `Member`, `view_processes` and `retrigger_process_steps` in `OSP Admin`; steps and queries of C6, C8, C10, C12).

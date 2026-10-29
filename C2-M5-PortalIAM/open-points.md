@@ -1,12 +1,12 @@
 # C2-M5 Portal IAM: open points
 
-**Version:** 0.2, as of 2026-10-28
+**Version:** 0.2, as of 2026-10-29
 
 For version 0.2, the README fixes each of these points so that the configuration can be created. The following decisions are provisional and still to be agreed. Decided on 28 Oct 2026 are: OSP 2.0 (one Portal IAM per OSP), the EBW-Connector as identity provider, accounts without a password.
 
 ## List of permissions
 
-Aligned on 28 Oct 2026 with all module specs of our own part (README 6.2): C1-M2, C1-M3, C2-M2, C2-M3, C3-M1, C3-M2, C4-M1, C4-M2. Only the proposals for Connectors, Subscriptions and Offers (other part) remain open.
+Aligned on 28 Oct 2026 with all module specs of our own part (README 6.2): C1-M2, C1-M3, C2-M2, C2-M3, C3-M1, C3-M2, C4-M1, C4-M2. On 29 Oct 2026 the permissions reported by the other part were added (notifications, Process Orchestration, marketplace, steps and queries of C6, C8, C10, C12). Open: the complete list of permissions of the other part; it replaces the proposals for Connectors, Subscriptions and Offers.
 
 ## Provisional decisions
 
