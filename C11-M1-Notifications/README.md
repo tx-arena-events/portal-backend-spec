@@ -102,9 +102,9 @@ Per person and notification: `notification_id`, `sub`, `read_at`, `hidden_at`. A
 | Recipient in 6.2 | Resolved how |
 |---|---|
 | applicant | `applicant_sub` of the application (table `applicant`) |
-| `<portal role>` of `<company field>` | C2-M2 `GET /internal/company-users?companyId=…&portalRole=…`: one personal notification per person |
+| `<portal role>` of `<company field>` | C2-M2 `GET /internal/company-users?companyId=…&portalRole=…`: one personal notification per person, addressed to `userId` (C2-M2 `CompanyUserRef`; `userId` is the `sub` of the person, C2-M2 2) |
 | staff with `<permission>` | one staff notification; every person with the permission in the token sees it |
-| customers of the app | C10-M1 `GET /internal/subscriptions?offerId=…&status=ACTIVE`, then `Company Admin` of each `customerCompanyId` |
+| customers of the app | C10-M1 `GET /internal/subscriptions?offerId=…&status=ACTIVE` with `offerId` = `appId` of the event (an app is an offer; C12-M1 flow `app-approval` passes `offerId` as `appId`), then `Company Admin` of each `customerCompanyId` |
 
 ### 6.2 Rules
 
@@ -123,14 +123,14 @@ Per person and notification: `notification_id`, `sub`, `read_at`, `hidden_at`. A
 | R11 | `SubscriptionDeclined` | `SUBSCRIPTION_DECLINED` | `INFO` | `Company Admin` of `customerCompanyId` | – |
 | R12 | `SubscriptionInstanceUrlChanged` | `SUBSCRIPTION_URL_CHANGED` | `INFO` | `Company Admin` of the customer (C10-M1 `/internal/subscriptions/{id}`) | – |
 | R13 | `AppRolesAdded` | `APP_ROLES_ADDED` | `INFO` | customers of the app (`appId`) | – |
-| R14 | `WalletAccountCreated`, `WalletAccountFailed` | `TECHNICAL_USER_WALLET_READY`, `TECHNICAL_USER_WALLET_FAILED` | `INFO` | `IT Admin` of `companyId` | – |
+| R14 | `WalletAccountCreated`, `WalletAccountFailed` | `TECHNICAL_USER_WALLET_READY`, `TECHNICAL_USER_WALLET_FAILED` | `INFO` | `IT Admin` of `companyId`; if the company has none, `Company Admin` | – |
 | R15 | `CredentialRevoked` | `CREDENTIAL_REVOKED` | `INFO` | `Company Admin` of `companyId` | – |
-| R16 | `ConnectorRegistered` | `CONNECTOR_REGISTERED` | `INFO` | `IT Admin` of `companyId` | – |
+| R16 | `ConnectorRegistered` | `CONNECTOR_REGISTERED` | `INFO` | `IT Admin` of `companyId`; if the company has none, `Company Admin` | – |
 | R17 | `ProcessStepFailed` | `PROCESS_STEP_FAILED` | `ACTION` | staff with `retrigger_process_steps` | `ProcessStepRetriggered` (same `processId` and `stepKey`), `ProcessCompleted`, `ProcessEnded` (`processId`) |
 
 `content` of a notification: the fields of the event without `eventId`, `eventType` and `occurredAt`. R17 additionally `flowKey`, `subjectType`, `subjectId`, `errorType`.
 
-A closing event sets `done` on all open tasks of the rule for the same object. A closing event that arrives before its task (e.g. a quick approval) is remembered for 24 hours, so that the task is created as `done`.
+A closing event sets `done` on all open tasks of the rule for the same object. A closing event that arrives before its task (e.g. a quick approval) is remembered for 24 hours. A new task is created as `done` only if the event that creates it did not occur later than the remembered closing event (compare `occurredAt`). Example: after `ProcessStepRetriggered` the same step fails again; the new `ProcessStepFailed` is later than the retrigger, so the new task stays open (acceptance case 6).
 
 ### 6.3 Permissions
 
@@ -193,7 +193,7 @@ All events named in 6.2: from C1-M2 (`ApplicationSubmitted`, `ApplicationComplet
 
 | Neighbour (variable) | Call | Built-in stand-in |
 |---|---|---|
-| C2-M2 (`APP_ACCESS_URL`) | `GET /api/c2-m2/internal/company-users?companyId=&portalRole=` → `sub` of the people | reads `stub-company-users.json` |
+| C2-M2 (`APP_ACCESS_URL`) | `GET /api/c2-m2/internal/company-users?companyId=&portalRole=` → `userId` (= `sub`) of the people | reads `stub-company-users.json` |
 | C10-M1 (`SUBSCRIPTION_URL`) | `GET /api/c10-m1/internal/subscriptions?offerId=&status=ACTIVE`, `GET /api/c10-m1/internal/subscriptions/{id}` | empty list |
 
 ## 12. Errors
@@ -216,11 +216,12 @@ Problem Details, `type` = `urn:c11-m1:problem:<name>`.
 4. `ApplicationDeclined`: the applicant has `APPLICATION_DECLINED` with `reason`; afterwards the row in `applicant` is deleted.
 5. `SubscriptionRequested`: every `Company Admin` of the provider company (stand-in with two people) has an open task; `SubscriptionActivated` closes it and creates `SUBSCRIPTION_ACTIVATED` for the `Company Admin` of the customer.
 6. `ProcessStepFailed`: a person with `retrigger_process_steps` sees `PROCESS_STEP_FAILED`; `ProcessStepRetriggered` for the same step closes it; a new `ProcessStepFailed` creates a new task.
-7. A closing event arrives before the event of the task: the task is created as `done`.
+7. A closing event arrives before the event of the task, and the task event has an earlier or equal `occurredAt`: the task is created as `done`. A task event with a later `occurredAt` (case 6 after a retrigger): the task is created open.
 8. Hide an open task: 409; after `done`: 204, it no longer appears in the list.
 9. One person marks a staff notification as read: for another staff member it stays unread.
 10. Another person's notification: 404. Notification contents contain no names (check against the stand-in data).
 11. `DISABLED_RULES=R14`: `WalletAccountCreated` creates no notification.
+12. `ConnectorRegistered` for a company without an `IT Admin` (stand-in): every `Company Admin` of the company has `CONNECTOR_REGISTERED`.
 
 ## 14. Test data
 
@@ -242,3 +243,6 @@ Problem Details, `type` = `urn:c11-m1:problem:<name>`.
 - Receiver is the `sub` of the person, no portal user ID.
 - Paths under `/api/c11-m1`; permission `view_notifications` with scope `own`. `retrigger_mail` dropped.
 - Deleting becomes hiding per person.
+- A remembered closing event closes a new task only if the task event is not later (`occurredAt`, 6.2).
+- R14 and R16 go to `Company Admin` if the company has no `IT Admin` (e.g. right after onboarding).
+- Recipients from C2-M2 are read from `userId` (= `sub`); `appId` of `AppRolesAdded` is the `offerId` for the query at C10-M1.

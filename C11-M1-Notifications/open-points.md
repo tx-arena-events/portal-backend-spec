@@ -12,13 +12,14 @@
 | 4 | Customers of an app (R13) | all `Company Admin` of companies with an active subscription; not the people who already have app roles | Offers, Subscriptions |
 | 5 | Applicant | `applicantSub` from `ApplicationSubmitted` is kept until the application is finished | data protection |
 | 6 | Retention | read or done notifications are deleted after 180 days (OP-20) | OSP, data protection |
+| 7 | Recipients without `IT Admin` | R14 and R16 go to `Company Admin` if the company has no `IT Admin`; after onboarding a company has only its `Company Admin` (C2-M2 8.8). Alternative: onboarding also assigns `IT Admin` | C2-M2 |
 
 ## Assumptions about other modules
 
 | Who | Assumption |
 |---|---|
 | C2-M5 | `view_notifications` in the portal role `Applicant`, which every account keeps; `retrigger_process_steps` in `OSP Admin` (C2-M5 6.3) |
-| C2-M2 | `GET /internal/company-users?companyId=&portalRole=` returns the `sub` of the people (C2-M2 9.4) |
+| C2-M2 | `GET /internal/company-users?companyId=&portalRole=` returns `userId` of the people, which is their `sub` (C2-M2 2, 9.4) |
 | C1-M2 | `ApplicationSubmitted` carries `applicantSub` (FRAMEWORK 6) |
 | C3-M1 | `CompanyChangeRequestSubmitted`, `CompanyChangeRequestClosed` with `changeRequestId` (FRAMEWORK 6) |
 | C6-M1 | `ConnectorRegistered` with `connectorId`, `companyId` |
