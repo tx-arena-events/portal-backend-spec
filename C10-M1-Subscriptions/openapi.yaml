@@ -1,0 +1,531 @@
+openapi: 3.1.0
+info:
+  title: C10-M1 Subscriptions
+  version: 0.2.0
+  description: |
+    Subscriptions of companies to apps and services of the installation. Setup through
+    Process Orchestration (FRAMEWORK 5.8). Behaviour in README.md, sections 6 to 9.
+
+    - Calls carry a token of the Portal IAM; required permission in `x-permission`,
+      scope in `x-permission-scope` (FRAMEWORK 4.3).
+    - Process Orchestration and other modules call the paths under `/steps` and `/internal`.
+    - Errors as Problem Details (RFC 9457), identifiers in README section 12.
+servers:
+  - url: /api/c10-m1
+security:
+  - portalIam: []
+tags:
+  - name: Company
+    description: Customer side
+  - name: Provider
+    description: Provider side
+  - name: Queries
+    description: For other modules
+  - name: Steps
+    description: For Process Orchestration
+
+paths:
+  /subscriptions:
+    get:
+      tags: [Company, Provider]
+      operationId: listSubscriptions
+      summary: Subscriptions of the own company
+      description: README 7.1. `view=customer` or `view=provider`.
+      x-permission: view_subscriptions
+      x-permission-scope: company
+      parameters:
+        - { name: view, in: query, schema: { type: string, enum: [customer, provider], default: customer } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/SubscriptionStatus' } }
+        - { name: offerType, in: query, schema: { $ref: '#/components/schemas/OfferType' } }
+        - { name: offerId, in: query, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Page of subscriptions
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SubscriptionPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [Company]
+      operationId: subscribe
+      summary: Subscribe to an offer
+      description: README 7.2.
+      x-permission: manage_subscriptions
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubscribeRequest' }
+      responses:
+        '201':
+          description: Subscription created with `PENDING`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subscription' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /subscriptions/{offerSubscriptionId}:
+    get:
+      tags: [Company, Provider]
+      operationId: getSubscription
+      summary: One subscription
+      description: README 7.3. Visible to the customer and to the provider company.
+      x-permission: view_subscriptions
+      x-permission-scope: company
+      parameters:
+        - $ref: '#/components/parameters/OfferSubscriptionId'
+      responses:
+        '200':
+          description: The subscription
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subscription' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /subscriptions/{offerSubscriptionId}/end:
+    post:
+      tags: [Company]
+      operationId: endSubscription
+      summary: End a subscription
+      description: README 7.4. Customer company only.
+      x-permission: manage_subscriptions
+      x-permission-scope: company
+      parameters:
+        - $ref: '#/components/parameters/OfferSubscriptionId'
+      responses:
+        '200':
+          description: Status `INACTIVE`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subscription' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /subscriptions/{offerSubscriptionId}/start-setup:
+    post:
+      tags: [Provider]
+      operationId: startSetup
+      summary: Start the setup
+      description: README 7.5. Multi-instance apps and services; provider company only.
+      x-permission: manage_offers
+      x-permission-scope: company
+      parameters:
+        - $ref: '#/components/parameters/OfferSubscriptionId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StartSetupRequest' }
+      responses:
+        '202':
+          description: Setup started
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subscription' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /subscriptions/{offerSubscriptionId}/activate:
+    post:
+      tags: [Provider]
+      operationId: activateSubscription
+      summary: Activate a subscription
+      description: README 7.6. Provider company only.
+      x-permission: manage_offers
+      x-permission-scope: company
+      parameters:
+        - $ref: '#/components/parameters/OfferSubscriptionId'
+      responses:
+        '200':
+          description: Status `ACTIVE`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subscription' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /subscriptions/{offerSubscriptionId}/decline:
+    post:
+      tags: [Provider]
+      operationId: declineSubscription
+      summary: Decline a subscription
+      description: README 7.7. Provider company only.
+      x-permission: manage_offers
+      x-permission-scope: company
+      parameters:
+        - $ref: '#/components/parameters/OfferSubscriptionId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 1000 }
+      responses:
+        '200':
+          description: Status `DECLINED`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subscription' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /subscriptions/{offerSubscriptionId}/instance-url:
+    put:
+      tags: [Provider]
+      operationId: changeInstanceUrl
+      summary: Change the URL of the instance
+      description: README 7.8. Multi-instance apps in `ACTIVE`; provider company only.
+      x-permission: manage_offers
+      x-permission-scope: company
+      parameters:
+        - $ref: '#/components/parameters/OfferSubscriptionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [instanceUrl]
+              properties:
+                instanceUrl: { $ref: '#/components/schemas/InstanceUrl' }
+      responses:
+        '200':
+          description: URL changed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subscription' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /provider-configuration:
+    get:
+      tags: [Provider]
+      operationId: getProviderConfiguration
+      summary: Own provider configuration (without secret)
+      description: README 7.9.
+      x-permission: manage_offers
+      x-permission-scope: company
+      responses:
+        '200':
+          description: The configuration
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderConfiguration' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    put:
+      tags: [Provider]
+      operationId: putProviderConfiguration
+      summary: Create or replace the own provider configuration
+      description: README 7.9. Without `clientSecret` the stored secret is kept.
+      x-permission: manage_offers
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProviderConfigurationInput' }
+      responses:
+        '200':
+          description: Stored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderConfiguration' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [Provider]
+      operationId: deleteProviderConfiguration
+      summary: Delete the own provider configuration
+      description: README 7.9.
+      x-permission: manage_offers
+      x-permission-scope: company
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /internal/subscriptions:
+    get:
+      tags: [Queries]
+      operationId: findSubscriptions
+      summary: Subscriptions by company, offer and status
+      description: README 9.1. At least one parameter.
+      x-permission: query_c10
+      x-permission-scope: osp
+      parameters:
+        - { name: customerCompanyId, in: query, schema: { type: string, format: uuid } }
+        - { name: offerId, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/SubscriptionStatus' } }
+      responses:
+        '200':
+          description: Matching subscriptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SubscriptionRef' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  /internal/subscriptions/{offerSubscriptionId}:
+    get:
+      tags: [Queries]
+      operationId: getSubscriptionInternal
+      summary: One subscription for other modules
+      description: README 9.2.
+      x-permission: query_c10
+      x-permission-scope: osp
+      parameters:
+        - $ref: '#/components/parameters/OfferSubscriptionId'
+      responses:
+        '200':
+          description: The subscription
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SubscriptionInternal' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /steps/notify-provider:
+    post:
+      tags: [Steps]
+      operationId: stepNotifyProvider
+      summary: Inform the provider of a new subscription
+      description: README 8.1.
+      x-permission: execute_steps_c10
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepInput' }
+      responses:
+        '200':
+          description: Result of the step (FRAMEWORK 4.4)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /steps/send-activation-callback:
+    post:
+      tags: [Steps]
+      operationId: stepSendActivationCallback
+      summary: Send the activation callback to the provider
+      description: README 8.2. The secret is neither stored nor in the result.
+      x-permission: execute_steps_c10
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActivationCallbackInput' }
+      responses:
+        '200':
+          description: Result of the step (FRAMEWORK 4.4)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    portalIam:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token of the Portal IAM of the OSP
+  parameters:
+    OfferSubscriptionId:
+      name: offerSubscriptionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+  responses:
+    Problem:
+      description: Problem Details (README section 12)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    OfferType:
+      type: string
+      enum: [APP, SERVICE]
+    InstanceKind:
+      type: [string, 'null']
+      description: Apps only.
+      enum: [SINGLE, MULTI, null]
+    SubscriptionStatus:
+      type: string
+      description: README 6.1.
+      enum: [PENDING, ACTIVE, DECLINED, INACTIVE]
+    InstanceUrl:
+      type: string
+      format: uri
+      pattern: '^https://[^#]+$'
+    SubscribeRequest:
+      type: object
+      required: [offerId, agreementConsents]
+      properties:
+        offerId: { type: string, format: uuid }
+        agreementConsents:
+          type: array
+          items:
+            type: object
+            required: [agreementId, consent]
+            properties:
+              agreementId: { type: string, format: uuid }
+              consent: { type: string, enum: [ACTIVE, INACTIVE] }
+    StartSetupRequest:
+      type: object
+      properties:
+        instanceUrl: { $ref: '#/components/schemas/InstanceUrl' }
+    SubscriptionRef:
+      type: object
+      required: [offerSubscriptionId, offerId, customerCompanyId, status]
+      properties:
+        offerSubscriptionId: { type: string, format: uuid }
+        offerId: { type: string, format: uuid }
+        customerCompanyId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/SubscriptionStatus' }
+    SubscriptionInternal:
+      allOf:
+        - $ref: '#/components/schemas/SubscriptionRef'
+        - type: object
+          required: [offerType, providerCompanyId]
+          properties:
+            offerType: { $ref: '#/components/schemas/OfferType' }
+            instanceKind: { $ref: '#/components/schemas/InstanceKind' }
+            providerCompanyId: { type: string, format: uuid }
+            instanceUrl: { type: [string, 'null'] }
+    Subscription:
+      allOf:
+        - $ref: '#/components/schemas/SubscriptionInternal'
+        - type: object
+          required: [setupStarted, requestedAt]
+          properties:
+            setupStarted: { type: boolean }
+            declineReason: { type: [string, 'null'] }
+            requestedAt: { type: string, format: date-time }
+            activatedAt: { type: [string, 'null'], format: date-time }
+            endedAt: { type: [string, 'null'], format: date-time }
+            requestedBy:
+              type: [string, 'null']
+              description: '`sub` of the person who subscribed; provider view only.'
+            agreementConsents:
+              type: array
+              description: Provider view only.
+              items:
+                type: object
+                properties:
+                  agreementId: { type: string, format: uuid }
+                  consent: { type: string, enum: [ACTIVE, INACTIVE] }
+    SubscriptionPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Subscription' }
+        page: { type: integer }
+        size: { type: integer }
+        total: { type: integer }
+    ProviderConfigurationInput:
+      type: object
+      required: [tokenUrl, clientId]
+      properties:
+        setupUrl: { type: [string, 'null'], format: uri }
+        callbackUrl: { type: [string, 'null'], format: uri }
+        tokenUrl: { type: string, format: uri }
+        clientId: { type: string }
+        clientSecret: { type: string, writeOnly: true }
+    ProviderConfiguration:
+      type: object
+      required: [companyId, tokenUrl, clientId, clientSecretSet, updatedAt]
+      properties:
+        companyId: { type: string, format: uuid }
+        setupUrl: { type: [string, 'null'], format: uri }
+        callbackUrl: { type: [string, 'null'], format: uri }
+        tokenUrl: { type: string, format: uri }
+        clientId: { type: string }
+        clientSecretSet: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+    StepInput:
+      type: object
+      required: [processId, stepRunId, offerSubscriptionId]
+      properties:
+        processId: { type: string, format: uuid }
+        stepRunId: { type: string, format: uuid }
+        offerSubscriptionId: { type: string, format: uuid }
+    ActivationCallbackInput:
+      allOf:
+        - $ref: '#/components/schemas/StepInput'
+        - type: object
+          properties:
+            appInstanceClientId: { type: string, format: uuid }
+            technicalUsers:
+              type: array
+              description: Result `accounts` of C2-M3 `create-for-subscription`.
+              items: { type: object, additionalProperties: true }
+    StepResult:
+      type: object
+      required: [stepRunId, state]
+      properties:
+        stepRunId: { type: string, format: uuid }
+        state: { type: string, enum: [DONE, RUNNING] }
+        result:
+          type: object
+          properties:
+            notified: { type: boolean }
+            called: { type: boolean }
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        retryable: { type: boolean, description: For steps (FRAMEWORK 4.4). }
