@@ -24,7 +24,8 @@ Callers:
 |---|---|
 | People of a company (UI) | register, view, change, delete own connectors; view connectors that a provider runs for the company |
 | People of a provider company (UI) | register a connector as a service for a customer |
-| Process Orchestration | steps: deactivate the connectors of an ended subscription, remove the link to a deleted technical user (section 8) |
+| Process Orchestration | steps: deactivate the connectors of an ended or declined subscription, remove the link to a deleted technical user (section 8) |
+| C2-M3 Technical Users | query: connectors that use a technical user, before the account is deleted (section 9) |
 
 ## 2. Terms
 
@@ -51,7 +52,7 @@ Callers:
 ## 4. Technical frame
 
 - Module of the modular monolith (Python, FastAPI), own database `c6_m1` in PostgreSQL.
-- People call with their token from the Portal IAM; scope `company` against provider or host company.
+- People call with their token from the Portal IAM; scope `company` against provider or host company. A token without `company_id` gets 403 `forbidden` for these operations.
 - Events through the outbox of the module.
 
 ### Configuration
@@ -81,7 +82,7 @@ Callers:
 | `offer_subscription_id` | uuid | only `CONNECTOR_AS_A_SERVICE` |
 | `created_at`, `changed_at` | timestamptz | |
 
-Unique: `name` with `endpoint`; `technical_user_id` (one connector per account); `offer_subscription_id` (one connector per subscription).
+Unique: `name` with `endpoint`; `technical_user_id` (one connector per account) and `offer_subscription_id` (one connector per subscription), both only among connectors that are not `INACTIVE`.
 
 ### Table `audit_entry`
 
@@ -97,7 +98,7 @@ As FRAMEWORK 4.3.
 |---|---|---|---|
 | – | registered (7.2, 7.3) | `ACTIVE` | `ConnectorRegistered` |
 | `ACTIVE` | endpoint changed (7.5) | `ACTIVE` | `ConnectorEndpointChanged` |
-| `ACTIVE` | subscription ended (8.1), or deleted while a subscription is linked (7.6) | `INACTIVE` | `ConnectorDeactivated` |
+| `ACTIVE` | subscription ended or declined (8.1), or deleted while a subscription is linked (7.6) | `INACTIVE` | `ConnectorDeactivated` |
 | `ACTIVE`, `INACTIVE` | deleted (7.6), no subscription linked | – | `ConnectorDeleted` |
 
 `INACTIVE` connectors are kept for traceability and left out of lists.
@@ -108,7 +109,7 @@ As FRAMEWORK 4.3.
 - **Duplicate:** same `name` and `endpoint`: 409 `duplicate`.
 - **Location:** known country code, otherwise 400.
 - **Technical user (optional):** C2-M3 `/internal/technical-users/{id}?companyId=<host>` answers `usableForConnector: true`, and the account is not linked to another connector; otherwise 409 `technical-user-not-usable`.
-- **Connector as a service:** the subscription exists (C10-M1), the offer belongs to the calling company (otherwise 404), status `PENDING` or `ACTIVE`, no other connector linked (409).
+- **Connector as a service:** the subscription exists (C10-M1), the offer belongs to the calling company (otherwise 404), status `PENDING` or `ACTIVE` (otherwise 409 `invalid-state`), no other connector that is not `INACTIVE` linked (409 `subscription-linked`).
 - **Change:** only the provider company changes the endpoint; not in `INACTIVE`.
 - **Delete:** provider or host company. While the linked subscription is `ACTIVE`: 409 `subscription-active`.
 
@@ -119,6 +120,7 @@ As FRAMEWORK 4.3.
 | `view_connectors` | `company` | read connectors of which the own company is provider or host |
 | `manage_connectors` | `company` | register, change, delete them |
 | `execute_steps_c6` | `osp` | steps over HTTP (FRAMEWORK 4.2) |
+| `query_c6` | `osp` | queries over HTTP (section 9, FRAMEWORK 4.2) |
 
 The permissions are listed in C2-M5 6.2; `view_connectors` and `manage_connectors` are in the portal roles `IT Admin` and `Company Admin` (C2-M5 6.3).
 
@@ -132,7 +134,7 @@ Lists as in FRAMEWORK 4.1. Tag `Company`.
 
 ### 7.1 `GET /api/c6-m1/connectors`
 
-Permission `view_connectors`. Parameter `role` (`provider`: connectors the own company runs; `host`: connectors run for the own company by a provider; default both). Filters `type`, `status` (default without `INACTIVE`). Response 200 `ConnectorPage`.
+Permission `view_connectors`. Parameter `role` (`provider`: connectors the own company runs, including its company connectors; `host`: connectors as a service that a provider runs for the own company; default both). Filters `type`, `status` (default without `INACTIVE`). Response 200 `ConnectorPage`.
 
 ### 7.2 `POST /api/c6-m1/connectors`
 
@@ -160,7 +162,7 @@ Input always with `processId` and `stepRunId` (FRAMEWORK 4.4).
 
 ### 8.1 `POST /api/c6-m1/steps/deactivate-subscription-connectors`
 
-- **Flow:** `subscription-ended`, after `SubscriptionDeactivated`.
+- **Flow:** `subscription-ended`, after `SubscriptionDeactivated`; `subscription-declined`, after `SubscriptionDeclined` (a connector as a service may exist for a `PENDING` subscription).
 - **Input:** in addition `offerSubscriptionId`.
 - **Precondition:** none; without a linked connector the step does nothing.
 - **Behaviour:** the connector of the subscription becomes `INACTIVE`, the link to the technical user is removed.
@@ -175,7 +177,11 @@ Input always with `processId` and `stepRunId` (FRAMEWORK 4.4).
 
 ## 9. Queries for other modules
 
-None. Connectors of a company are read by people through 7.1; discovery is at the CSP.
+Connectors of a company are read by people through 7.1; discovery is at the CSP.
+
+### 9.1 `GET /api/c6-m1/internal/connectors`
+
+Permission `query_c6`. Parameter `technicalUserId` (required). Response 200: list of `{ "connectorId", "status" }` of the connectors that use this technical user and are `ACTIVE`; empty list if none. Used by C2-M3 before it deletes a technical user (C2-M3 7.5: a connector uses the account → 409 `in-use`). `INACTIVE` connectors do not count; step 8.2 removes their link after the account is deleted.
 
 ## 10. Events
 
@@ -192,7 +198,7 @@ Every event also carries `eventId`, `eventType`, `occurredAt`. They start the fl
 
 | Neighbour (variable) | Call | Built-in stand-in |
 |---|---|---|
-| C3-M1 (`COMPANY_URL`) | `GET /api/c3-m1/internal/companies/{companyId}`: `status` | every company `ACTIVE` |
+| C3-M1 (`COMPANY_URL`) | `GET /api/c3-m1/internal/companies/{companyId}`: `status` | every company `ACTIVE`, unless `stub-companies.json` gives it another status (for acceptance case 3) |
 | C2-M3 (`TECHNICAL_USER_URL`) | `GET /api/c2-m3/internal/technical-users/{id}?companyId=`: `exists`, `usableForConnector` | every account usable |
 | C10-M1 (`SUBSCRIPTION_URL`) | `GET /api/c10-m1/internal/subscriptions/{id}`: `status`, `providerCompanyId`, `customerCompanyId` | reads `stub-subscriptions.json` |
 
@@ -213,7 +219,7 @@ Problem Details, `type` = `urn:c6-m1:problem:<name>`.
 | `technical-user-not-usable` | 409 | technical user unknown, of another company, disabled or already linked | – |
 | `subscription-linked` | 409 | the subscription already has a connector | – |
 | `subscription-active` | 409 | delete while the linked subscription is `ACTIVE` | – |
-| `invalid-state` | 409 | change of an `INACTIVE` connector | – |
+| `invalid-state` | 409 | change of an `INACTIVE` connector; connector as a service for a subscription that is not `PENDING` or `ACTIVE` | – |
 | `upstream-error` | 502 | neighbour not reachable | `true` |
 
 ## 13. Acceptance
@@ -226,6 +232,8 @@ Problem Details, `type` = `urn:c6-m1:problem:<name>`.
 6. Change the endpoint as host company: 403; as provider: 200, `ConnectorEndpointChanged`.
 7. Delete while the subscription is `ACTIVE`: 409. After the end of the subscription the step 8.1 sets it `INACTIVE`, `ConnectorDeactivated`; delete then removes nothing and answers 204.
 8. Step 8.2 with the ID of a linked technical user: link removed, connector stays `ACTIVE`; the same step again: `DONE` with an empty list.
+9. `GET /internal/connectors?technicalUserId=` with the technical user of an `ACTIVE` connector: one entry; after step 8.2 or for an unknown account: empty list; without `query_c6`: 403.
+10. A connector as a service of a `PENDING` subscription is deleted (`INACTIVE`, link stays): a new connector as a service for the same subscription is accepted (201).
 
 ## 14. Test data
 
@@ -247,3 +255,5 @@ Problem Details, `type` = `urn:c6-m1:problem:<name>`.
 - Paths under `/api/c6-m1`, `POST /connectors/managed` becomes `/connectors/as-a-service`, `PUT` of the endpoint becomes `PATCH`; permissions `view_connectors`, `manage_connectors` instead of `add_connectors`, `modify_connectors`, `delete_connectors`; `execute_steps_c6` for steps over HTTP (C2-M5 6.2).
 - Self-description fields and the clearing house dropped.
 - `NotificationRequested` dropped; Notifications reacts to `ConnectorRegistered`.
+- Query `GET /internal/connectors?technicalUserId=` for C2-M3 (9.1), permission `query_c6`.
+- Step 8.1 also runs after `SubscriptionDeclined` (flow `subscription-declined`); `INACTIVE` connectors no longer block a new connector for the same subscription or account.

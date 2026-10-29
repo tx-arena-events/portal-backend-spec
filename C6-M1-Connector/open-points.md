@@ -11,16 +11,17 @@
 | 3 | Reactions to other modules | steps for Process Orchestration instead of own event handlers (FRAMEWORK 1) | C12-M1 |
 | 4 | Technical user on delete | stays; the company deletes it in C2-M3 | C2-M3 |
 | 5 | Status `PENDING` | dropped; without a clearing house a connector is `ACTIVE` at once | – |
+| 6 | Technical user in use | C6-M1 offers `GET /internal/connectors?technicalUserId=` (README 9.1), so that C2-M3 7.5 can refuse to delete an account used by an `ACTIVE` connector (409 `in-use`); `unlink-technical-user` stays for `INACTIVE` connectors | C2-M3 |
 
 ## Assumptions about other modules
 
 | Who | Assumption |
 |---|---|
 | C3-M2 | steps `register-connector` (`companyId`, `connectorId`, `endpointUrl`) and `deregister-connector` (`companyId`, `connectorId`), C3-M2 8.6; `companyId` is the host company; the company must have the status `REGISTERED` at the CSP |
-| C2-M3 | `/internal/technical-users/{id}?companyId=` with `usableForConnector` (C2-M3 9.1); event `TechnicalUserDeleted` with `technicalUserId`, `companyId` |
+| C2-M3 | `/internal/technical-users/{id}?companyId=` with `usableForConnector` (C2-M3 9.1); event `TechnicalUserDeleted` with `technicalUserId`, `companyId`; C2-M3 calls README 9.1 before deleting an account (C2-M3 7.5, 11.2) |
 | C10-M1 | `/internal/subscriptions/{id}` with `status`, `providerCompanyId`, `customerCompanyId` |
-| C12-M1 | flows `subscription-ended` (step 8.1), `technical-user-deleted` (step 8.2) and `connector-registered`, `connector-endpoint-changed`, `connector-deactivated`, `connector-deleted` (No. 1) |
-| C2-M5 | `view_connectors`, `manage_connectors` in the portal roles `IT Admin` and `Company Admin`; `execute_steps_c6` for the service account of Process Orchestration (C2-M5 6.2, 6.3) |
+| C12-M1 | flows `subscription-ended` and `subscription-declined` (step 8.1), `technical-user-deleted` (step 8.2) and `connector-registered`, `connector-endpoint-changed`, `connector-deactivated`, `connector-deleted` (No. 1) |
+| C2-M5 | `view_connectors`, `manage_connectors` in the portal roles `IT Admin` and `Company Admin`; `execute_steps_c6` for the service account of Process Orchestration, `query_c6` for the service account of C2-M3 (C2-M5 6.2, 6.3) |
 | C11-M1 | rule R16 on `ConnectorRegistered` |
 
 ## Open questions
