@@ -1,0 +1,376 @@
+openapi: 3.1.0
+info:
+  title: C12-M1 Process Orchestration
+  version: 0.2.0
+  description: |
+    Runs the flows of an installation (FRAMEWORK 5). Flows are data in flows.yaml;
+    behaviour in README.md, sections 6 and 7.
+
+    - Calls carry a token of the Portal IAM; required permission in `x-permission`,
+      scope in `x-permission-scope` (FRAMEWORK 4.3).
+    - Other modules call the paths under `/internal`.
+    - The module offers no steps; it calls the steps of the other modules.
+    - Errors as Problem Details (RFC 9457), identifiers in README section 12.
+servers:
+  - url: /api/c12-m1
+security:
+  - portalIam: []
+tags:
+  - name: OSP
+    description: For OSP staff
+  - name: Queries
+    description: For other modules
+
+paths:
+  /processes:
+    get:
+      tags: [OSP]
+      operationId: listProcesses
+      summary: List processes
+      description: README 7.1. Sorted by `updatedAt` descending.
+      x-permission: view_processes
+      x-permission-scope: osp
+      parameters:
+        - { name: flowKey, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ProcessStatus' } }
+        - { name: subjectType, in: query, schema: { $ref: '#/components/schemas/SubjectType' } }
+        - { name: subjectId, in: query, schema: { type: string, format: uuid } }
+        - { name: updatedSince, in: query, schema: { type: string, format: date-time } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Page of processes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProcessSummaryPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /processes/{processId}:
+    get:
+      tags: [OSP]
+      operationId: getProcess
+      summary: Process with its step runs
+      description: README 7.2.
+      x-permission: view_processes
+      x-permission-scope: osp
+      parameters:
+        - $ref: '#/components/parameters/ProcessId'
+      responses:
+        '200':
+          description: The process
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Process' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /processes/{processId}/steps/{stepKey}:
+    get:
+      tags: [OSP]
+      operationId: getStepRun
+      summary: Step run with its attempts
+      description: README 7.3.
+      x-permission: view_processes
+      x-permission-scope: osp
+      parameters:
+        - $ref: '#/components/parameters/ProcessId'
+        - $ref: '#/components/parameters/StepKey'
+      responses:
+        '200':
+          description: The step run
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepRunDetail' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /processes/{processId}/steps/{stepKey}/retrigger:
+    post:
+      tags: [OSP]
+      operationId: retriggerStep
+      summary: Retrigger a failed step
+      description: README 7.4. Only for a step in `FAILED`; attempts start again.
+      x-permission: retrigger_process_steps
+      x-permission-scope: osp
+      parameters:
+        - $ref: '#/components/parameters/ProcessId'
+        - $ref: '#/components/parameters/StepKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RetriggerRequest' }
+      responses:
+        '202':
+          description: Step is `READY` again
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepRun' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /flows:
+    get:
+      tags: [OSP]
+      operationId: listFlows
+      summary: Loaded flow definitions
+      description: README 7.5.
+      x-permission: view_processes
+      x-permission-scope: osp
+      responses:
+        '200':
+          description: All flows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Flow' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /flows/{flowKey}:
+    get:
+      tags: [OSP]
+      operationId: getFlow
+      summary: One flow definition
+      description: README 7.5.
+      x-permission: view_processes
+      x-permission-scope: osp
+      parameters:
+        - { name: flowKey, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The flow
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Flow' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /internal/processes:
+    get:
+      tags: [Queries]
+      operationId: findProcessesOfSubject
+      summary: Processes of a subject
+      description: README section 9. Newest first.
+      x-permission: query_c12
+      x-permission-scope: osp
+      parameters:
+        - { name: subjectType, in: query, required: true, schema: { $ref: '#/components/schemas/SubjectType' } }
+        - { name: subjectId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Processes of the subject
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ProcessSummary' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    portalIam:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token of the Portal IAM of the OSP
+  parameters:
+    ProcessId:
+      name: processId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    StepKey:
+      name: stepKey
+      in: path
+      required: true
+      description: Key of the step in the flow, e.g. `register-company`.
+      schema: { type: string, pattern: '^[a-z][a-z0-9-]*$' }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+  responses:
+    Problem:
+      description: Problem Details (README section 12)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    SubjectType:
+      type: string
+      enum: [APPLICATION, COMPANY, TECHNICAL_USER, OFFER, SUBSCRIPTION, CONNECTOR]
+    ProcessStatus:
+      type: string
+      description: README 6.4.
+      enum: [RUNNING, WAITING, FAILED, COMPLETED, ENDED]
+    StepState:
+      type: string
+      description: README 6.3.
+      enum: [WAITING, READY, IN_PROGRESS, AWAITING_EVENT, DONE, SKIPPED, FAILED]
+    ProcessSummary:
+      type: object
+      required: [id, flowKey, subjectType, subjectId, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        flowKey: { type: string, examples: [onboarding] }
+        flowVersion: { type: integer }
+        subjectType: { $ref: '#/components/schemas/SubjectType' }
+        subjectId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/ProcessStatus' }
+        currentStep:
+          type: [string, 'null']
+          description: First step that is not `DONE` or `SKIPPED`.
+        endReason:
+          type: [string, 'null']
+          description: With `ENDED`, the event that ended the process.
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        finishedAt: { type: [string, 'null'], format: date-time }
+    ProcessSummaryPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ProcessSummary' }
+        page: { type: integer }
+        size: { type: integer }
+        total: { type: integer }
+    Process:
+      allOf:
+        - $ref: '#/components/schemas/ProcessSummary'
+        - type: object
+          required: [steps]
+          properties:
+            variables:
+              type: object
+              description: Process variables; only IDs and business values.
+              additionalProperties: true
+            steps:
+              type: array
+              items: { $ref: '#/components/schemas/StepRun' }
+    StepRun:
+      type: object
+      required: [stepRunId, stepKey, call, state, attempts, maxAttempts]
+      properties:
+        stepRunId: { type: string, format: uuid }
+        stepKey: { type: string, examples: [register-company] }
+        call: { type: string, examples: [c3-m2.register-company] }
+        state: { $ref: '#/components/schemas/StepState' }
+        attempts: { type: integer, minimum: 0 }
+        maxAttempts: { type: integer, minimum: 1 }
+        nextAttemptAt: { type: [string, 'null'], format: date-time }
+        awaitUntil: { type: [string, 'null'], format: date-time }
+        lastError:
+          oneOf:
+            - { type: 'null' }
+            - { $ref: '#/components/schemas/StepError' }
+        startedAt: { type: [string, 'null'], format: date-time }
+        finishedAt: { type: [string, 'null'], format: date-time }
+    StepRunDetail:
+      allOf:
+        - $ref: '#/components/schemas/StepRun'
+        - type: object
+          required: [attemptHistory]
+          properties:
+            result:
+              type: [object, 'null']
+              description: Result of the step or payload of the completing event.
+              additionalProperties: true
+            attemptHistory:
+              type: array
+              items: { $ref: '#/components/schemas/StepAttempt' }
+    StepError:
+      type: object
+      required: [type, retryable]
+      properties:
+        type: { type: string, examples: ['urn:c3-m2:problem:upstream-error'] }
+        status: { type: integer }
+        title: { type: string }
+        retryable: { type: boolean }
+    StepAttempt:
+      type: object
+      required: [number, trigger, startedAt]
+      properties:
+        number: { type: integer, minimum: 1 }
+        trigger: { type: string, enum: [WORKER, RETRIGGER] }
+        triggeredBy:
+          type: [string, 'null']
+          description: '`sub` of the person with `RETRIGGER`.'
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: [string, 'null'], format: date-time }
+        outcome: { type: [string, 'null'], enum: [DONE, RUNNING, ERROR, null] }
+        errorType: { type: [string, 'null'] }
+    RetriggerRequest:
+      type: object
+      properties:
+        comment: { type: string, maxLength: 500 }
+    Flow:
+      type: object
+      description: A flow as in flows.yaml (README 6.1).
+      required: [key, version, trigger, subject, correlateBy, steps]
+      properties:
+        key: { type: string }
+        version: { type: integer }
+        trigger:
+          type: object
+          required: [event]
+          properties:
+            event: { type: string }
+            when: { type: object, additionalProperties: true }
+        subject:
+          type: object
+          required: [type, key]
+          properties:
+            type: { $ref: '#/components/schemas/SubjectType' }
+            key: { type: string }
+        correlateBy: { type: string }
+        endOn:
+          type: array
+          items: { type: string }
+        steps:
+          type: array
+          items:
+            type: object
+            required: [key, call]
+            properties:
+              key: { type: string }
+              call: { type: string }
+              waitFor: { type: string }
+              when: { type: object, additionalProperties: true }
+              lookup: { type: string }
+              input: { type: object, additionalProperties: true }
+              completesOn:
+                type: array
+                items: {}
+              failsOn:
+                type: array
+                items: { type: string }
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }

@@ -1,0 +1,508 @@
+# Flow definitions of Process Orchestration (C12-M1), version 0.2, as of 2026-10-29.
+# Format: README section 6. Flows: FRAMEWORK section 5. Every OSP may replace this file
+# in its installation (configuration FLOWS_FILE); the module code does not change.
+#
+# Sources of an input value:
+#   name                   process variable (fields of the trigger event, of correlated
+#                          events and of `set`)
+#   steps.<step>.<field>   result of an earlier step (or the payload of the event that
+#                          completed it)
+#   lookup.<name>.<field>  result of a query declared under `lookups`
+#   =VALUE                 fixed value
+
+version: 1
+
+defaults:
+  maxAttempts: 5
+  awaitTimeout: PT24H
+
+lookups:
+  company-core-data:
+    query: c3-m1.get-company            # GET /api/c3-m1/internal/companies/{companyId}
+    params: { companyId: companyId }
+    fields:
+      legalName: name
+      ebwoid: identifiers[EBWOID].value
+      euid: identifiers[EUID].value
+      identifiers: identifiers
+      country: address.countryCode
+      address: address
+  offer:
+    query: c8-m1.get-offer              # GET /api/c8-m1/internal/offers/{offerId} (other part, 0.2)
+    params: { offerId: offerId }
+    fields:
+      offerType: offerType
+      appName: name
+      providerCompanyId: providerCompanyId
+      instanceKind: instanceKind
+      instanceUrl: instanceUrl
+      roles: roles
+      hasTechnicalUserProfile: hasTechnicalUserProfile
+      technicalUserName: technicalUserProfile.name
+      technicalUserRoles: technicalUserProfile.roles
+  subscription-instance-client:
+    query: c2-m2.list-app-instance-clients   # GET /api/c2-m2/internal/app-instance-clients
+    params: { offerSubscriptionId: offerSubscriptionId }
+    fields:
+      appInstanceClientId: items[0].id
+
+flows:
+
+  # FRAMEWORK 5.2: onboarding of a new company
+  - key: onboarding
+    trigger: { event: ApplicationSubmitted, when: { kind: ONBOARDING } }
+    subject: { type: APPLICATION, key: applicationId }
+    correlateBy: companyId
+    endOn: [ApplicationDeclined, ApplicationWithdrawn]
+    steps:
+      - key: create-company
+        call: c3-m1.create-company
+        when: { existingCompany: false }
+        input: { companyId: companyId, applicationId: applicationId }
+      - key: open-review
+        call: c1-m3.open-review
+        input: { applicationId: applicationId }
+      - key: register-company
+        call: c3-m2.register-company
+        waitFor: ApplicationApproved
+        lookup: company-core-data
+        input:
+          companyId: companyId
+          legalName: lookup.company-core-data.legalName
+          ebwoid: lookup.company-core-data.ebwoid
+          euid: lookup.company-core-data.euid
+          identifiers: lookup.company-core-data.identifiers
+          country: lookup.company-core-data.country
+          address: lookup.company-core-data.address
+        completesOn: [CompanyRegisteredAtCsp]
+        failsOn: [CompanyRegistrationAtCspFailed]
+      - key: assign-identifier
+        call: c3-m1.assign-identifier
+        input: { companyId: companyId, bpn: steps.register-company.bpn }
+      - key: create-wallet
+        call: c4-m2.create-wallet
+        input: { companyId: companyId }
+        completesOn: [DataspaceWalletCreated]
+        failsOn: [DataspaceWalletFailed]
+      - key: register-did
+        call: c3-m2.register-did
+        input: { companyId: companyId, did: steps.create-wallet.did }
+      - key: issue-credentials
+        call: c4-m1.issue-credentials
+        input: { companyId: companyId }
+        completesOn: [CredentialsIssued]
+        failsOn: [CredentialIssuanceFailed]
+      - key: register-membership
+        call: c3-m2.register-membership
+        input: { companyId: companyId }
+      - key: assign-company-admin
+        call: c2-m2.assign-company-admin
+        input: { companyId: companyId, bpn: steps.register-company.bpn, applicantSub: applicantSub }
+      - key: activate-company
+        call: c3-m1.activate-company
+        input: { companyId: companyId, applicationId: applicationId }
+      - key: complete-application
+        call: c1-m2.complete-application
+        input: { applicationId: applicationId }
+
+  # FRAMEWORK 5.6: transfer from another OSP (new company in this installation)
+  - key: transfer
+    trigger: { event: ApplicationSubmitted, when: { kind: TRANSFER, existingCompany: false } }
+    subject: { type: APPLICATION, key: applicationId }
+    correlateBy: companyId
+    endOn: [ApplicationDeclined, ApplicationWithdrawn]
+    steps:
+      - key: create-company
+        call: c3-m1.create-company
+        input: { companyId: companyId, applicationId: applicationId }
+      - key: open-review
+        call: c1-m3.open-review
+        input: { applicationId: applicationId }
+      - key: transfer-company
+        call: c3-m2.transfer-company
+        waitFor: ApplicationApproved
+        lookup: company-core-data
+        input:
+          companyId: companyId
+          bpn: bpn
+          ebwoid: lookup.company-core-data.ebwoid
+          euid: lookup.company-core-data.euid
+          identifiers: lookup.company-core-data.identifiers
+        completesOn: [CompanyRegisteredAtCsp]
+        failsOn: [CompanyRegistrationAtCspFailed]
+      - key: assign-identifier
+        call: c3-m1.assign-identifier
+        input: { companyId: companyId, bpn: steps.transfer-company.bpn }
+      - key: create-wallet
+        call: c4-m2.create-wallet
+        input: { companyId: companyId }
+        completesOn: [DataspaceWalletCreated]
+        failsOn: [DataspaceWalletFailed]
+      - key: register-did
+        call: c3-m2.register-did
+        input: { companyId: companyId, did: steps.create-wallet.did }
+      - key: issue-credentials
+        call: c4-m1.issue-credentials
+        input: { companyId: companyId }
+        completesOn: [CredentialsIssued]
+        failsOn: [CredentialIssuanceFailed]
+      - key: register-membership
+        call: c3-m2.register-membership
+        input: { companyId: companyId }
+      - key: assign-company-admin
+        call: c2-m2.assign-company-admin
+        input: { companyId: companyId, bpn: steps.transfer-company.bpn, applicantSub: applicantSub }
+      - key: activate-company
+        call: c3-m1.activate-company
+        input: { companyId: companyId, applicationId: applicationId }
+      - key: complete-application
+        call: c1-m2.complete-application
+        input: { applicationId: applicationId }
+
+  # FRAMEWORK 5.6, return to an OSP the company moved away from earlier
+  - key: return
+    trigger: { event: ApplicationSubmitted, when: { kind: TRANSFER, existingCompany: true } }
+    subject: { type: APPLICATION, key: applicationId }
+    correlateBy: companyId
+    endOn: [ApplicationDeclined, ApplicationWithdrawn]
+    steps:
+      - key: open-review
+        call: c1-m3.open-review
+        input: { applicationId: applicationId }
+      - key: transfer-company
+        call: c3-m2.transfer-company
+        waitFor: ApplicationApproved
+        lookup: company-core-data
+        input:
+          companyId: companyId
+          bpn: bpn
+          ebwoid: lookup.company-core-data.ebwoid
+          euid: lookup.company-core-data.euid
+          identifiers: lookup.company-core-data.identifiers
+        completesOn: [CompanyRegisteredAtCsp]
+        failsOn: [CompanyRegistrationAtCspFailed]
+      - key: reactivate-company
+        call: c3-m1.reactivate-company
+        input: { companyId: companyId, applicationId: applicationId }
+      - key: enable-company-users
+        call: c2-m2.enable-company-users
+        input: { companyId: companyId }
+      - key: assign-company-admin
+        call: c2-m2.assign-company-admin
+        input: { companyId: companyId, bpn: bpn, applicantSub: applicantSub }
+      - key: enable-company-technical-users
+        call: c2-m3.enable-company-technical-users
+        input: { companyId: companyId }
+      - key: issue-credentials
+        call: c4-m1.issue-credentials
+        input: { companyId: companyId }
+        completesOn: [CredentialsIssued]
+        failsOn: [CredentialIssuanceFailed]
+      - key: register-membership
+        call: c3-m2.register-membership
+        input: { companyId: companyId }
+      - key: complete-application
+        call: c1-m2.complete-application
+        input: { applicationId: applicationId }
+
+  # FRAMEWORK 5.5: reactivation of a deactivated company
+  - key: reactivation
+    trigger: { event: ApplicationSubmitted, when: { kind: REACTIVATION } }
+    subject: { type: APPLICATION, key: applicationId }
+    correlateBy: companyId
+    endOn: [ApplicationDeclined, ApplicationWithdrawn]
+    steps:
+      - key: open-review
+        call: c1-m3.open-review
+        input: { applicationId: applicationId }
+      - key: reactivate-company
+        call: c3-m1.reactivate-company
+        waitFor: ApplicationApproved
+        input: { companyId: companyId, applicationId: applicationId }
+      - key: enable-company-users
+        call: c2-m2.enable-company-users
+        input: { companyId: companyId }
+      - key: assign-company-admin
+        call: c2-m2.assign-company-admin
+        input: { companyId: companyId, bpn: bpn, applicantSub: applicantSub }
+      - key: enable-company-technical-users
+        call: c2-m3.enable-company-technical-users
+        input: { companyId: companyId }
+      - key: issue-credentials
+        call: c4-m1.issue-credentials
+        input: { companyId: companyId }
+        completesOn: [CredentialsIssued]
+        failsOn: [CredentialIssuanceFailed]
+      - key: register-membership
+        call: c3-m2.register-membership
+        input: { companyId: companyId }
+      - key: complete-application
+        call: c1-m2.complete-application
+        input: { applicationId: applicationId }
+
+  # FRAMEWORK 5.2 step 5: decline by OSP staff
+  - key: application-declined
+    trigger: { event: ApplicationDeclined }
+    subject: { type: APPLICATION, key: applicationId }
+    correlateBy: applicationId
+    steps:
+      - key: close-application
+        call: c1-m2.close-application
+        input: { applicationId: applicationId, reason: reason }
+      - key: reject-company
+        call: c3-m1.reject-company
+        when: { existingCompany: false }
+        input: { companyId: companyId }
+
+  # FRAMEWORK 5.2 step 5: withdrawal by the applicant
+  - key: application-withdrawn
+    trigger: { event: ApplicationWithdrawn }
+    subject: { type: APPLICATION, key: applicationId }
+    correlateBy: applicationId
+    steps:
+      - key: close-review
+        call: c1-m3.close-review
+        input: { applicationId: applicationId, reason: =WITHDRAWN }
+      - key: reject-company
+        call: c3-m1.reject-company
+        when: { existingCompany: false }
+        input: { companyId: companyId }
+
+  # FRAMEWORK 5.4: deactivation of a company
+  - key: deactivation
+    trigger: { event: CompanyDeactivated }
+    subject: { type: COMPANY, key: companyId }
+    correlateBy: companyId
+    steps:
+      - key: disable-company-users
+        call: c2-m2.disable-company-users
+        input: { companyId: companyId }
+      - key: disable-company-technical-users
+        call: c2-m3.disable-company-technical-users
+        input: { companyId: companyId }
+      - key: revoke-credentials
+        call: c4-m1.revoke-credentials
+        input: { companyId: companyId, reason: =COMPANY_DEACTIVATED }
+      - key: deregister-membership
+        call: c3-m2.deregister-membership
+        input: { companyId: companyId }
+
+  # FRAMEWORK 5.6 step 3: the company moved to another OSP
+  - key: transferred-away
+    trigger: { event: CompanyTransferredAway }
+    subject: { type: COMPANY, key: companyId }
+    correlateBy: companyId
+    steps:
+      - key: deactivate-company
+        call: c3-m1.deactivate-company
+        input: { companyId: companyId, reason: =TRANSFERRED }
+
+  # FRAMEWORK 5.6a: core data changed
+  - key: core-data-changed
+    trigger: { event: CompanyDataChanged, when: { coreDataChanged: true } }
+    subject: { type: COMPANY, key: companyId }
+    correlateBy: companyId
+    steps:
+      - key: update-company
+        call: c3-m2.update-company
+        lookup: company-core-data
+        input:
+          companyId: companyId
+          legalName: lookup.company-core-data.legalName
+          euid: lookup.company-core-data.euid
+          address: lookup.company-core-data.address
+
+  # FRAMEWORK 5.7: technical user with wallet access
+  - key: wallet-access
+    trigger: { event: WalletAccessRequested }
+    subject: { type: TECHNICAL_USER, key: technicalUserId }
+    correlateBy: technicalUserId
+    steps:
+      - key: create-wallet-account
+        call: c4-m2.create-wallet-account
+        input: { technicalUserId: technicalUserId, companyId: companyId }
+        completesOn:
+          - { event: WalletAccountCreated, set: { outcome: ACTIVE } }
+          - { event: WalletAccountFailed, set: { outcome: FAILED } }
+      - key: apply-wallet-access
+        call: c2-m3.apply-wallet-access
+        input:
+          technicalUserId: technicalUserId
+          outcome: outcome
+          walletAccountRef: steps.create-wallet-account.walletAccountRef
+
+  - key: wallet-access-removal
+    trigger: { event: WalletAccessRemovalRequested }
+    subject: { type: TECHNICAL_USER, key: technicalUserId }
+    correlateBy: technicalUserId
+    steps:
+      - key: delete-wallet-account
+        call: c4-m2.delete-wallet-account
+        input: { technicalUserId: technicalUserId, companyId: companyId }
+        completesOn: [WalletAccountDeleted]
+        failsOn: [WalletAccountDeletionFailed]
+      - key: delete-technical-user
+        call: c2-m3.delete
+        input: { technicalUserId: technicalUserId }
+
+  # FRAMEWORK 5.8: app approved
+  - key: app-approval
+    trigger: { event: OfferApproved, when: { offerType: APP } }
+    subject: { type: OFFER, key: offerId }
+    correlateBy: offerId
+    steps:
+      - key: create-client-template
+        call: c2-m2.create-client-template
+        lookup: offer
+        input:
+          appId: offerId
+          providerCompanyId: lookup.offer.providerCompanyId
+          appName: lookup.offer.appName
+          roles: lookup.offer.roles
+      - key: create-instance-client
+        call: c2-m2.create-instance-client
+        when: { lookup.offer.instanceKind: SINGLE }
+        input: { appId: offerId, instanceKind: =SINGLE, instanceUrl: lookup.offer.instanceUrl }
+      - key: enable-instance-client
+        call: c2-m2.enable-instance-client
+        when: { lookup.offer.instanceKind: SINGLE }
+        input: { appInstanceClientId: steps.create-instance-client.id }
+
+  - key: app-roles-added
+    trigger: { event: OfferRolesAdded }
+    subject: { type: OFFER, key: offerId }
+    correlateBy: offerId
+    steps:
+      - key: add-app-roles
+        call: c2-m2.add-app-roles
+        input: { appId: offerId, roles: roles }
+
+  - key: app-role-descriptions-changed
+    trigger: { event: OfferRoleDescriptionsChanged }
+    subject: { type: OFFER, key: offerId }
+    correlateBy: offerId
+    steps:
+      - key: update-role-descriptions
+        call: c2-m2.update-role-descriptions
+        input: { appId: offerId, roles: roles }
+
+  # FRAMEWORK 5.8: a company subscribed; inform the provider
+  - key: subscription-requested
+    trigger: { event: SubscriptionRequested }
+    subject: { type: SUBSCRIPTION, key: offerSubscriptionId }
+    correlateBy: offerSubscriptionId
+    steps:
+      - key: notify-provider
+        call: c10-m1.notify-provider
+        input: { offerSubscriptionId: offerSubscriptionId }
+
+  # FRAMEWORK 5.8: subscription to a multi-instance app or to a service
+  - key: subscription-setup
+    trigger: { event: SubscriptionSetupStarted }
+    subject: { type: SUBSCRIPTION, key: offerSubscriptionId }
+    correlateBy: offerSubscriptionId
+    endOn: [SubscriptionDeclined]
+    steps:
+      - key: create-instance-client
+        call: c2-m2.create-instance-client
+        lookup: offer
+        when: { lookup.offer.offerType: APP }
+        input:
+          appId: offerId
+          instanceKind: =SUBSCRIPTION
+          instanceUrl: instanceUrl
+          offerSubscriptionId: offerSubscriptionId
+          customerCompanyId: customerCompanyId
+      - key: create-technical-user
+        call: c2-m3.create-for-subscription
+        when: { lookup.offer.hasTechnicalUserProfile: true }
+        input:
+          customerCompanyId: customerCompanyId
+          providerCompanyId: lookup.offer.providerCompanyId
+          offerSubscriptionId: offerSubscriptionId
+          name: lookup.offer.technicalUserName
+          roles: lookup.offer.technicalUserRoles
+      - key: enable-instance-client
+        call: c2-m2.enable-instance-client
+        waitFor: SubscriptionActivated
+        when: { lookup.offer.offerType: APP }
+        input: { appInstanceClientId: steps.create-instance-client.id }
+      - key: send-activation-callback
+        call: c10-m1.send-activation-callback
+        input:
+          offerSubscriptionId: offerSubscriptionId
+          appInstanceClientId: steps.create-instance-client.id
+          technicalUsers: steps.create-technical-user.accounts
+
+  - key: subscription-ended
+    trigger: { event: SubscriptionDeactivated }
+    subject: { type: SUBSCRIPTION, key: offerSubscriptionId }
+    correlateBy: offerSubscriptionId
+    steps:
+      - key: disable-instance-client
+        call: c2-m2.disable-instance-client
+        lookup: subscription-instance-client
+        when: { lookup.subscription-instance-client.found: true }
+        input: { appInstanceClientId: lookup.subscription-instance-client.appInstanceClientId }
+      - key: deactivate-subscription-connectors
+        call: c6-m1.deactivate-subscription-connectors
+        input: { offerSubscriptionId: offerSubscriptionId }
+
+  # a technical user was deleted; remove its link at the connector
+  - key: technical-user-deleted
+    trigger: { event: TechnicalUserDeleted }
+    subject: { type: TECHNICAL_USER, key: technicalUserId }
+    correlateBy: technicalUserId
+    steps:
+      - key: unlink-technical-user
+        call: c6-m1.unlink-technical-user
+        input: { technicalUserId: technicalUserId }
+
+  # FRAMEWORK 5.9: connectors in the discovery of the CSP
+  - key: connector-registered
+    trigger: { event: ConnectorRegistered }
+    subject: { type: CONNECTOR, key: connectorId }
+    correlateBy: connectorId
+    steps:
+      - key: register-connector
+        call: c3-m2.register-connector
+        input: { companyId: companyId, connectorId: connectorId, endpointUrl: endpoint }
+
+  - key: connector-endpoint-changed
+    trigger: { event: ConnectorEndpointChanged }
+    subject: { type: CONNECTOR, key: connectorId }
+    correlateBy: connectorId
+    steps:
+      - key: register-connector
+        call: c3-m2.register-connector
+        input: { companyId: companyId, connectorId: connectorId, endpointUrl: endpoint }
+
+  - key: connector-deactivated
+    trigger: { event: ConnectorDeactivated }
+    subject: { type: CONNECTOR, key: connectorId }
+    correlateBy: connectorId
+    steps:
+      - key: deregister-connector
+        call: c3-m2.deregister-connector
+        input: { companyId: companyId, connectorId: connectorId }
+
+  - key: connector-deleted
+    trigger: { event: ConnectorDeleted }
+    subject: { type: CONNECTOR, key: connectorId }
+    correlateBy: connectorId
+    steps:
+      - key: deregister-connector
+        call: c3-m2.deregister-connector
+        input: { companyId: companyId, connectorId: connectorId }
+
+  - key: instance-url-changed
+    trigger: { event: SubscriptionInstanceUrlChanged }
+    subject: { type: SUBSCRIPTION, key: offerSubscriptionId }
+    correlateBy: offerSubscriptionId
+    steps:
+      - key: update-instance-url
+        call: c2-m2.update-instance-url
+        lookup: subscription-instance-client
+        input:
+          appInstanceClientId: lookup.subscription-instance-client.appInstanceClientId
+          instanceUrl: instanceUrl

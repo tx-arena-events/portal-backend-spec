@@ -1,0 +1,361 @@
+# C12-M1 Process Orchestration
+
+**Version:** 0.2, as of 2026-10-29 (OSP 2.0)
+**Capability:** C12 Process Orchestration
+**Kind:** Provided
+**Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [flows.yaml](flows.yaml) (flow definitions), [open-points.md](open-points.md)
+
+This README, the OpenAPI description and the flow definitions are sufficient to build the module. The binding framework is [FRAMEWORK.md](../FRAMEWORK.md); this module implements the flows of FRAMEWORK section 5.
+
+## 1. Purpose
+
+Process Orchestration runs the flows of an installation. A flow is data: a trigger event, a list of steps of other modules, and the events that complete them. The module
+
+- starts a process when a trigger event arrives (for example `ApplicationSubmitted`);
+- calls the steps of the modules in the order of the flow, with the input the flow defines;
+- waits for the event of a long-running step (`RUNNING`), or for an event that the flow waits for (for example `ApplicationApproved`);
+- repeats steps after temporary errors and notifies OSP staff when a step fails for good (OP-18);
+- lets OSP staff view processes and retrigger a failed step.
+
+Modules do not know Process Orchestration (FRAMEWORK 1). They offer steps under `/steps/...`, publish events, and name their preconditions.
+
+Callers:
+
+| Who | What for |
+|---|---|
+| Event bus of the installation | delivers every published event (in the same process) |
+| OSP staff (through the UI) | view processes and steps, retrigger a failed step |
+| Other modules | query the processes of a subject (section 9), e.g. Subscriptions for the setup status |
+| Notifications | react to `ProcessStepFailed` and inform OSP staff |
+
+## 2. Terms
+
+| Term | Meaning |
+|---|---|
+| Flow | definition in [flows.yaml](flows.yaml): trigger, subject, steps; identified by `key` |
+| Process | one run of a flow for one subject, e.g. the onboarding of one application |
+| Subject | the object a process is about: `APPLICATION`, `COMPANY`, `TECHNICAL_USER`, `OFFER`, `SUBSCRIPTION`, `CONNECTOR`, with its ID |
+| Step run | one step of one process; its ID is the `stepRunId` that the module receives |
+| Correlation key | field of an event (e.g. `companyId`) that assigns the event to an open process |
+| Process variables | fields of the trigger event and of correlated events, plus values set by the flow; never secrets |
+| Lookup | query to another module that a flow declares, e.g. the core data of a company for the CSP |
+
+## 3. Not part of this module
+
+| What | Where |
+|---|---|
+| Business logic and business checks of a step | the module that owns the step |
+| Decisions (approve, decline, activate) | the owning module, e.g. C1-M3, Subscriptions |
+| Status shown to companies (e.g. "application under review") | the owning module (C1-M2, Subscriptions) |
+| Messages to people | Notifications, triggered by events |
+| Transport of events | event bus of the installation with an outbox per module (FRAMEWORK 1) |
+| Flows across installations | none: all flows run within one installation; only C3-M2 talks to the CSP (FRAMEWORK 5) |
+
+## 4. Technical frame
+
+- Module of the modular monolith (Python, FastAPI), own database `c12_m1` in PostgreSQL.
+- **Calling steps:** in the same process through the public interface of the module; if a module is split out, over HTTP at `{module address}/steps/{step}` with a token of the service account of Process Orchestration (permission `execute_steps_<module>`, FRAMEWORK 4.2). Lookups the same way under `/internal/...` (permission `query_<module>`).
+- **Receiving events:** the module subscribes to all event types that its flows name. Delivery is at least once; the module ignores an `eventId` it has already processed.
+- **Worker:** picks due step runs, locks them (`SELECT … FOR UPDATE SKIP LOCKED`), calls the step, stores the result. Several workers may run; a step run is never called twice at the same time.
+- **Flow definitions** are read from `FLOWS_FILE` at start-up and checked (section 6.2). Each process keeps the version of the flow it started with.
+- Timeout per step call 30 seconds.
+
+### Configuration
+
+| Variable | Meaning | Example |
+|---|---|---|
+| `DATABASE_URL` | own database `c12_m1` | |
+| `FLOWS_FILE` | flow definitions | `config/flows.yaml` |
+| `MODULE_URLS` | address per module: empty = built-in stand-in (section 11.3), `in-process`, or HTTP address (FRAMEWORK 4.7) | `{"c3-m2": "in-process", "c8-m1": ""}` |
+| `RETRY_BASE_SECONDS`, `RETRY_FACTOR`, `RETRY_MAX_SECONDS` | wait time before a repetition | `5`, `2`, `600` |
+| `MAX_ATTEMPTS` | attempts per step, unless the flow sets its own | `5` |
+| `AWAIT_TIMEOUT` | longest wait for a completing event, unless the flow sets its own (ISO 8601) | `PT24H` |
+| `WORKER_POLL_SECONDS` | interval of the worker for due repetitions | `2` |
+| `STANDIN_EVENTS` | stand-ins also publish the completing events (11.3) | `true` |
+
+## 5. Data
+
+### Table `process`
+
+| Field | Type | Rule |
+|---|---|---|
+| `id` | uuid | primary key; `processId` |
+| `flow_key`, `flow_version` | text, int | from [flows.yaml](flows.yaml) |
+| `subject_type`, `subject_id` | text, uuid | from the trigger event |
+| `correlation_key`, `correlation_value` | text, text | e.g. `companyId` and its value |
+| `status` | text | 6.4 |
+| `variables` | jsonb | process variables; only IDs and business values, never secrets |
+| `lookups` | jsonb | results of the lookups, kept for the whole process |
+| `trigger_event_id` | uuid | `eventId` of the trigger event |
+| `end_reason` | text | with `ENDED`: the event that ended the process |
+| `created_at`, `updated_at`, `finished_at` | timestamptz | |
+
+At most one process with status `RUNNING`, `WAITING` or `FAILED` per flow and correlation value (unique index).
+
+### Table `step_run`
+
+| Field | Type | Rule |
+|---|---|---|
+| `id` | uuid | primary key; `stepRunId`, stays the same for all attempts |
+| `process_id` | uuid | |
+| `step_key`, `call` | text | from the flow |
+| `state` | text | 6.3 |
+| `attempts`, `max_attempts` | int | |
+| `next_attempt_at` | timestamptz | due time of the next attempt |
+| `await_until` | timestamptz | end of the wait for a completing event |
+| `result` | jsonb | `result` of the step, or the payload of the completing event |
+| `last_error` | jsonb | `type`, `status`, `title`, `retryable` of the last Problem Details |
+| `started_at`, `finished_at` | timestamptz | |
+
+Unique: `process_id` with `step_key`.
+
+### Table `step_attempt`
+
+One row per call: `step_run_id`, `number`, `trigger` (`WORKER`, `RETRIGGER`), `triggered_by` (`sub` with `RETRIGGER`), `started_at`, `finished_at`, `outcome` (`DONE`, `RUNNING`, `ERROR`), `error_type`.
+
+### Table `processed_event`
+
+`event_id` (primary key), `event_type`, `received_at`. Detects repeated delivery.
+
+### Table `audit_entry`
+
+Retriggers by OSP staff: time, `sub`, `process_id`, `step_key`, comment (FRAMEWORK 4.3).
+
+**Not stored:** tokens, secrets, personal data. Events with names do not exist (FRAMEWORK 4.6); if a module ever sent one, only the fields named in the flow would be kept.
+
+## 6. Rules
+
+### 6.1 Format of a flow
+
+| Field | Meaning |
+|---|---|
+| `key` | unique name of the flow |
+| `trigger.event`, `trigger.when` | event that starts a process; `when`: fields of the event with the required value (all must match) |
+| `subject.type`, `subject.key` | subject of the process and the field of the trigger event that holds its ID |
+| `correlateBy` | field that assigns later events to this process |
+| `endOn` | events that end the process early (status `ENDED`); open steps become `SKIPPED` |
+| `steps[]` | in order; a step starts when the previous step is `DONE` or `SKIPPED` |
+| `steps[].call` | `<module>.<step>`, e.g. `c3-m2.register-company` |
+| `steps[].waitFor` | event that must have arrived before the step starts (e.g. `ApplicationApproved`) |
+| `steps[].when` | condition on process variables or lookup fields; not met: `SKIPPED` |
+| `steps[].lookup` | lookup to run before the step (once per process; the result is kept) |
+| `steps[].input` | input of the step: field → source (see below); `processId` and `stepRunId` are always added |
+| `steps[].completesOn` | events that complete the step after `RUNNING`; optional `set` adds process variables |
+| `steps[].failsOn` | events that make the step `FAILED` (not retryable) |
+| `maxAttempts`, `awaitTimeout` | per step, otherwise from `defaults` |
+
+Sources of an input value: `name` (process variable), `steps.<step>.<field>` (result of an earlier step), `lookup.<name>.<field>` (lookup), `=VALUE` (fixed value). A missing source value is left out of the input; if the step requires it, the step answers 400 and the step run becomes `FAILED`. A lookup always provides the field `found` (`true` if the query returned an object or a non-empty list).
+
+The key for a waiting step is `waitFor`, not `on`: YAML 1.1 parsers read `on` as a boolean.
+
+### 6.2 Check at start-up
+
+The module refuses to start if a flow names an unknown step, an unknown event, an unknown lookup, a step source that is not earlier in the flow, or a required input of a step without a source. The check script in the test tools does the same against the `openapi.yaml` of all modules.
+
+### 6.3 Status of a step run
+
+| From | Event | To |
+|---|---|---|
+| – | process started | `WAITING` |
+| `WAITING` | previous step `DONE` or `SKIPPED` and `waitFor` event arrived | `READY`, or `SKIPPED` if `when` is not met |
+| `READY` | worker calls the step | `IN_PROGRESS` |
+| `IN_PROGRESS` | answer `DONE` | `DONE` |
+| `IN_PROGRESS` | answer `RUNNING` | `AWAITING_EVENT` |
+| `AWAITING_EVENT` | event from `completesOn` | `DONE` |
+| `AWAITING_EVENT` | event from `failsOn`, or `await_until` passed | `FAILED` |
+| `IN_PROGRESS` | error with `retryable: true`, attempts left | `READY` with `next_attempt_at` |
+| `IN_PROGRESS` | error with `retryable: false`, or no attempts left | `FAILED` |
+| `FAILED` | retrigger by OSP staff | `READY`, attempts start again |
+| `WAITING`, `READY` | process ended (`endOn`) | `SKIPPED` |
+
+Wait time before attempt n+1: `RETRY_BASE_SECONDS × RETRY_FACTOR^(n−1)`, at most `RETRY_MAX_SECONDS`. Errors without `retryable` count as `retryable: false`. Timeouts and connection errors count as `retryable: true`.
+
+### 6.4 Status of a process
+
+Derived from the step runs and stored for queries:
+
+| Status | When |
+|---|---|
+| `RUNNING` | a step is `READY`, `IN_PROGRESS` or `AWAITING_EVENT` |
+| `WAITING` | the next step waits for a `waitFor` event, e.g. the decision on an application |
+| `FAILED` | a step is `FAILED` |
+| `COMPLETED` | all steps `DONE` or `SKIPPED` |
+| `ENDED` | an `endOn` event arrived (e.g. `ApplicationDeclined`) |
+
+### 6.5 Events and processes
+
+1. An event whose type is a `trigger.event` and whose fields meet `trigger.when` starts a process, unless a process of this flow with the same correlation value is open (`RUNNING`, `WAITING`, `FAILED`); then the event is only recorded.
+2. An event that a step of an open process names in `waitFor`, `completesOn`, `failsOn` or the flow in `endOn` is assigned through `correlateBy`. Its fields are added to the process variables; with `completesOn` the payload becomes the result of the step.
+3. An event that arrives while its step is still `WAITING` or `IN_PROGRESS` is kept and applied as soon as the step can use it (the module may publish the event before it answers `RUNNING`).
+4. Events that no flow names are not stored.
+
+### 6.6 Permissions
+
+| Permission | Scope | What for |
+|---|---|---|
+| `view_processes` | `osp` | view processes, step runs and flows (portal role `OSP Admin`) |
+| `retrigger_process_steps` | `osp` | retrigger a failed step (portal role `OSP Admin`) |
+| `query_c12` | `osp` | query processes of a subject over HTTP (FRAMEWORK 4.2) |
+
+The permissions and portal roles are defined in C2-M5 6.2 and 6.3.
+
+Companies do not see processes; they see the status at the owning module (proposal, open-points No. 2).
+
+### 6.7 Repeatability
+
+- A step run keeps its `stepRunId` across all attempts and retriggers. Modules find their object by a business key (FRAMEWORK 4.4); a repeated call returns the same result.
+- An `eventId` is processed once.
+- Retrigger of a step that is not `FAILED`: 409, nothing changes.
+
+## 7. Operations
+
+All operations by OSP staff over HTTP with a token of the Portal IAM (tag `OSP`).
+
+### 7.1 `GET /api/c12-m1/processes`
+
+Permission `view_processes`. Filters: `flowKey`, `status`, `subjectType`, `subjectId`, `updatedSince`; paging as in FRAMEWORK 4.1, sorted by `updatedAt` descending. Response 200 `ProcessSummaryPage`.
+
+### 7.2 `GET /api/c12-m1/processes/{processId}`
+
+Permission `view_processes`. Response 200 `Process` with all step runs (without attempts). Unknown: 404.
+
+### 7.3 `GET /api/c12-m1/processes/{processId}/steps/{stepKey}`
+
+Permission `view_processes`. Response 200 `StepRunDetail` with the attempts. Unknown process or step: 404.
+
+### 7.4 `POST /api/c12-m1/processes/{processId}/steps/{stepKey}/retrigger`
+
+Permission `retrigger_process_steps`. Input optional `comment` (up to 500 characters).
+
+1. Process or step unknown: 404.
+2. Step not `FAILED`: 409 `invalid-state`.
+3. Step becomes `READY`, attempts start at 0, `await_until` is reset; process status `RUNNING`.
+4. Audit log entry, event `ProcessStepRetriggered`. Response 202 with the step run.
+
+### 7.5 `GET /api/c12-m1/flows` and `GET /api/c12-m1/flows/{flowKey}`
+
+Permission `view_processes`. The loaded flow definitions as JSON, so that the UI can show the steps of a process before they run.
+
+## 8. Steps for Process Orchestration
+
+None. This module calls the steps of the other modules; it offers none itself.
+
+## 9. Queries for other modules
+
+### `GET /api/c12-m1/internal/processes`
+
+Parameters `subjectType`, `subjectId` (both required). Response 200: list of `ProcessSummary` of this subject, newest first. Use: Subscriptions shows the setup status of a subscription; C1-M2 may show why an approved application is not yet active.
+
+## 10. Events
+
+| Event | When | Content |
+|---|---|---|
+| `ProcessStarted` | a process was started | `processId`, `flowKey`, `subjectType`, `subjectId` |
+| `ProcessStepFailed` | a step became `FAILED` | `processId`, `flowKey`, `subjectType`, `subjectId`, `stepKey`, `errorType`, `retryable` |
+| `ProcessStepRetriggered` | OSP staff retriggered a step | `processId`, `stepKey`, `retriggeredBy` (`sub`) |
+| `ProcessCompleted`, `ProcessEnded` | status `COMPLETED` or `ENDED` | `processId`, `flowKey`, `subjectType`, `subjectId` |
+
+Notifications reacts to `ProcessStepFailed` (notice to OSP staff with `OSP Admin`) and closes the notice on `ProcessStepRetriggered`, `ProcessCompleted` or `ProcessEnded` (OP-18, OP-19).
+
+## 11. Calls to other modules and external systems
+
+### 11.1 Steps
+
+All steps of the step catalogue (FRAMEWORK 7), as named in [flows.yaml](flows.yaml). The flows and the events they use:
+
+| Flow | Trigger | Waits for | Steps |
+|---|---|---|---|
+| `onboarding` | `ApplicationSubmitted` (`ONBOARDING`) | `ApplicationApproved`; ends on `ApplicationDeclined`, `ApplicationWithdrawn` | C3-M1 create-company (only new company), C1-M3 open-review, C3-M2 register-company, C3-M1 assign-identifier, C4-M2 create-wallet, C3-M2 register-did, C4-M1 issue-credentials, C3-M2 register-membership, C2-M2 assign-company-admin, C3-M1 activate-company, C1-M2 complete-application |
+| `transfer` | `ApplicationSubmitted` (`TRANSFER`, new company) | as onboarding | as onboarding, with C3-M2 transfer-company instead of register-company |
+| `return` | `ApplicationSubmitted` (`TRANSFER`, existing company) | as onboarding | C1-M3 open-review, C3-M2 transfer-company, C3-M1 reactivate-company, then as `reactivation` |
+| `reactivation` | `ApplicationSubmitted` (`REACTIVATION`) | as onboarding | C1-M3 open-review, C3-M1 reactivate-company, C2-M2 enable-company-users, C2-M2 assign-company-admin, C2-M3 enable-company-technical-users, C4-M1 issue-credentials, C3-M2 register-membership, C1-M2 complete-application |
+| `application-declined` | `ApplicationDeclined` | – | C1-M2 close-application, C3-M1 reject-company (only new company) |
+| `application-withdrawn` | `ApplicationWithdrawn` | – | C1-M3 close-review, C3-M1 reject-company (only new company) |
+| `deactivation` | `CompanyDeactivated` | – | C2-M2 disable-company-users, C2-M3 disable-company-technical-users, C4-M1 revoke-credentials, C3-M2 deregister-membership |
+| `transferred-away` | `CompanyTransferredAway` | – | C3-M1 deactivate-company (`TRANSFERRED`), which leads to `deactivation` |
+| `core-data-changed` | `CompanyDataChanged` (`coreDataChanged`) | – | C3-M2 update-company |
+| `wallet-access` | `WalletAccessRequested` | – | C4-M2 create-wallet-account, C2-M3 apply-wallet-access |
+| `wallet-access-removal` | `WalletAccessRemovalRequested` | – | C4-M2 delete-wallet-account, C2-M3 delete |
+| `app-approval` | `OfferApproved` (`APP`) | – | C2-M2 create-client-template; single-instance app: create-instance-client, enable-instance-client |
+| `app-roles-added`, `app-role-descriptions-changed` | `OfferRolesAdded`, `OfferRoleDescriptionsChanged` | – | C2-M2 add-app-roles, update-role-descriptions |
+| `subscription-requested` | `SubscriptionRequested` | – | C10-M1 notify-provider |
+| `subscription-setup` | `SubscriptionSetupStarted` | `SubscriptionActivated`; ends on `SubscriptionDeclined` | C2-M2 create-instance-client (apps), C2-M3 create-for-subscription (if the offer has a technical user profile), C2-M2 enable-instance-client, C10-M1 send-activation-callback |
+| `subscription-ended` | `SubscriptionDeactivated` | – | C2-M2 disable-instance-client, C6-M1 deactivate-subscription-connectors |
+| `instance-url-changed` | `SubscriptionInstanceUrlChanged` | – | C2-M2 update-instance-url |
+| `technical-user-deleted` | `TechnicalUserDeleted` | – | C6-M1 unlink-technical-user |
+| `connector-registered`, `connector-endpoint-changed` | `ConnectorRegistered`, `ConnectorEndpointChanged` | – | C3-M2 register-connector (FRAMEWORK 5.9) |
+| `connector-deactivated`, `connector-deleted` | `ConnectorDeactivated`, `ConnectorDeleted` | – | C3-M2 deregister-connector (FRAMEWORK 5.9) |
+
+The events of Offers, Subscriptions and Connectors are defined in their specs (version 0.2).
+
+### 11.2 Lookups
+
+| Lookup | Query | Used for |
+|---|---|---|
+| `company-core-data` | C3-M1 `GET /internal/companies/{companyId}`: `name`, identifiers (`EBWOID` and `EUID` separately, and the full list), `address` | input of C3-M2 `register-company`, `transfer-company`, `update-company` |
+| `offer` | Offers `GET /internal/offers/{offerId}`: `offerType`, `name`, `providerCompanyId`, `instanceKind`, `instanceUrl`, `roles`, `hasTechnicalUserProfile`, `technicalUserProfile` | app approval, subscription setup |
+| `subscription-instance-client` | C2-M2 `GET /internal/app-instance-clients?offerSubscriptionId=` | end of a subscription, URL change |
+
+### 11.3 Built-in stand-in
+
+With an empty address in `MODULE_URLS`, the module answers every step of that module itself with `DONE` and an empty `result`, and every lookup with `found: false`. With `STANDIN_EVENTS=true`, the stand-in also publishes the events that the flow expects in `completesOn` (first entry), with the IDs of the process. This way a flow can be run end to end without any other module.
+
+## 12. Errors
+
+Problem Details, `type` = `urn:c12-m1:problem:<name>`.
+
+| `type` | HTTP | When |
+|---|---|---|
+| `validation` | 400 | invalid parameter or input |
+| `unauthorized` | 401 | token missing or invalid |
+| `forbidden` | 403 | permission missing |
+| `not-found` | 404 | process, step or flow unknown |
+| `invalid-state` | 409 | retrigger of a step that is not `FAILED` |
+
+Errors of the called steps are not passed on; they are stored in `last_error` of the step run (type, HTTP status, title, `retryable`).
+
+## 13. Acceptance
+
+1. Start-up with [flows.yaml](flows.yaml) (23 flows): the check (6.2) passes. A flow with an unknown step stops the start with a message naming flow and step.
+2. `ApplicationSubmitted` (`ONBOARDING`, `existingCompany` `false`) with all stand-ins: `create-company` and `open-review` are `DONE`, process `WAITING` on `ApplicationApproved`.
+3. `ApplicationApproved` for the same `companyId`: the steps from `register-company` to `complete-application` run in order; process `COMPLETED`; `ProcessCompleted` once.
+4. The same `ApplicationSubmitted` (same `eventId`) a second time: no second process. A new event with another `eventId` for the same company while the process is open: no second process.
+5. `ApplicationDeclined` while the onboarding process waits: process `ENDED`, open steps `SKIPPED`; flow `application-declined` runs `close-application` and `reject-company`.
+6. `ApplicationSubmitted` with `existingCompany` `true` (`REACTIVATION`): flow `reactivation`, no `create-company`.
+7. A step answers `RUNNING`: step `AWAITING_EVENT`; the event from `completesOn` completes it, its payload is the step result (e.g. `did` for `register-did`). An event from `failsOn`: step `FAILED`, `ProcessStepFailed`.
+8. The completing event arrives before the step answer `RUNNING`: the step still becomes `DONE` (6.5 point 3).
+9. A step fails with `retryable: true` three times, then succeeds: 4 attempts, wait times 5 s, 10 s, 20 s; process continues.
+10. A step fails with `retryable: false`: `FAILED` after one attempt, `ProcessStepFailed` with `stepKey` and `errorType`.
+11. Retrigger by a person with `retrigger_process_steps`: 202, step `READY`, attempts from 0, `ProcessStepRetriggered`; without the permission 403; for a `DONE` step 409.
+12. `when` not met (e.g. `create-instance-client` for an offer of type `SERVICE`): step `SKIPPED`, next step starts.
+13. `GET /internal/processes?subjectType=SUBSCRIPTION&subjectId=…` returns the subscription setup process.
+14. Two workers on the same database: no step run is called twice at the same time (test with a step that takes 2 seconds).
+
+## 14. Test data
+
+| Object | Value |
+|---|---|
+| Company (new) | `companyId` `5b0c7a52-3f7e-4b1e-9d0a-1c2d3e4f5a6b`, Beispiel Maschinenbau GmbH, `EBWOID-DE-0000000001` |
+| Application | `applicationId` `0f8e2d4c-6b1a-4c3e-8f7d-2a9b1c0d3e4f`, kind `ONBOARDING`, `existingCompany` `false`, `applicantSub` `ebw.test-erika` |
+| BPN from the stand-in | `BPNL` + hash of the EBWOID (C3-M2 11.3) |
+| App (multi-instance) | `offerId` `7c1d9e3a-2b4f-4a6c-8d0e-5f1a2b3c4d5e`, provider OSP A company `11111111-1111-4111-8111-111111111111` |
+
+Example event that starts the onboarding:
+
+```json
+{ "eventId": "b8e1f7a0-1c2d-4e3f-9a8b-7c6d5e4f3a2b", "eventType": "ApplicationSubmitted",
+  "occurredAt": "2026-11-06T09:30:00Z", "applicationId": "0f8e2d4c-6b1a-4c3e-8f7d-2a9b1c0d3e4f",
+  "companyId": "5b0c7a52-3f7e-4b1e-9d0a-1c2d3e4f5a6b", "kind": "ONBOARDING",
+  "existingCompany": false, "applicantSub": "ebw.test-erika" }
+```
+
+## Changes from version 0.1
+
+- Flows are data in [flows.yaml](flows.yaml) and cover FRAMEWORK 5 (OSP 2.0). The legacy process types (`APPLICATION_CHECKLIST`, `INVITATION`, `PARTNER_REGISTRATION`, `IDENTITY_PROVIDER_PROVISIONING`, `MAILING`, …) and their mapping are dropped.
+- Modules no longer register executors or complete steps themselves; the module calls `/steps/...` and completes long-running steps by event (decision of 20/22 Oct 2026, now the only model).
+- Step result `DONE`/`RUNNING` and errors with `retryable` (FRAMEWORK 4.4) instead of `recoverable` and step kinds `AUTOMATIC`/`MANUAL`/`AWAIT_CALLBACK`.
+- Paths under `/api/c12-m1`, permissions with scope `osp`; the legacy retrigger roles (`approve_new_partner`, `retrigger_subscription`, …) are dropped.
+- The tenant field of a process is dropped: one installation per OSP.
+- Companies no longer see processes (subject policies dropped).
+- Event names and contents as in FRAMEWORK 6; `common.yaml` and its event envelope are dropped.
+- Server-Sent Events for the UI moved to open points (No. 6).
