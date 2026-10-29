@@ -1,0 +1,320 @@
+openapi: 3.1.0
+info:
+  title: C6-M1 Connectors
+  version: 0.2.0
+  description: |
+    Register of the dataspace connectors of the companies of the installation.
+    Discovery is a core service of the CSP; C3-M2 enters the connectors there (FRAMEWORK 5.9).
+    Behaviour in README.md, sections 6 to 8.
+
+    - Calls carry a token of the Portal IAM; required permission in `x-permission`,
+      scope in `x-permission-scope` (FRAMEWORK 4.3).
+    - Process Orchestration calls the paths under `/steps`.
+    - Errors as Problem Details (RFC 9457), identifiers in README section 12.
+servers:
+  - url: /api/c6-m1
+security:
+  - portalIam: []
+tags:
+  - name: Company
+    description: Connectors of the own company
+  - name: Steps
+    description: For Process Orchestration
+
+paths:
+  /connectors:
+    get:
+      tags: [Company]
+      operationId: listConnectors
+      summary: Connectors of the own company
+      description: README 7.1. `role=provider` or `role=host`; default both.
+      x-permission: view_connectors
+      x-permission-scope: company
+      parameters:
+        - { name: role, in: query, schema: { type: string, enum: [provider, host] } }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/ConnectorType' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ConnectorStatus' } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Page of connectors
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConnectorPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+    post:
+      tags: [Company]
+      operationId: registerConnector
+      summary: Register a company connector
+      description: README 7.2.
+      x-permission: manage_connectors
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConnectorInput' }
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Connector' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /connectors/as-a-service:
+    post:
+      tags: [Company]
+      operationId: registerConnectorAsAService
+      summary: Register a connector as a service for a customer
+      description: README 7.3. The offer of the subscription belongs to the own company.
+      x-permission: manage_connectors
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConnectorAsAServiceInput' }
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Connector' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /connectors/{connectorId}:
+    parameters:
+      - $ref: '#/components/parameters/ConnectorId'
+    get:
+      tags: [Company]
+      operationId: getConnector
+      summary: One connector
+      description: README 7.4. Provider or host company.
+      x-permission: view_connectors
+      x-permission-scope: company
+      responses:
+        '200':
+          description: The connector
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Connector' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    patch:
+      tags: [Company]
+      operationId: changeEndpoint
+      summary: Change the endpoint
+      description: README 7.5. Provider company only.
+      x-permission: manage_connectors
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint]
+              properties:
+                endpoint: { $ref: '#/components/schemas/Endpoint' }
+      responses:
+        '200':
+          description: Changed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Connector' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [Company]
+      operationId: deleteConnector
+      summary: Delete a connector
+      description: README 7.6. With a linked subscription that is not active, the connector becomes `INACTIVE`.
+      x-permission: manage_connectors
+      x-permission-scope: company
+      responses:
+        '204': { description: Deleted or deactivated }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /steps/deactivate-subscription-connectors:
+    post:
+      tags: [Steps]
+      operationId: stepDeactivateSubscriptionConnectors
+      summary: Deactivate the connector of an ended subscription
+      description: README 8.1.
+      x-permission: execute_steps_c6
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeactivateSubscriptionConnectorsInput' }
+      responses:
+        '200':
+          description: Result of the step (FRAMEWORK 4.4)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+  /steps/unlink-technical-user:
+    post:
+      tags: [Steps]
+      operationId: stepUnlinkTechnicalUser
+      summary: Remove the link to a deleted technical user
+      description: README 8.2.
+      x-permission: execute_steps_c6
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnlinkTechnicalUserInput' }
+      responses:
+        '200':
+          description: Result of the step (FRAMEWORK 4.4)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResult' }
+        '400': { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    portalIam:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token of the Portal IAM of the OSP
+  parameters:
+    ConnectorId:
+      name: connectorId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+  responses:
+    Problem:
+      description: Problem Details (README section 12)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    ConnectorType:
+      type: string
+      enum: [COMPANY_CONNECTOR, CONNECTOR_AS_A_SERVICE]
+    ConnectorStatus:
+      type: string
+      description: README 6.1.
+      enum: [ACTIVE, INACTIVE]
+    Endpoint:
+      type: string
+      format: uri
+      pattern: '^https://'
+      maxLength: 2000
+    ConnectorInput:
+      type: object
+      required: [name, endpoint, location]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        endpoint: { $ref: '#/components/schemas/Endpoint' }
+        location: { type: string, pattern: '^[A-Z]{2}$' }
+        technicalUserId: { type: string, format: uuid }
+    ConnectorAsAServiceInput:
+      allOf:
+        - $ref: '#/components/schemas/ConnectorInput'
+        - type: object
+          required: [offerSubscriptionId]
+          properties:
+            offerSubscriptionId: { type: string, format: uuid }
+    Connector:
+      type: object
+      required: [connectorId, name, endpoint, location, type, status, providerCompanyId, hostCompanyId, createdAt]
+      properties:
+        connectorId: { type: string, format: uuid }
+        name: { type: string }
+        endpoint: { type: string, format: uri }
+        location: { type: string }
+        type: { $ref: '#/components/schemas/ConnectorType' }
+        status: { $ref: '#/components/schemas/ConnectorStatus' }
+        providerCompanyId: { type: string, format: uuid }
+        hostCompanyId: { type: string, format: uuid }
+        technicalUserId: { type: [string, 'null'], format: uuid }
+        offerSubscriptionId: { type: [string, 'null'], format: uuid }
+        createdAt: { type: string, format: date-time }
+        changedAt: { type: [string, 'null'], format: date-time }
+    ConnectorPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Connector' }
+        page: { type: integer }
+        size: { type: integer }
+        total: { type: integer }
+    StepInput:
+      type: object
+      required: [processId, stepRunId]
+      properties:
+        processId: { type: string, format: uuid }
+        stepRunId: { type: string, format: uuid }
+    DeactivateSubscriptionConnectorsInput:
+      allOf:
+        - $ref: '#/components/schemas/StepInput'
+        - type: object
+          required: [offerSubscriptionId]
+          properties:
+            offerSubscriptionId: { type: string, format: uuid }
+    UnlinkTechnicalUserInput:
+      allOf:
+        - $ref: '#/components/schemas/StepInput'
+        - type: object
+          required: [technicalUserId]
+          properties:
+            technicalUserId: { type: string, format: uuid }
+    StepResult:
+      type: object
+      required: [stepRunId, state]
+      properties:
+        stepRunId: { type: string, format: uuid }
+        state: { type: string, enum: [DONE, RUNNING] }
+        result:
+          type: object
+          properties:
+            connectorIds:
+              type: array
+              items: { type: string, format: uuid }
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        retryable: { type: boolean, description: For steps (FRAMEWORK 4.4). }
