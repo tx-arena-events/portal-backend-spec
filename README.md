@@ -68,8 +68,13 @@ All modules are at version 0.2 for OSP 2.0, as of 28 Oct 2026. Every decision th
 | [C4-M1 Credentials](C4-M1-Credentials/) | Hackathon | draft 0.2 |
 | [C4-M2 Dataspace Wallet Interface](C4-M2-DataspaceWalletInterface/) | Hackathon | draft 0.2 |
 | [C5-M1 EBW-Connector](C5-M1-EBWConnector/) | Provided | draft 0.2 (two wallets, OSP 2.0; lenient for the hackathon, OP-43) |
+| [C6-M1 Connectors](C6-M1-Connector/) | Hackathon | draft 0.2 (other part of the spec) |
+| [C8-M1 Offers](C8-M1-Offers/) | Hackathon | draft 0.2 (other part of the spec) |
+| [C10-M1 Subscriptions](C10-M1-Subscriptions/) | Hackathon | draft 0.2 (other part of the spec) |
+| [C11-M1 Notifications](C11-M1-Notifications/) | Hackathon | draft 0.2 (other part of the spec; inbox in the portal only) |
+| [C12-M1 Process Orchestration](C12-M1-ProcessOrchestration/) | Provided | draft 0.2 (other part of the spec; the flows of FRAMEWORK 5 in `flows.yaml`) |
 
-Modules from the other part of the spec (Process Orchestration, Offers, Subscriptions, Connectors, Notifications, MCP server) are referred to by name.
+C6 to C12 are the other part of the spec. The framework refers to them by name (Connectors, Offers, Subscriptions, Notifications, Process Orchestration). The MCP server is not specified yet.
 
 The module numbers changed with the Portal Service Provider architecture. The former C2-M6 App Clients and Roles is now part of C2-M2. The versions written for the Portal Service Provider architecture are in the git history of this repository.
 
