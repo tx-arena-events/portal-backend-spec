@@ -1,0 +1,236 @@
+openapi: 3.1.0
+info:
+  title: C11-M1 Notifications
+  version: 0.2.0
+  description: |
+    Inbox of a person in the portal of the OSP. Notifications are created by the module
+    from the events of the other modules (README 6.2); there is no operation to create them.
+
+    - Calls carry a token of the Portal IAM; required permission in `x-permission`,
+      scope in `x-permission-scope` (FRAMEWORK 4.3).
+    - Errors as Problem Details (RFC 9457), identifiers in README section 12.
+servers:
+  - url: /api/c11-m1
+security:
+  - portalIam: []
+tags:
+  - name: Inbox
+    description: Own notifications
+
+paths:
+  /notifications:
+    get:
+      tags: [Inbox]
+      operationId: listNotifications
+      summary: Own notifications
+      description: README 7.1. Personal notifications and staff notifications of the own permissions; hidden ones are left out.
+      x-permission: view_notifications
+      x-permission-scope: own
+      parameters:
+        - { name: topic, in: query, schema: { $ref: '#/components/schemas/Topic' } }
+        - { name: type, in: query, schema: { type: string } }
+        - { name: read, in: query, schema: { type: boolean } }
+        - { name: done, in: query, schema: { type: boolean } }
+        - { name: createdSince, in: query, schema: { type: string, format: date-time } }
+        - { name: sort, in: query, schema: { type: string, enum: [createdAt.desc, createdAt.asc], default: createdAt.desc } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Page of notifications
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /notifications/count:
+    get:
+      tags: [Inbox]
+      operationId: countNotifications
+      summary: Counters of the own inbox
+      description: README 7.2.
+      x-permission: view_notifications
+      x-permission-scope: own
+      responses:
+        '200':
+          description: Counters
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationCount' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /notifications/{notificationId}:
+    get:
+      tags: [Inbox]
+      operationId: getNotification
+      summary: One own notification
+      description: README 7.3.
+      x-permission: view_notifications
+      x-permission-scope: own
+      parameters:
+        - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '200':
+          description: The notification
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Notification' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /notifications/{notificationId}/read:
+    post:
+      tags: [Inbox]
+      operationId: markRead
+      summary: Mark as read
+      description: README 7.4. Idempotent.
+      x-permission: view_notifications
+      x-permission-scope: own
+      parameters:
+        - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '204': { description: Marked }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /notifications/{notificationId}/unread:
+    post:
+      tags: [Inbox]
+      operationId: markUnread
+      summary: Mark as unread
+      description: README 7.4. Idempotent.
+      x-permission: view_notifications
+      x-permission-scope: own
+      parameters:
+        - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '204': { description: Marked }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /notifications/{notificationId}/hide:
+    post:
+      tags: [Inbox]
+      operationId: hideNotification
+      summary: Hide for the calling person
+      description: README 7.5. Not for an open task.
+      x-permission: view_notifications
+      x-permission-scope: own
+      parameters:
+        - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '204': { description: Hidden }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    portalIam:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token of the Portal IAM of the OSP
+  parameters:
+    NotificationId:
+      name: notificationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+  responses:
+    Problem:
+      description: Problem Details (README section 12)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    Topic:
+      type: string
+      enum: [INFO, ACTION]
+    NotificationType:
+      type: string
+      description: README 6.2.
+      enum:
+        - APPLICATION_SUBMITTED
+        - REVIEW_CASE_OPENED
+        - APPLICATION_DECLINED
+        - APPLICATION_COMPLETED
+        - CHANGE_REQUEST_OPENED
+        - OFFER_REVIEW_REQUESTED
+        - OFFER_APPROVED
+        - OFFER_DECLINED
+        - SUBSCRIPTION_REQUESTED
+        - SUBSCRIPTION_ACTIVATED
+        - SUBSCRIPTION_DECLINED
+        - SUBSCRIPTION_URL_CHANGED
+        - APP_ROLES_ADDED
+        - TECHNICAL_USER_WALLET_READY
+        - TECHNICAL_USER_WALLET_FAILED
+        - CREDENTIAL_REVOKED
+        - CONNECTOR_REGISTERED
+        - PROCESS_STEP_FAILED
+    Notification:
+      type: object
+      required: [notificationId, type, topic, content, read, createdAt]
+      properties:
+        notificationId: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/NotificationType' }
+        topic: { $ref: '#/components/schemas/Topic' }
+        companyId: { type: [string, 'null'], format: uuid }
+        subjectType: { type: [string, 'null'], examples: [OFFER] }
+        subjectId: { type: [string, 'null'], format: uuid }
+        content:
+          type: object
+          description: Fields of the event (IDs and business values), no names.
+          additionalProperties: true
+        forStaff:
+          type: boolean
+          description: '`true` for a staff notification (addressed to a permission).'
+        read: { type: boolean }
+        done:
+          type: [boolean, 'null']
+          description: Tasks only.
+        createdAt: { type: string, format: date-time }
+        doneAt: { type: [string, 'null'], format: date-time }
+    NotificationPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Notification' }
+        page: { type: integer }
+        size: { type: integer }
+        total: { type: integer }
+    NotificationCount:
+      type: object
+      required: [total, unread, openTasks, unreadInfo]
+      properties:
+        total: { type: integer }
+        unread: { type: integer }
+        openTasks: { type: integer }
+        unreadInfo: { type: integer }
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
