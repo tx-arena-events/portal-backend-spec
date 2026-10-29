@@ -168,6 +168,18 @@ Lists as in FRAMEWORK 4.1. Three groups of paths, each with one permission, as i
 | `/offers…`, `/release-agreements` | people of the provider company (tag `Provider`) | `view_offers` to read, `manage_offers` to change |
 | `/osp/offers…` | OSP staff (tag `OSP`) | `approve_offers` |
 
+**Hackathon core path.** The main path from a draft to a subscribable app or service needs these operations; a team builds them first:
+
+| Step | Operations (`operationId`) |
+|---|---|
+| create and edit a draft | `createOffer`, `updateOffer`, `getOwnOffer`, `listOwnOffers`, `getReferenceData` |
+| roles, technical user profile, contract | `replacePlannedRoles`, `putTechnicalUserProfile`, `uploadDocument` (type `CONTRACT`) |
+| agreements and consents | `listReleaseAgreements`, `putReleaseConsents`, `putOfferAgreements` |
+| submit and review | `submitOffer`, `listOffersForReview`, `getOfferForReview`, `approveOffer`, `declineOffer` |
+| marketplace and other modules | `listMarketplace`, `getMarketplaceOffer`, `getOfferInternal` (9.1) |
+
+All other operations (favourites, document lists and downloads, roles of an active app, deactivate, delete, the remaining reads) are optional for the hackathon. The acceptance cases of section 13 that need them are optional as well.
+
 ### 7.1 Lists
 
 - `GET /api/c8-m1/marketplace/offers`: offers in `ACTIVE`; filters `offerType`, `serviceType`, `useCaseId`, `search`, `favourite`.
@@ -259,7 +271,7 @@ Response 200 `OfferInternal`:
 | `technicalUserProfile` | `{ name, roles: [{ name }] }`, as C2-M3 `create-for-subscription` expects |
 | `agreements` | `{ agreementId, name, mandatory }` |
 
-Used by the flows `app-approval` and `subscription-setup` (lookup `offer`) and by C10-M1.
+Used by the flows `app-approval`, `subscription-setup` and `single-instance-activation` (lookup `offer`, query `c8-m1.getOfferInternal`) and by C10-M1.
 
 ## 10. Events
 
@@ -319,7 +331,7 @@ Problem Details, `type` = `urn:c8-m1:problem:<name>`.
 | Object | Value |
 |---|---|
 | Provider company (OSP A, roles `APP_PROVIDER`, `SERVICE_PROVIDER`) | `11111111-1111-4111-8111-111111111111` |
-| Multi-instance app | `7c1d9e3a-2b4f-4a6c-8d0e-5f1a2b3c4d5e`, roles `Viewer`, `Editor`, profile `connector-sync` with role `Dataspace Admin` |
+| Multi-instance app | `7c1d9e3a-2b4f-4a6c-8d0e-5f1a2b3c4d5e`, roles `Viewer`, `Editor`, profile `connector-sync` with role `Dataspace Discovery` (a technical role of C2-M5 6.4) |
 | Single-instance app | `8d2e0f4b-3c5a-4b7d-9e1f-6a2b3c4d5e6f`, URL `https://app.example.org` |
 | Service | `9e3f1a5c-4d6b-4c8e-8f2a-7b3c4d5e6f70`, `DATASPACE_SERVICE` |
 
@@ -335,3 +347,4 @@ Problem Details, `type` = `urn:c8-m1:problem:<name>`.
 - Events `OfferCreated`, `OfferUpdated`, `OfferDeleted` dropped (no consumer).
 - View `assigned` dropped; the apps of a person come from C2-M2.
 - Mapping of the legacy endpoints moved to [open-points.md](open-points.md).
+- Hackathon core path marked in section 7; test profile `connector-sync` uses the technical role `Dataspace Discovery`.

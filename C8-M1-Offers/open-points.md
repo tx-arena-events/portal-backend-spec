@@ -13,6 +13,7 @@
 | 5 | Release agreements | from the installation settings (OP-36), not from a catalogue of this module | project owner |
 | 6 | Documents in the own database | up to 8 MB per document | operators |
 | 7 | Permission for the catalogue | `view_marketplace` (scope `company`) in the portal role `Member` and therefore in every portal role of a company (C2-M5 6.3); `view_offers` means the provider view. Favourites also use `view_marketplace` with scope `company`, stored per person | – |
+| 8 | Hackathon core path | the operations of the main path are marked in README 7; the rest is optional for the hackathon of 6 Nov 2026 | hackathon organisers |
 
 ## Assumptions about other modules
 
