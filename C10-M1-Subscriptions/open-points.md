@@ -13,6 +13,8 @@
 | 5 | Several subscriptions | apps: one open subscription per company; services: several (as today) | project owner |
 | 6 | Visibility | the provider sees `requestedBy` and the consents; the customer does not see the provider configuration | project owner |
 | 7 | BPN | not checked and not stored; only the company status (README 6.2) | – |
+| 8 | Activation and setup | activation only when the setup process at C12-M1 is not `RUNNING` or `FAILED`; customer and provider see `setupStatus` (README 6.3, 7.3). Alternative: an own subscription status for a failed setup | C12-M1, project owner |
+| 9 | Single-instance app with a technical user profile | the flow `single-instance-activation` creates the technical user after `SubscriptionActivated` and sends the callback (README 8.2). Alternative: C8-M1 forbids a technical user profile for single-instance apps | C8-M1, C12-M1, provider systems |
 
 ## Assumptions about other modules
 
@@ -21,9 +23,9 @@
 | C8-M1 Offers | `GET /internal/offers/{offerId}` with `status`, `offerType`, `instanceKind`, `instanceUrl`, `providerCompanyId`, `agreements` |
 | C3-M1 | `GET /internal/companies/{companyId}` with `status`, `name`, `address.countryCode` |
 | C2-M2 | creates, enables, disables the client of the instance in the flows; queries `/internal/subscriptions` |
-| C2-M3 | step `create-for-subscription` creates the technical user (result `accounts`); `credentials/rotate` with `offerSubscriptionId` |
-| C2-M5 | `view_subscriptions` in `IT Admin` and `Company Admin`, `manage_subscriptions` and `manage_offers` in `Company Admin`; `execute_steps_c10`, `query_c10` for the service account of Process Orchestration (C2-M5 6.2, 6.3) |
-| C12-M1 | flows `subscription-requested`, `subscription-setup`, `subscription-ended`, `instance-url-changed` in `flows.yaml` |
+| C2-M3 | step `create-for-subscription` creates the technical user (result `accounts`); `POST /internal/technical-users/{id}/credentials/rotate` with `offerSubscriptionId`, permission `rotate_subscription_credentials` |
+| C2-M5 | `view_subscriptions` in `IT Admin` and `Company Admin`, `manage_subscriptions` and `manage_offers` in `Company Admin`; `execute_steps_c10`, `query_c10` for the service account of Process Orchestration; `rotate_subscription_credentials`, `query_c8`, `query_c3_m1`, `query_c12` for the service account of this module (C2-M5 6.2, 6.3) |
+| C12-M1 | flows `subscription-requested`, `subscription-setup`, `single-instance-activation`, `subscription-declined`, `subscription-ended`, `instance-url-changed` in `flows.yaml`; `GET /internal/processes` for the setup status |
 | C6-M1, C11-M1 | react to `SubscriptionDeactivated` and the other events |
 
 ## Open questions

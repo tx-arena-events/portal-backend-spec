@@ -145,7 +145,7 @@ paths:
       tags: [Provider]
       operationId: activateSubscription
       summary: Activate a subscription
-      description: README 7.6. Provider company only.
+      description: README 7.6. Provider company only. 409 `setup-not-finished` or `setup-failed` depending on the setup status at C12-M1 (README 6.3).
       x-permission: manage_offers
       x-permission-scope: company
       parameters:
@@ -294,6 +294,8 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/SubscriptionRef' }
         '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
 
   /internal/subscriptions/{offerSubscriptionId}:
     get:
@@ -311,6 +313,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SubscriptionInternal' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
 
   /steps/notify-provider:
@@ -318,7 +322,7 @@ paths:
       tags: [Steps]
       operationId: stepNotifyProvider
       summary: Inform the provider of a new subscription
-      description: README 8.1.
+      description: README 8.1. A subscription that is no longer `PENDING` gives `DONE` with `notified` false.
       x-permission: execute_steps_c10
       x-permission-scope: osp
       requestBody:
@@ -333,8 +337,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/StepResult' }
         '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
-        '409': { $ref: '#/components/responses/Problem' }
         '502': { $ref: '#/components/responses/Problem' }
 
   /steps/send-activation-callback:
@@ -357,6 +362,8 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/StepResult' }
         '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '409': { $ref: '#/components/responses/Problem' }
         '502': { $ref: '#/components/responses/Problem' }
@@ -446,6 +453,10 @@ components:
           required: [setupStarted, requestedAt]
           properties:
             setupStarted: { type: boolean }
+            setupStatus:
+              type: [string, 'null']
+              description: Status of the newest setup process at C12-M1 (README 6.3, 7.3); null without a process.
+              enum: [RUNNING, WAITING, FAILED, COMPLETED, ENDED, null]
             declineReason: { type: [string, 'null'] }
             requestedAt: { type: string, format: date-time }
             activatedAt: { type: [string, 'null'], format: date-time }
@@ -504,6 +515,9 @@ components:
         - type: object
           properties:
             appInstanceClientId: { type: string, format: uuid }
+            clientId:
+              type: string
+              description: '`iamClientId` of the instance client (C2-M2 `create-instance-client`); sent to the provider as `clientId`.'
             technicalUsers:
               type: array
               description: Result `accounts` of C2-M3 `create-for-subscription`.
