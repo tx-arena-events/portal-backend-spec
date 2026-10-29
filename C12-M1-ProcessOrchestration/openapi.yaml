@@ -180,6 +180,8 @@ paths:
                 type: array
                 items: { $ref: '#/components/schemas/ProcessSummary' }
         '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
 
 components:
   securitySchemes:
@@ -330,7 +332,7 @@ components:
       required: [key, version, trigger, subject, correlateBy, steps]
       properties:
         key: { type: string }
-        version: { type: integer }
+        version: { type: integer, description: '`version` of flows.yaml; the same for every flow of the file (README 6.1).' }
         trigger:
           type: object
           required: [event]

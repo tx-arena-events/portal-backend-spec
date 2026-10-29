@@ -9,6 +9,10 @@
 #                          completed it)
 #   lookup.<name>.<field>  result of a query declared under `lookups`
 #   =VALUE                 fixed value
+#
+# Lookups (README 6.8): `query` is <module>.<operationId> of a GET operation under
+# /internal; `params` bind the parameters of that operation; `fields` map a field path
+# of the answer (a.b, a[0], [0].id, a[TYPE]) or build an object (nested map, `join`).
 
 version: 1
 
@@ -18,7 +22,7 @@ defaults:
 
 lookups:
   company-core-data:
-    query: c3-m1.get-company            # GET /api/c3-m1/internal/companies/{companyId}
+    query: c3-m1.queryCompany           # GET /api/c3-m1/internal/companies/{companyId}
     params: { companyId: companyId }
     fields:
       legalName: name
@@ -26,9 +30,13 @@ lookups:
       euid: identifiers[EUID].value
       identifiers: identifiers
       country: address.countryCode
-      address: address
+      address:                          # C3-M2 Address from the C3-M1 address (C3-M1 9.1)
+        streetAddress: { join: [address.street, address.houseNumber] }
+        postalCode: address.postalCode
+        locality: address.city
+        country: address.countryCode
   offer:
-    query: c8-m1.get-offer              # GET /api/c8-m1/internal/offers/{offerId} (other part, 0.2)
+    query: c8-m1.getOfferInternal       # GET /api/c8-m1/internal/offers/{offerId}
     params: { offerId: offerId }
     fields:
       offerType: offerType
@@ -41,10 +49,10 @@ lookups:
       technicalUserName: technicalUserProfile.name
       technicalUserRoles: technicalUserProfile.roles
   subscription-instance-client:
-    query: c2-m2.list-app-instance-clients   # GET /api/c2-m2/internal/app-instance-clients
+    query: c2-m2.listAppInstanceClients   # GET /api/c2-m2/internal/app-instance-clients (answer: list)
     params: { offerSubscriptionId: offerSubscriptionId }
     fields:
-      appInstanceClientId: items[0].id
+      appInstanceClientId: '[0].id'
 
 flows:
 
@@ -401,12 +409,12 @@ flows:
     trigger: { event: SubscriptionSetupStarted }
     subject: { type: SUBSCRIPTION, key: offerSubscriptionId }
     correlateBy: offerSubscriptionId
-    endOn: [SubscriptionDeclined]
+    endOn: [SubscriptionDeclined, SubscriptionDeactivated]
     steps:
       - key: create-instance-client
         call: c2-m2.create-instance-client
         lookup: offer
-        when: { lookup.offer.offerType: APP }
+        when: { offerType: APP }
         input:
           appId: offerId
           instanceKind: =SUBSCRIPTION
@@ -425,14 +433,52 @@ flows:
       - key: enable-instance-client
         call: c2-m2.enable-instance-client
         waitFor: SubscriptionActivated
-        when: { lookup.offer.offerType: APP }
+        when: { offerType: APP }
         input: { appInstanceClientId: steps.create-instance-client.id }
       - key: send-activation-callback
         call: c10-m1.send-activation-callback
         input:
           offerSubscriptionId: offerSubscriptionId
           appInstanceClientId: steps.create-instance-client.id
+          clientId: steps.create-instance-client.iamClientId
           technicalUsers: steps.create-technical-user.accounts
+
+  # FRAMEWORK 5.8: subscription to a single-instance app; no setup, the provider activated
+  - key: single-instance-activation
+    trigger: { event: SubscriptionActivated, when: { instanceKind: SINGLE } }
+    subject: { type: SUBSCRIPTION, key: offerSubscriptionId }
+    correlateBy: offerSubscriptionId
+    steps:
+      - key: create-technical-user
+        call: c2-m3.create-for-subscription
+        lookup: offer
+        when: { lookup.offer.hasTechnicalUserProfile: true }
+        input:
+          customerCompanyId: customerCompanyId
+          providerCompanyId: lookup.offer.providerCompanyId
+          offerSubscriptionId: offerSubscriptionId
+          name: lookup.offer.technicalUserName
+          roles: lookup.offer.technicalUserRoles
+      - key: send-activation-callback
+        call: c10-m1.send-activation-callback
+        input:
+          offerSubscriptionId: offerSubscriptionId
+          technicalUsers: steps.create-technical-user.accounts
+
+  # the provider declined; remove what the setup may already have created
+  - key: subscription-declined
+    trigger: { event: SubscriptionDeclined }
+    subject: { type: SUBSCRIPTION, key: offerSubscriptionId }
+    correlateBy: offerSubscriptionId
+    steps:
+      - key: disable-instance-client
+        call: c2-m2.disable-instance-client
+        lookup: subscription-instance-client
+        when: { lookup.subscription-instance-client.found: true }
+        input: { appInstanceClientId: lookup.subscription-instance-client.appInstanceClientId }
+      - key: deactivate-subscription-connectors
+        call: c6-m1.deactivate-subscription-connectors
+        input: { offerSubscriptionId: offerSubscriptionId }
 
   - key: subscription-ended
     trigger: { event: SubscriptionDeactivated }

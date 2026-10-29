@@ -71,7 +71,7 @@ Callers:
 | `MAX_ATTEMPTS` | attempts per step, unless the flow sets its own | `5` |
 | `AWAIT_TIMEOUT` | longest wait for a completing event, unless the flow sets its own (ISO 8601) | `PT24H` |
 | `WORKER_POLL_SECONDS` | interval of the worker for due repetitions | `2` |
-| `STANDIN_EVENTS` | stand-ins also publish the completing events (11.3) | `true` |
+| `STANDIN_FILE` | optional results of the built-in stand-ins that replace the defaults of 11.3 | `config/standins.yaml` |
 
 ## 5. Data
 
@@ -133,18 +133,20 @@ Retriggers by OSP staff: time, `sub`, `process_id`, `step_key`, comment (FRAMEWO
 | `trigger.event`, `trigger.when` | event that starts a process; `when`: fields of the event with the required value (all must match) |
 | `subject.type`, `subject.key` | subject of the process and the field of the trigger event that holds its ID |
 | `correlateBy` | field that assigns later events to this process |
-| `endOn` | events that end the process early (status `ENDED`); open steps become `SKIPPED` |
+| `endOn` | events that end the process early (status `ENDED`); open steps become `SKIPPED`. Only as long as a `waitFor` event of the flow has not arrived (6.5) |
 | `steps[]` | in order; a step starts when the previous step is `DONE` or `SKIPPED` |
 | `steps[].call` | `<module>.<step>`, e.g. `c3-m2.register-company` |
 | `steps[].waitFor` | event that must have arrived before the step starts (e.g. `ApplicationApproved`) |
-| `steps[].when` | condition on process variables or lookup fields; not met: `SKIPPED` |
-| `steps[].lookup` | lookup to run before the step (once per process; the result is kept) |
+| `steps[].when` | condition: source (process variable or `lookup.<name>.<field>`) → required value; all must match; not met: `SKIPPED` |
+| `steps[].lookup` | lookup to run before the step and before its `when` (once per process; the result is kept; 6.8) |
 | `steps[].input` | input of the step: field → source (see below); `processId` and `stepRunId` are always added |
 | `steps[].completesOn` | events that complete the step after `RUNNING`; optional `set` adds process variables |
 | `steps[].failsOn` | events that make the step `FAILED` (not retryable) |
 | `maxAttempts`, `awaitTimeout` | per step, otherwise from `defaults` |
 
-Sources of an input value: `name` (process variable), `steps.<step>.<field>` (result of an earlier step), `lookup.<name>.<field>` (lookup), `=VALUE` (fixed value). A missing source value is left out of the input; if the step requires it, the step answers 400 and the step run becomes `FAILED`. A lookup always provides the field `found` (`true` if the query returned an object or a non-empty list).
+Sources of an input value: `name` (process variable), `steps.<step>.<field>` (result of an earlier step), `lookup.<name>.<field>` (lookup, 6.8), `=VALUE` (fixed value). A missing source value is left out of the input; if the step requires it, the step answers 400 and the step run becomes `FAILED`. A lookup always provides the field `found` (6.8).
+
+`version` at the top of [flows.yaml](flows.yaml) is the version of every flow in the file (`flow_version` in table `process`, `version` in the answer of 7.5).
 
 The key for a waiting step is `waitFor`, not `on`: YAML 1.1 parsers read `on` as a boolean.
 
@@ -158,7 +160,8 @@ The module refuses to start if a flow names an unknown step, an unknown event, a
 |---|---|---|
 | – | process started | `WAITING` |
 | `WAITING` | previous step `DONE` or `SKIPPED` and `waitFor` event arrived | `READY`, or `SKIPPED` if `when` is not met |
-| `READY` | worker calls the step | `IN_PROGRESS` |
+| `READY` | worker calls the step (after the lookup of the step, 6.8) | `IN_PROGRESS` |
+| `READY` | the lookup of the step fails (6.8) | as an error of the call: `READY` with `next_attempt_at`, or `FAILED` |
 | `IN_PROGRESS` | answer `DONE` | `DONE` |
 | `IN_PROGRESS` | answer `RUNNING` | `AWAITING_EVENT` |
 | `AWAITING_EVENT` | event from `completesOn` | `DONE` |
@@ -166,9 +169,12 @@ The module refuses to start if a flow names an unknown step, an unknown event, a
 | `IN_PROGRESS` | error with `retryable: true`, attempts left | `READY` with `next_attempt_at` |
 | `IN_PROGRESS` | error with `retryable: false`, or no attempts left | `FAILED` |
 | `FAILED` | retrigger by OSP staff | `READY`, attempts start again |
-| `WAITING`, `READY` | process ended (`endOn`) | `SKIPPED` |
+| `WAITING`, `READY`, `AWAITING_EVENT` | process ended (`endOn`) | `SKIPPED` |
+| `IN_PROGRESS` | process ended (`endOn`) | the running call is completed and recorded, then `SKIPPED`; no further step starts |
 
 Wait time before attempt n+1: `RETRY_BASE_SECONDS × RETRY_FACTOR^(n−1)`, at most `RETRY_MAX_SECONDS`. Errors without `retryable` count as `retryable: false`. Timeouts and connection errors count as `retryable: true`.
+
+`await_until` (`AWAIT_TIMEOUT`) applies only to `AWAITING_EVENT`. A step that waits for its `waitFor` event (e.g. the decision on an application) has no time limit.
 
 ### 6.4 Status of a process
 
@@ -188,6 +194,7 @@ Derived from the step runs and stored for queries:
 2. An event that a step of an open process names in `waitFor`, `completesOn`, `failsOn` or the flow in `endOn` is assigned through `correlateBy`. Its fields are added to the process variables; with `completesOn` the payload becomes the result of the step.
 3. An event that arrives while its step is still `WAITING` or `IN_PROGRESS` is kept and applied as soon as the step can use it (the module may publish the event before it answers `RUNNING`).
 4. Events that no flow names are not stored.
+5. An `endOn` event ends the process only as long as at least one `waitFor` event of the flow has not arrived. Afterwards the decision is taken; the event is only recorded and the process continues. Example: `ApplicationWithdrawn` after `ApplicationApproved` (C1-M2 6.10) does not end the onboarding; the flow `application-withdrawn` then fails at `close-review`, and OSP staff are informed through `ProcessStepFailed` (FRAMEWORK 5.2 step 5).
 
 ### 6.6 Permissions
 
@@ -206,6 +213,42 @@ Companies do not see processes; they see the status at the owning module (propos
 - A step run keeps its `stepRunId` across all attempts and retriggers. Modules find their object by a business key (FRAMEWORK 4.4); a repeated call returns the same result.
 - An `eventId` is processed once.
 - Retrigger of a step that is not `FAILED`: 409, nothing changes.
+
+### 6.8 Lookups
+
+A lookup is declared once under `lookups` in [flows.yaml](flows.yaml). It runs when the first step that names it (`steps[].lookup`) becomes `READY`, before its `when` is checked. A successful result is kept for the whole process.
+
+| Field | Meaning |
+|---|---|
+| `query` | `<module>.<operationId>` of a `GET` operation under `/internal` in the `openapi.yaml` of that module, e.g. `c3-m1.queryCompany` for `GET /api/c3-m1/internal/companies/{companyId}` |
+| `params` | parameter of that operation → source (as for `input`, 6.1). The operation defines whether a parameter is a path or a query parameter |
+| `fields` | field of the lookup → field path in the answer, or a mapping (below) |
+
+Field paths:
+
+| Form | Meaning | Example |
+|---|---|---|
+| `a.b` | field `b` of the object `a` | `address.countryCode` |
+| `a[n]` | element `n` of the list `a`, counted from 0 | `items[0].id` |
+| `[n]` at the start | element `n` of an answer that is a list | `[0].id` |
+| `a[TYPE]` | first element of the list `a` whose field `type` has the value `TYPE` (capital letters, digits, `_`, `-`) | `identifiers[EBWOID].value` |
+
+A path that does not exist gives no value; the field is then left out (6.1).
+
+Mappings, when the value of a field is an object instead of a path:
+
+- **Object:** every key is a field of the result, every value is a path or a mapping. Fields without a value are left out. Example: the C3-M2 `Address` (`streetAddress`, `postalCode`, `locality`, `country`) from the C3-M1 address in the lookup `company-core-data`.
+- **`join`:** an object with the only key `join` and a list of paths. The values that are not empty, joined with one space; no value if all are empty. Example: `streetAddress: { join: [address.street, address.houseNumber] }`.
+
+Result of a lookup:
+
+| Answer of the query | Result |
+|---|---|
+| 200 with an object or a non-empty list | `found` `true` and the fields |
+| 200 with an empty list, or 404 | `found` `false`, no other fields |
+| any other answer (400, 401, 403, 409, 5xx), timeout, connection error | the lookup failed: the step is not called, and the step run is treated as after an error of the call (6.3). `retryable` from the Problem Details of the answer; 5xx, timeouts and connection errors `retryable: true`; otherwise `false`. `last_error.type` is the `type` of the answer, or `urn:c12-m1:problem:lookup-failed` without Problem Details |
+
+A failed lookup is never `found: false`; otherwise steps with a `when` on the lookup would be `SKIPPED` without notice. The next attempt or a retrigger runs the lookup again.
 
 ## 7. Operations
 
@@ -255,6 +298,8 @@ Parameters `subjectType`, `subjectId` (both required). Response 200: list of `Pr
 | `ProcessStepRetriggered` | OSP staff retriggered a step | `processId`, `stepKey`, `retriggeredBy` (`sub`) |
 | `ProcessCompleted`, `ProcessEnded` | status `COMPLETED` or `ENDED` | `processId`, `flowKey`, `subjectType`, `subjectId` |
 
+`errorType` in `ProcessStepFailed`: the `type` of the Problem Details of the last error (also of a failed lookup, 6.8); `event:<EventType>` for an event from `failsOn`; `await-timeout` when `await_until` has passed.
+
 Notifications reacts to `ProcessStepFailed` (notice to OSP staff with `OSP Admin`) and closes the notice on `ProcessStepRetriggered`, `ProcessCompleted` or `ProcessEnded` (OP-18, OP-19).
 
 ## 11. Calls to other modules and external systems
@@ -279,7 +324,9 @@ All steps of the step catalogue (FRAMEWORK 7), as named in [flows.yaml](flows.ya
 | `app-approval` | `OfferApproved` (`APP`) | – | C2-M2 create-client-template; single-instance app: create-instance-client, enable-instance-client |
 | `app-roles-added`, `app-role-descriptions-changed` | `OfferRolesAdded`, `OfferRoleDescriptionsChanged` | – | C2-M2 add-app-roles, update-role-descriptions |
 | `subscription-requested` | `SubscriptionRequested` | – | C10-M1 notify-provider |
-| `subscription-setup` | `SubscriptionSetupStarted` | `SubscriptionActivated`; ends on `SubscriptionDeclined` | C2-M2 create-instance-client (apps), C2-M3 create-for-subscription (if the offer has a technical user profile), C2-M2 enable-instance-client, C10-M1 send-activation-callback |
+| `subscription-setup` | `SubscriptionSetupStarted` | `SubscriptionActivated`; ends on `SubscriptionDeclined`, `SubscriptionDeactivated` | C2-M2 create-instance-client (apps, `offerType` of the event), C2-M3 create-for-subscription (if the offer has a technical user profile), C2-M2 enable-instance-client, C10-M1 send-activation-callback |
+| `single-instance-activation` | `SubscriptionActivated` (`instanceKind` `SINGLE`) | – | C2-M3 create-for-subscription (if the offer has a technical user profile), C10-M1 send-activation-callback |
+| `subscription-declined` | `SubscriptionDeclined` | – | C2-M2 disable-instance-client (if the setup created one), C6-M1 deactivate-subscription-connectors |
 | `subscription-ended` | `SubscriptionDeactivated` | – | C2-M2 disable-instance-client, C6-M1 deactivate-subscription-connectors |
 | `instance-url-changed` | `SubscriptionInstanceUrlChanged` | – | C2-M2 update-instance-url |
 | `technical-user-deleted` | `TechnicalUserDeleted` | – | C6-M1 unlink-technical-user |
@@ -290,15 +337,36 @@ The events of Offers, Subscriptions and Connectors are defined in their specs (v
 
 ### 11.2 Lookups
 
-| Lookup | Query | Used for |
+| Lookup | Query (`operationId`) | Used for |
 |---|---|---|
-| `company-core-data` | C3-M1 `GET /internal/companies/{companyId}`: `name`, identifiers (`EBWOID` and `EUID` separately, and the full list), `address` | input of C3-M2 `register-company`, `transfer-company`, `update-company` |
-| `offer` | Offers `GET /internal/offers/{offerId}`: `offerType`, `name`, `providerCompanyId`, `instanceKind`, `instanceUrl`, `roles`, `hasTechnicalUserProfile`, `technicalUserProfile` | app approval, subscription setup |
-| `subscription-instance-client` | C2-M2 `GET /internal/app-instance-clients?offerSubscriptionId=` | end of a subscription, URL change |
+| `company-core-data` | C3-M1 `queryCompany`, `GET /internal/companies/{companyId}`: `name`, identifiers (`EBWOID` and `EUID` separately, and the full list), `address` mapped to the C3-M2 `Address` (`street` and `houseNumber` → `streetAddress`, `postalCode`, `city` → `locality`, `countryCode` → `country`; C3-M1 9.1) | input of C3-M2 `register-company`, `transfer-company`, `update-company` |
+| `offer` | Offers `getOfferInternal`, `GET /internal/offers/{offerId}`: `offerType`, `name`, `providerCompanyId`, `instanceKind`, `instanceUrl`, `roles`, `hasTechnicalUserProfile`, `technicalUserProfile` | app approval, subscription setup, single-instance activation |
+| `subscription-instance-client` | C2-M2 `listAppInstanceClients`, `GET /internal/app-instance-clients?offerSubscriptionId=` (answer: list; `found` if not empty) | end or decline of a subscription, URL change |
 
 ### 11.3 Built-in stand-in
 
-With an empty address in `MODULE_URLS`, the module answers every step of that module itself with `DONE` and an empty `result`, and every lookup with `found: false`. With `STANDIN_EVENTS=true`, the stand-in also publishes the events that the flow expects in `completesOn` (first entry), with the IDs of the process. This way a flow can be run end to end without any other module.
+With an empty address in `MODULE_URLS`, the module answers the steps and lookups of that module itself. The stand-in answers every step with `DONE` at once and never publishes events. A step with `completesOn` gets the `set` values of its first entry, as if that event had arrived. This way a flow can be run end to end, also in mixed operation where only some neighbours are real modules.
+
+Step results of the stand-in (all other steps: empty `result`):
+
+| Step | `result` |
+|---|---|
+| `c3-m2.register-company` | `bpn` derived from the input as the stand-in of C3-M2 does it (C3-M2 11.3); from an EBWOID: `BPNL` + the first 12 characters of the Base32 hash (SHA-256) of the EBWOID, in upper case |
+| `c3-m2.transfer-company` | `bpn` from the input |
+| `c4-m2.create-wallet` | `did` = `did:web:wallet.example.org:` + `companyId` |
+| `c4-m2.create-wallet-account` | `walletAccountRef` = the `stepRunId` |
+| `c2-m2.create-instance-client` | `id` = the `stepRunId`, `iamClientId` = `standin-` + the `stepRunId` |
+| `c2-m3.create-for-subscription` | `accounts` = `[]` |
+
+Lookup answers of the stand-in:
+
+| Query | Answer |
+|---|---|
+| `c3-m1.queryCompany` | the company of section 14 with the `companyId` of the parameter |
+| `c8-m1.getOfferInternal` | the multi-instance app of section 14 with the `offerId` of the parameter: `offerType` `APP`, `instanceKind` `MULTI`, roles `Viewer` and `Editor`, `hasTechnicalUserProfile` `true`, profile `connector-sync` with role `Dataspace Discovery` (as C8-M1 14) |
+| `c2-m2.listAppInstanceClients` | empty list (`found` `false`) |
+
+`STANDIN_FILE` (YAML) replaces these defaults: `steps` maps `<module>.<step>` to a `result`, `lookups` maps `<module>.<operationId>` to an answer.
 
 ## 12. Errors
 
@@ -316,7 +384,7 @@ Errors of the called steps are not passed on; they are stored in `last_error` of
 
 ## 13. Acceptance
 
-1. Start-up with [flows.yaml](flows.yaml) (23 flows): the check (6.2) passes. A flow with an unknown step stops the start with a message naming flow and step.
+1. Start-up with [flows.yaml](flows.yaml) (25 flows): the check (6.2) passes. A flow with an unknown step stops the start with a message naming flow and step.
 2. `ApplicationSubmitted` (`ONBOARDING`, `existingCompany` `false`) with all stand-ins: `create-company` and `open-review` are `DONE`, process `WAITING` on `ApplicationApproved`.
 3. `ApplicationApproved` for the same `companyId`: the steps from `register-company` to `complete-application` run in order; process `COMPLETED`; `ProcessCompleted` once.
 4. The same `ApplicationSubmitted` (same `eventId`) a second time: no second process. A new event with another `eventId` for the same company while the process is open: no second process.
@@ -330,6 +398,11 @@ Errors of the called steps are not passed on; they are stored in `last_error` of
 12. `when` not met (e.g. `create-instance-client` for an offer of type `SERVICE`): step `SKIPPED`, next step starts.
 13. `GET /internal/processes?subjectType=SUBSCRIPTION&subjectId=…` returns the subscription setup process.
 14. Two workers on the same database: no step run is called twice at the same time (test with a step that takes 2 seconds).
+15. The lookup `offer` answers 403: `create-instance-client` is not called and not `SKIPPED`; the step run is `FAILED` with `last_error.type` of the answer and `retryable` `false`; `ProcessStepFailed`. The lookup answers 503 three times, then 200: the step runs after 4 attempts.
+16. Onboarding with the C3-M1 address Musterstraße 1, 70569 Stuttgart, `DE`: `register-company` receives `address` `{ "streetAddress": "Musterstraße 1", "postalCode": "70569", "locality": "Stuttgart", "country": "DE" }`.
+17. Lookup `subscription-instance-client` with the answer `[{ "id": "…" }]`: `found` `true`, `appInstanceClientId` is the `id`; with `[]`: `found` `false`, `disable-instance-client` `SKIPPED`.
+18. All neighbours as stand-ins: the onboarding runs to `COMPLETED`; `assign-identifier` receives the stand-in BPN and `register-did` the stand-in DID. Mixed: real C3-M1, all other stand-ins: the same.
+19. `ApplicationWithdrawn` after `ApplicationApproved`: the onboarding process is not `ENDED` and continues; the flow `application-withdrawn` fails at `close-review` with `ProcessStepFailed`.
 
 ## 14. Test data
 
@@ -337,7 +410,8 @@ Errors of the called steps are not passed on; they are stored in `last_error` of
 |---|---|
 | Company (new) | `companyId` `5b0c7a52-3f7e-4b1e-9d0a-1c2d3e4f5a6b`, Beispiel Maschinenbau GmbH, `EBWOID-DE-0000000001` |
 | Application | `applicationId` `0f8e2d4c-6b1a-4c3e-8f7d-2a9b1c0d3e4f`, kind `ONBOARDING`, `existingCompany` `false`, `applicantSub` `ebw.test-erika` |
-| BPN from the stand-in | `BPNL` + hash of the EBWOID (C3-M2 11.3) |
+| Address (C3-M1) | Musterstraße 1, 70569 Stuttgart, region `BW`, `DE` (as C3-M1 14) |
+| BPN from the stand-in | `BPNLIUK2REMLK3F4` (from `EBWOID-DE-0000000001`, 11.3) |
 | App (multi-instance) | `offerId` `7c1d9e3a-2b4f-4a6c-8d0e-5f1a2b3c4d5e`, provider OSP A company `11111111-1111-4111-8111-111111111111` |
 
 Example event that starts the onboarding:
@@ -359,3 +433,9 @@ Example event that starts the onboarding:
 - Companies no longer see processes (subject policies dropped).
 - Event names and contents as in FRAMEWORK 6; `common.yaml` and its event envelope are dropped.
 - Server-Sent Events for the UI moved to open points (No. 6).
+- Lookups (6.8): `query` names the `operationId`, a path grammar for fields, mappings with nested objects and `join` (address C3-M1 → C3-M2), `found` only for 200 and 404; any other answer makes the step fail like a step error.
+- `subscription-instance-client` reads `[0].id`, because C2-M2 answers with a list.
+- Built-in stand-in (11.3) returns results per step (`bpn`, `did`, `id`, `accounts`) and lookup answers; `STANDIN_EVENTS` dropped, `STANDIN_FILE` added.
+- `endOn` applies only before the `waitFor` events of a flow have arrived; `IN_PROGRESS` and `AWAITING_EVENT` on end (6.3, 6.5).
+- Flows `single-instance-activation` and `subscription-declined`; `subscription-setup` also ends on `SubscriptionDeactivated`, decides on `offerType` of the event and passes `clientId` to the callback.
+- `errorType` values (10); `version` of the file is the version of every flow (6.1); `waitFor` has no time limit (6.3).
