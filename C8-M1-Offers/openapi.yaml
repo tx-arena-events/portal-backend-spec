@@ -1,0 +1,1545 @@
+openapi: 3.1.0
+info:
+  title: C8-M1 Offers
+  version: 0.2.0
+  description: |
+    Catalogue of apps and services of the installation and their release by OSP staff.
+    Behaviour in README.md, sections 6, 7 and 9.
+
+    - Calls carry a token of the Portal IAM; required permission in `x-permission`,
+      scope in `x-permission-scope` (FRAMEWORK 4.3).
+    - `/marketplace` for people of all companies, `/offers` for the own offers of a
+      provider company, `/osp` for OSP staff, `/internal` for other modules.
+    - Errors as Problem Details (RFC 9457), identifiers in README section 12.
+servers:
+- url: /api/c8-m1
+security:
+- portalIam: []
+tags:
+- name: Company
+  description: Catalogue for people of a company
+- name: Provider
+  description: Own offers of a provider company
+- name: OSP
+  description: Review by OSP staff
+- name: Queries
+  description: For other modules
+paths:
+  /marketplace/offers:
+    get:
+      tags:
+      - Company
+      operationId: listMarketplace
+      summary: Active offers of the installation
+      description: README 7.1.
+      x-permission: view_marketplace
+      x-permission-scope: company
+      parameters:
+      - name: offerType
+        in: query
+        schema:
+          $ref: '#/components/schemas/OfferType'
+      - name: serviceType
+        in: query
+        schema:
+          $ref: '#/components/schemas/ServiceType'
+      - name: useCaseId
+        in: query
+        schema:
+          type: string
+      - name: favourite
+        in: query
+        schema:
+          type: boolean
+      - name: search
+        in: query
+        schema:
+          type: string
+          maxLength: 100
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Page of offers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /marketplace/offers/{offerId}:
+    parameters: &id001
+    - &id002
+      $ref: '#/components/parameters/OfferId'
+    get:
+      tags:
+      - Company
+      operationId: getMarketplaceOffer
+      summary: One active offer
+      description: README 7.2.
+      x-permission: view_marketplace
+      x-permission-scope: company
+      responses:
+        '200':
+          description: The offer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /marketplace/offers/{offerId}/roles:
+    parameters: *id001
+    get:
+      tags:
+      - Company
+      operationId: listMarketplaceRoles
+      summary: Roles of an active app
+      description: README 7.10.
+      x-permission: view_marketplace
+      x-permission-scope: company
+      responses:
+        '200':
+          description: Roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppRole'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /marketplace/offers/{offerId}/documents:
+    parameters: *id001
+    get:
+      tags:
+      - Company
+      operationId: listMarketplaceDocuments
+      summary: Documents of an offer (metadata)
+      description: README 7.12.
+      x-permission: view_marketplace
+      x-permission-scope: company
+      responses:
+        '200':
+          description: Documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfferDocument'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /marketplace/offers/{offerId}/documents/{documentId}/content:
+    parameters: &id003
+    - *id002
+    - $ref: '#/components/parameters/DocumentId'
+    get:
+      tags:
+      - Company
+      operationId: downloadMarketplaceDocument
+      summary: Download a document
+      description: README 7.12.
+      x-permission: view_marketplace
+      x-permission-scope: company
+      parameters:
+      - $ref: '#/components/parameters/OfferId'
+      - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /marketplace/offers/{offerId}/agreements:
+    parameters: *id001
+    get:
+      tags:
+      - Company
+      operationId: listMarketplaceAgreements
+      summary: Agreements of the offer for customers
+      description: README 7.13.
+      x-permission: view_marketplace
+      x-permission-scope: company
+      responses:
+        '200':
+          description: Agreements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfferAgreement'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /marketplace/offers/{offerId}/favourite:
+    parameters: *id001
+    put:
+      tags:
+      - Company
+      operationId: addFavourite
+      summary: Mark as favourite
+      description: README 7.14. Idempotent.
+      x-permission: view_marketplace
+      x-permission-scope: company
+      responses:
+        '204':
+          description: Marked
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags:
+      - Company
+      operationId: removeFavourite
+      summary: Remove the favourite mark
+      description: README 7.14. Idempotent.
+      x-permission: view_marketplace
+      x-permission-scope: company
+      responses:
+        '204':
+          description: Removed
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /reference-data:
+    get:
+      tags:
+      - Company
+      operationId: getReferenceData
+      summary: Reference data for offer forms
+      description: README 7.15.
+      x-permission: view_marketplace
+      x-permission-scope: company
+      responses:
+        '200':
+          description: Reference data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceData'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /offers:
+    get:
+      tags:
+      - Provider
+      operationId: listOwnOffers
+      summary: Own offers of the company
+      description: README 7.1. All statuses.
+      x-permission: view_offers
+      x-permission-scope: company
+      parameters:
+      - name: offerType
+        in: query
+        schema:
+          $ref: '#/components/schemas/OfferType'
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/OfferStatus'
+      - name: search
+        in: query
+        schema:
+          type: string
+          maxLength: 100
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Page of offers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+      - Provider
+      operationId: createOffer
+      summary: Create an offer (draft)
+      description: README 7.3.
+      x-permission: manage_offers
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferInput'
+      responses:
+        '201':
+          description: Offer in `CREATED`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /offers/{offerId}:
+    parameters:
+    - $ref: '#/components/parameters/OfferId'
+    get:
+      tags:
+      - Provider
+      operationId: getOwnOffer
+      summary: One own offer
+      description: README 7.2.
+      x-permission: view_offers
+      x-permission-scope: company
+      responses:
+        '200':
+          description: The offer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+    put:
+      tags:
+      - Provider
+      operationId: updateOffer
+      summary: Change an own offer
+      description: README 7.4. What can change depends on the status (README 6.1).
+      x-permission: manage_offers
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferInput'
+      responses:
+        '200':
+          description: Changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags:
+      - Provider
+      operationId: deleteOffer
+      summary: Delete a draft
+      description: README 7.5.
+      x-permission: manage_offers
+      x-permission-scope: company
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /offers/{offerId}/submit:
+    post:
+      tags:
+      - Provider
+      operationId: submitOffer
+      summary: Submit for review
+      description: README 7.6.
+      x-permission: manage_offers
+      x-permission-scope: company
+      parameters:
+      - $ref: '#/components/parameters/OfferId'
+      responses:
+        '200':
+          description: Offer in `IN_REVIEW`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /offers/{offerId}/deactivate:
+    post:
+      tags:
+      - Provider
+      operationId: deactivateOffer
+      summary: Deactivate an own offer
+      description: README 7.9.
+      x-permission: manage_offers
+      x-permission-scope: company
+      parameters:
+      - $ref: '#/components/parameters/OfferId'
+      responses:
+        '200':
+          description: Offer in `INACTIVE`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /offers/{offerId}/technical-user-profile:
+    parameters:
+    - $ref: '#/components/parameters/OfferId'
+    get:
+      tags:
+      - Provider
+      operationId: getTechnicalUserProfile
+      summary: Technical user profile
+      description: README 7.11.
+      x-permission: view_offers
+      x-permission-scope: company
+      responses:
+        '200':
+          description: The profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TechnicalUserProfile'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+    put:
+      tags:
+      - Provider
+      operationId: putTechnicalUserProfile
+      summary: Set the technical user profile
+      description: README 7.11. Only in `CREATED`.
+      x-permission: manage_offers
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TechnicalUserProfile'
+      responses:
+        '200':
+          description: Stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TechnicalUserProfile'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+    delete:
+      tags:
+      - Provider
+      operationId: deleteTechnicalUserProfile
+      summary: Remove the technical user profile
+      description: README 7.11. Only in `CREATED`.
+      x-permission: manage_offers
+      x-permission-scope: company
+      responses:
+        '204':
+          description: Removed
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /release-agreements:
+    get:
+      tags:
+      - Provider
+      operationId: listReleaseAgreements
+      summary: Release agreements per offer type
+      description: README 7.13. From the installation settings.
+      x-permission: manage_offers
+      x-permission-scope: company
+      parameters:
+      - name: offerType
+        in: query
+        required: true
+        schema:
+          $ref: '#/components/schemas/OfferType'
+      responses:
+        '200':
+          description: Agreements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReleaseAgreement'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /offers/{offerId}/release-consents:
+    put:
+      tags:
+      - Provider
+      operationId: putReleaseConsents
+      summary: Consents of the provider to the release agreements
+      description: README 7.13. Only in `CREATED`.
+      x-permission: manage_offers
+      x-permission-scope: company
+      parameters:
+      - $ref: '#/components/parameters/OfferId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                required:
+                - agreementKey
+                - consent
+                properties:
+                  agreementKey:
+                    type: string
+                  consent:
+                    type: string
+                    enum:
+                    - ACTIVE
+                    - INACTIVE
+      responses:
+        '204':
+          description: Stored
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /offers/{offerId}/roles:
+    parameters:
+    - $ref: '#/components/parameters/OfferId'
+    get:
+      tags:
+      - Provider
+      operationId: listRoles
+      summary: Planned roles (draft) or roles of the active app
+      description: README 7.10.
+      x-permission: view_offers
+      x-permission-scope: company
+      responses:
+        '200':
+          description: Roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppRole'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+    put:
+      tags:
+      - Provider
+      operationId: replacePlannedRoles
+      summary: Replace the planned roles (draft)
+      description: README 7.10. Only in `CREATED`.
+      x-permission: manage_offers
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/AppRole'
+      responses:
+        '200':
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppRole'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+      - Provider
+      operationId: addRolesToActiveApp
+      summary: Add roles to an active app
+      description: README 7.10. Event `OfferRolesAdded`; the flow writes them to the Portal IAM.
+      x-permission: manage_offers
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              items:
+                $ref: '#/components/schemas/AppRole'
+      responses:
+        '202':
+          description: Accepted
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+    patch:
+      tags:
+      - Provider
+      operationId: changeRoleDescriptions
+      summary: Change descriptions of roles of an active app
+      description: README 7.10. Event `OfferRoleDescriptionsChanged`.
+      x-permission: manage_offers
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              items:
+                $ref: '#/components/schemas/AppRole'
+      responses:
+        '202':
+          description: Accepted
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /offers/{offerId}/documents:
+    parameters:
+    - $ref: '#/components/parameters/OfferId'
+    get:
+      tags:
+      - Provider
+      operationId: listDocuments
+      summary: Documents of an offer (metadata)
+      description: README 7.12.
+      x-permission: view_offers
+      x-permission-scope: company
+      responses:
+        '200':
+          description: Documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfferDocument'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+      - Provider
+      operationId: uploadDocument
+      summary: Upload a document
+      description: README 7.12.
+      x-permission: manage_offers
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - documentType
+              - file
+              properties:
+                documentType:
+                  $ref: '#/components/schemas/DocumentType'
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferDocument'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+  /offers/{offerId}/documents/{documentId}:
+    parameters:
+    - $ref: '#/components/parameters/OfferId'
+    - $ref: '#/components/parameters/DocumentId'
+    delete:
+      tags:
+      - Provider
+      operationId: deleteDocument
+      summary: Delete a document
+      description: README 7.12. Not `LOCKED`.
+      x-permission: manage_offers
+      x-permission-scope: company
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /offers/{offerId}/documents/{documentId}/content:
+    get:
+      tags:
+      - Provider
+      operationId: downloadDocument
+      summary: Download a document
+      description: README 7.12.
+      x-permission: view_offers
+      x-permission-scope: company
+      parameters:
+      - $ref: '#/components/parameters/OfferId'
+      - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /offers/{offerId}/agreements:
+    parameters:
+    - $ref: '#/components/parameters/OfferId'
+    get:
+      tags:
+      - Provider
+      operationId: listOfferAgreements
+      summary: Agreements of the offer for customers
+      description: README 7.13.
+      x-permission: view_offers
+      x-permission-scope: company
+      responses:
+        '200':
+          description: Agreements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfferAgreement'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+    put:
+      tags:
+      - Provider
+      operationId: putOfferAgreements
+      summary: Replace the agreements of the offer
+      description: README 7.13. Only in `CREATED`.
+      x-permission: manage_offers
+      x-permission-scope: company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/OfferAgreement'
+      responses:
+        '200':
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfferAgreement'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /osp/offers:
+    get:
+      tags:
+      - OSP
+      operationId: listOffersForReview
+      summary: Offers for review
+      description: README 7.1. Default `status=IN_REVIEW`.
+      x-permission: approve_offers
+      x-permission-scope: osp
+      parameters:
+      - name: offerType
+        in: query
+        schema:
+          $ref: '#/components/schemas/OfferType'
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/OfferStatus'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Page of offers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+  /osp/offers/{offerId}:
+    parameters: *id001
+    get:
+      tags:
+      - OSP
+      operationId: getOfferForReview
+      summary: One offer for review
+      description: README 7.2.
+      x-permission: approve_offers
+      x-permission-scope: osp
+      responses:
+        '200':
+          description: The offer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /osp/offers/{offerId}/documents:
+    parameters: *id001
+    get:
+      tags:
+      - OSP
+      operationId: listReviewDocuments
+      summary: Documents of an offer (metadata)
+      description: README 7.12.
+      x-permission: approve_offers
+      x-permission-scope: osp
+      responses:
+        '200':
+          description: Documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfferDocument'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /osp/offers/{offerId}/documents/{documentId}/content:
+    parameters: *id003
+    get:
+      tags:
+      - OSP
+      operationId: downloadReviewDocument
+      summary: Download a document
+      description: README 7.12.
+      x-permission: approve_offers
+      x-permission-scope: osp
+      parameters:
+      - $ref: '#/components/parameters/OfferId'
+      - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /osp/offers/{offerId}/approve:
+    post:
+      tags:
+      - OSP
+      operationId: approveOffer
+      summary: Approve an offer
+      description: README 7.7. Not for an offer of the own company.
+      x-permission: approve_offers
+      x-permission-scope: osp
+      parameters:
+      - $ref: '#/components/parameters/OfferId'
+      responses:
+        '200':
+          description: Offer in `ACTIVE`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /osp/offers/{offerId}/decline:
+    post:
+      tags:
+      - OSP
+      operationId: declineOffer
+      summary: Decline an offer
+      description: README 7.8.
+      x-permission: approve_offers
+      x-permission-scope: osp
+      parameters:
+      - $ref: '#/components/parameters/OfferId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - reason
+              properties:
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 1000
+      responses:
+        '200':
+          description: Offer back in `CREATED`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /internal/offers/{offerId}:
+    get:
+      tags:
+      - Queries
+      operationId: getOfferInternal
+      summary: Offer for other modules
+      description: README 9.1. Lookup `offer` of Process Orchestration, Subscriptions.
+      x-permission: query_c8
+      x-permission-scope: osp
+      parameters:
+      - $ref: '#/components/parameters/OfferId'
+      responses:
+        '200':
+          description: The offer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferInternal'
+        '404':
+          $ref: '#/components/responses/Problem'
+components:
+  securitySchemes:
+    portalIam:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token of the Portal IAM of the OSP
+  parameters:
+    OfferId:
+      name: offerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    Size:
+      name: size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+  responses:
+    Problem:
+      description: Problem Details (README section 12)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    OfferType:
+      type: string
+      enum:
+      - APP
+      - SERVICE
+    OfferStatus:
+      type: string
+      description: README 6.1.
+      enum:
+      - CREATED
+      - IN_REVIEW
+      - ACTIVE
+      - INACTIVE
+    ServiceType:
+      type: string
+      enum:
+      - DATASPACE_SERVICE
+      - CONSULTANCY_SERVICE
+    InstanceKind:
+      type:
+      - string
+      - 'null'
+      enum:
+      - SINGLE
+      - MULTI
+      - null
+    DocumentType:
+      type: string
+      enum:
+      - CONTRACT
+      - LEAD_IMAGE
+      - IMAGE
+      - TECHNICAL_INFORMATION
+      - CONFORMITY_APPROVAL
+      - ADDITIONAL_DETAILS
+    Description:
+      type: object
+      required:
+      - lang
+      - short
+      properties:
+        lang:
+          type: string
+          pattern: ^[a-z]{2}$
+        short:
+          type: string
+          minLength: 1
+          maxLength: 255
+        long:
+          type: string
+          maxLength: 4096
+    AppRole:
+      type: object
+      required:
+      - name
+      - descriptions
+      description: Same format as RoleInput of C2-M2.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        descriptions:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required:
+            - lang
+            - text
+            properties:
+              lang:
+                type: string
+                pattern: ^[a-z]{2}$
+              text:
+                type: string
+                minLength: 1
+                maxLength: 255
+    TechnicalUserProfile:
+      type: object
+      required:
+      - name
+      - roles
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        roles:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required:
+            - name
+            properties:
+              name:
+                type: string
+    OfferInput:
+      type: object
+      required:
+      - offerType
+      - name
+      properties:
+        offerType:
+          $ref: '#/components/schemas/OfferType'
+        name:
+          type: string
+          minLength: 3
+          maxLength: 100
+        descriptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Description'
+        priceText:
+          type: string
+          maxLength: 200
+        licenseType:
+          type: string
+          enum:
+          - COTS
+          - FOSS
+        providerUrl:
+          type: string
+          format: uri
+        contactEmail:
+          type: string
+          format: email
+        instanceKind:
+          $ref: '#/components/schemas/InstanceKind'
+        instanceUrl:
+          type:
+          - string
+          - 'null'
+          format: uri
+        serviceTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceType'
+        useCaseIds:
+          type: array
+          items:
+            type: string
+        privacyPolicies:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+    OfferSummary:
+      type: object
+      required:
+      - offerId
+      - offerType
+      - status
+      - name
+      - providerCompanyId
+      properties:
+        offerId:
+          type: string
+          format: uuid
+        offerType:
+          $ref: '#/components/schemas/OfferType'
+        status:
+          $ref: '#/components/schemas/OfferStatus'
+        name:
+          type: string
+        providerCompanyId:
+          type: string
+          format: uuid
+        providerName:
+          type: string
+        shortDescription:
+          type: string
+        leadImageId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        favourite:
+          type: boolean
+    Offer:
+      allOf:
+      - $ref: '#/components/schemas/OfferSummary'
+      - $ref: '#/components/schemas/OfferInput'
+      - type: object
+        properties:
+          roles:
+            type: array
+            items:
+              $ref: '#/components/schemas/AppRole'
+          technicalUserProfile:
+            oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/TechnicalUserProfile'
+          declineReason:
+            type:
+            - string
+            - 'null'
+          ownSubscriptionStatus:
+            type:
+            - string
+            - 'null'
+            description: Status of the subscription of the own company (C10), marketplace view.
+          createdAt:
+            type: string
+            format: date-time
+          submittedAt:
+            type:
+            - string
+            - 'null'
+            format: date-time
+          releasedAt:
+            type:
+            - string
+            - 'null'
+            format: date-time
+    OfferPage:
+      type: object
+      required:
+      - items
+      - page
+      - size
+      - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfferSummary'
+        page:
+          type: integer
+        size:
+          type: integer
+        total:
+          type: integer
+    OfferDocument:
+      type: object
+      required:
+      - documentId
+      - documentType
+      - name
+      - mediaType
+      - status
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        documentType:
+          $ref: '#/components/schemas/DocumentType'
+        name:
+          type: string
+        mediaType:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - LOCKED
+          - INACTIVE
+        createdAt:
+          type: string
+          format: date-time
+    ReleaseAgreement:
+      type: object
+      required:
+      - agreementKey
+      - name
+      - mandatory
+      properties:
+        agreementKey:
+          type: string
+        name:
+          type: string
+        link:
+          type: string
+          format: uri
+        mandatory:
+          type: boolean
+    OfferAgreement:
+      type: object
+      required:
+      - name
+      - mandatory
+      properties:
+        agreementId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 200
+        link:
+          type:
+          - string
+          - 'null'
+          format: uri
+        documentId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        mandatory:
+          type: boolean
+    ReferenceData:
+      type: object
+      properties:
+        serviceTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceType'
+        licenseTypes:
+          type: array
+          items:
+            type: string
+        privacyPolicies:
+          type: array
+          items:
+            type: string
+        documentTypes:
+          type: array
+          items:
+            type: object
+            properties:
+              documentType:
+                $ref: '#/components/schemas/DocumentType'
+              changeableIn:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfferStatus'
+        languages:
+          type: array
+          items:
+            type: string
+    OfferInternal:
+      type: object
+      required:
+      - offerId
+      - status
+      - offerType
+      - name
+      - providerCompanyId
+      - roles
+      - hasTechnicalUserProfile
+      - agreements
+      properties:
+        offerId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/OfferStatus'
+        offerType:
+          $ref: '#/components/schemas/OfferType'
+        name:
+          type: string
+        providerCompanyId:
+          type: string
+          format: uuid
+        instanceKind:
+          $ref: '#/components/schemas/InstanceKind'
+        instanceUrl:
+          type:
+          - string
+          - 'null'
+        roles:
+          type: array
+          description: Planned roles, format of C2-M2 create-client-template.
+          items:
+            $ref: '#/components/schemas/AppRole'
+        hasTechnicalUserProfile:
+          type: boolean
+        technicalUserProfile:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/TechnicalUserProfile'
+        agreements:
+          type: array
+          items:
+            type: object
+            required:
+            - agreementId
+            - name
+            - mandatory
+            properties:
+              agreementId:
+                type: string
+                format: uuid
+              name:
+                type: string
+              mandatory:
+                type: boolean
+    Problem:
+      type: object
+      required:
+      - type
+      - title
+      - status
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        missing:
+          type: array
+          description: With `submit-incomplete`, the missing items.
+          items:
+            type: string
