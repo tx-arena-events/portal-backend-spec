@@ -228,6 +228,17 @@ An IT Admin creates a technical user (C2-M3, scope `company`). With a wallet rol
 - Sign-in at an app: the app redirects to the OSP's Portal IAM, which forwards to the EBW-Connector. The token contains `company_id`, `bpn` and the app roles.
 - Apps across the boundaries of an OSP (marketplace) are not in focus (OP-39).
 
+In detail, as in the flow definitions of C12-M1 ([flows.yaml](C12-M1-ProcessOrchestration/flows.yaml)):
+
+- Roles of an active app added or their descriptions changed (C8-M1 `OfferRolesAdded`, `OfferRoleDescriptionsChanged`) → C2-M2 `add-app-roles` or `update-role-descriptions`.
+- A company subscribes to an offer (C10-M1 `SubscriptionRequested`) → C10-M1 `notify-provider`: the system of the provider is informed, if the provider has configured one.
+- Setup of a multi-instance app or a service: the provider starts it (C10-M1 `SubscriptionSetupStarted`) → C2-M2 `create-instance-client` (apps only), C2-M3 `create-for-subscription` (only if the offer has a technical user profile). After the provider has activated the subscription (`SubscriptionActivated`): C2-M2 `enable-instance-client` (apps only), C10-M1 `send-activation-callback`. The flow ends early on `SubscriptionDeclined` or `SubscriptionDeactivated`.
+- Single-instance app activated (C10-M1 `SubscriptionActivated` with `instanceKind` `SINGLE`) → C2-M3 `create-for-subscription` (only if the offer has a technical user profile), C10-M1 `send-activation-callback`.
+- Subscription declined by the provider or ended by the customer (C10-M1 `SubscriptionDeclined`, `SubscriptionDeactivated`) → C2-M2 `disable-instance-client` (only if an instance client exists), C2-M3 `disable-subscription-technical-users`, C6-M1 `deactivate-subscription-connectors` → `ConnectorDeactivated` (then 5.9).
+- Instance URL of a multi-instance app changed (C10-M1 `SubscriptionInstanceUrlChanged`) → C2-M2 `update-instance-url`.
+- Technical user deleted (C2-M3 `TechnicalUserDeleted`) → C6-M1 `unlink-technical-user`: the connector that used the account stays `ACTIVE` without it.
+- Notifications (C11-M1) has no flows and no steps. It reacts to the events of section 6 with fixed rules (C11-M1 6.2). Process Orchestration (C12-M1) reports its own events about processes (section 6).
+
 ### 5.9 Connectors in the discovery
 
 A company creates a connector, changes its address or deletes it (Connectors, other part) → C3-M2 `register-connector` or `deregister-connector` → `ConnectorRegisteredAtCsp` or `ConnectorDeregisteredAtCsp`. In its discovery, the CSP names only connectors of companies with an active membership; deactivation and reactivation (5.4, 5.5) therefore need no own steps.
@@ -273,6 +284,20 @@ Names in English in PascalCase. Content only IDs and business values, never secr
 | C4-M2 | `DataspaceWalletCreated` | `companyId`, `did` |
 | C4-M2 | `DataspaceWalletFailed` | `companyId` |
 | C4-M2 | `WalletAccountCreated`, `WalletAccountFailed`, `WalletAccountDeleted`, `WalletAccountDeletionFailed` | `technicalUserId`, `companyId`, `walletAccountRef` |
+| C6-M1 | `ConnectorRegistered` | `connectorId`, `companyId` (host company), `providerCompanyId`, `type`, `endpoint`, `location` |
+| C6-M1 | `ConnectorEndpointChanged` | `connectorId`, `companyId`, `endpoint` |
+| C6-M1 | `ConnectorDeactivated`, `ConnectorDeleted` | `connectorId`, `companyId` |
+| C8-M1 | `OfferSubmitted`, `OfferApproved`, `OfferDeactivated` | `offerId`, `offerType`, `providerCompanyId` |
+| C8-M1 | `OfferDeclined` | `offerId`, `offerType`, `providerCompanyId`, `reason` |
+| C8-M1 | `OfferRolesAdded`, `OfferRoleDescriptionsChanged` | `offerId`, `roles` |
+| C10-M1 | `SubscriptionRequested` | `offerSubscriptionId`, `offerId`, `offerType`, `customerCompanyId`, `providerCompanyId` |
+| C10-M1 | `SubscriptionSetupStarted` | as `SubscriptionRequested`, plus `instanceUrl` (apps) |
+| C10-M1 | `SubscriptionActivated` | `offerSubscriptionId`, `offerId`, `offerType`, `instanceKind`, `customerCompanyId`, `providerCompanyId` |
+| C10-M1 | `SubscriptionDeclined`, `SubscriptionDeactivated` | `offerSubscriptionId`, `offerId`, `customerCompanyId`, `providerCompanyId` |
+| C10-M1 | `SubscriptionInstanceUrlChanged` | `offerSubscriptionId`, `offerId`, `instanceUrl` |
+| C12-M1 | `ProcessStarted`, `ProcessCompleted`, `ProcessEnded` | `processId`, `flowKey`, `subjectType`, `subjectId` |
+| C12-M1 | `ProcessStepFailed` | `processId`, `flowKey`, `subjectType`, `subjectId`, `stepKey`, `errorType`, `retryable` |
+| C12-M1 | `ProcessStepRetriggered` | `processId`, `stepKey`, `retriggeredBy` |
 
 ## 7. Step catalogue
 
@@ -294,6 +319,10 @@ Names in English in PascalCase. Content only IDs and business values, never secr
 | C3-M2 | `register-connector`, `deregister-connector` | Connectors in the discovery |
 | C4-M1 | `issue-credentials`, `revoke-credentials` | Onboarding, reactivation, deactivation |
 | C4-M2 | `create-wallet`, `create-wallet-account`, `delete-wallet-account` | Onboarding, wallet access |
+| C6-M1 | `deactivate-subscription-connectors` | Subscription declined, subscription ended |
+| C6-M1 | `unlink-technical-user` | Technical user deleted |
+| C10-M1 | `notify-provider` | Subscription requested |
+| C10-M1 | `send-activation-callback` | Subscription setup, single-instance activation |
 
 Queries between modules (direct, without Process Orchestration), at least:
 
@@ -302,6 +331,14 @@ Queries between modules (direct, without Process Orchestration), at least:
 - C3-M1 → C1-M2 application (`create-company`, `activate-company`) and terms of the company roles (C1-M2 keeps the terms, identifier `agreementKey` with `version`);
 - C4-M1 → C3-M1 company, → C4-M2 wallet and holder access;
 - C2-M2 → C3-M1 company (invitation to a company without binding); Notifications → C2-M2 people of a company per portal role.
+
+Queries of C6-M1 to C12-M1, at least:
+
+- C6-M1 → C3-M1 status of the host company, → C2-M3 technical user (`usableForConnector`; with `offerSubscriptionId` for a connector as a service), → C10-M1 subscription; C2-M3 → C6-M1 connectors that use a technical user;
+- C8-M1 → C3-M1 company roles, → C2-M2 app roles of an active app, → C2-M3 technical user roles, → C10-M1 own subscription to an offer;
+- C10-M1 → C8-M1 offer, → C3-M1 company, → C12-M1 processes of a subscription (setup status); C2-M2 and C2-M3 → C10-M1 subscriptions;
+- C11-M1 → C10-M1 subscriptions (customers of an app, customer of a subscription);
+- C12-M1 lookups → C3-M1 core data of a company, → C8-M1 offer, → C2-M2 instance client of a subscription.
 
 Further queries per module in section 9.
 
