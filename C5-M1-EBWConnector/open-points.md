@@ -1,6 +1,6 @@
 # C5-M1 EBW-Connector: open points
 
-**As of:** 2026-10-28, version 0.2
+**As of:** 2026-10-30, version 0.2
 
 The README fixes each of these points for version 0.2 so that the module can be built. The following decisions are provisional and still to be agreed. Decided on 28 Oct 2026: OSP 2.0 (every OSP runs the portal modules itself, the CSP provides the core services), two wallets, the mandate is required at onboarding, the EBW-Connector and a Business Wallet are provided for the hackathon.
 
@@ -22,7 +22,7 @@ The README fixes each of these points for version 0.2 so that the module can be 
 | 12 | Response mode | `direct_post.jwt`, `direct_post` configurable (README 4) | wallet providers |
 | 13 | Claims in the ID token | flat names (`representation_*`, `company_*`) (README 6.7) | OSPs |
 | 14 | Single sign-on | none; every transaction asks the wallet | OSPs |
-| 15 | Clients of an OSP | Portal IAM (sign-in, scopes `openid profile`) and user interface (onboarding with verification attestation) are separate clients (README 1, 6.1; FRAMEWORK 5.2) | C2-M5, user interface |
+| 15 | Clients of an OSP | Portal IAM (sign-in, scopes `openid profile`) and the server part of the user interface (onboarding with verification attestation; client ID `osp-a-ui`, `osp-b-ui`, FRAMEWORK 7a) are separate clients (README 1, 6.1; FRAMEWORK 5.2) | C2-M5, user interface |
 
 ## Deviations from the framework
 

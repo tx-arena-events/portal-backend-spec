@@ -1,6 +1,6 @@
 # C1-M3 Application Review
 
-**Version:** 0.2, as of 2026-10-28
+**Version:** 0.2, as of 2026-10-30
 **Capability:** C1 Onboarding
 **Kind:** Hackathon
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
@@ -440,8 +440,8 @@ Shared test IDs per FRAMEWORK 7a; the installation is the one of OSP A (`ospId` 
 |---|---|---|
 | R1, OSP Reviewer | `bbede0f3-fbc4-433b-b7ca-1982e8724912` | `view_reviews`, `review_application` |
 | R2, OSP Reviewer | `ed9d901d-cdc3-4a86-8ab4-0b477318506c` | `view_reviews`, `review_application` |
-| OSP Admin | `6e3cc6aa-b456-47e2-8888-2fb7cc0b36b8` | `view_reviews` |
-| Erika Mustermann (applicant) | `eee3c86e-a5fb-4684-b6f9-c23062a0d095` | `register_company` (C1-M2 only) |
+| OSP Admin | `5a1c0012-0000-4000-8000-000000000012` | `view_reviews` |
+| Erika Mustermann (applicant) | `5a1c0001-0000-4000-8000-000000000001` | `register_company` (C1-M2 only) |
 | Service account | – | `execute_steps_c1_m3`, `query_c1_m3` |
 
 ### 14.2 Stand-in for C1-M2 (`stub-applications.json`)
@@ -452,11 +452,11 @@ Application A1 in full (verification attestation as in C5-M1 14.5; company and i
 [
   {
     "id": "05b53523-7794-456e-92aa-2e36524e546e",
-    "companyId": "88d1a7ee-3475-4bb1-abb5-9e61da30e3f5",
+    "companyId": "c0000001-0000-4000-8000-000000000001",
     "kind": "ONBOARDING",
     "existingCompany": false,
     "verification": "EBW",
-    "applicant": { "sub": "eee3c86e-a5fb-4684-b6f9-c23062a0d095", "givenName": "Erika", "familyName": "Mustermann" },
+    "applicant": { "sub": "5a1c0001-0000-4000-8000-000000000001", "givenName": "Erika", "familyName": "Mustermann" },
     "status": "SUBMITTED",
     "companyData": {
       "legalName": "Beispiel Maschinenbau GmbH",
@@ -557,7 +557,7 @@ The other applications are copies of A1 with their own `id`, `companyId`, `attes
 
 ```json
 [
-  { "companyId": "88d1a7ee-3475-4bb1-abb5-9e61da30e3f5", "status": "REQUESTED", "bpn": null,
+  { "companyId": "c0000001-0000-4000-8000-000000000001", "status": "REQUESTED", "bpn": null,
     "identifiers": [ { "type": "EUID", "value": "DEXX001T.HRB100001" }, { "type": "EBWOID", "value": "EBWOID-DE-0000000001" } ] },
   { "companyId": "e0fbbb38-f0a7-4407-bc07-9b1991703a3a", "status": "ACTIVE", "bpn": "BPNL00000000009Z",
     "identifiers": [ { "type": "EUID", "value": "DEXX001T.HRB654321" } ] },

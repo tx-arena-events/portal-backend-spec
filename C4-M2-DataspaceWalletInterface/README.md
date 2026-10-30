@@ -1,6 +1,6 @@
 # C4-M2 Dataspace Wallet Interface
 
-**Version:** 0.2, as of 2026-10-28
+**Version:** 0.2, as of 2026-10-30
 **Capability:** C4 Dataspace
 **Kind:** Hackathon
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
@@ -698,7 +698,7 @@ The module is done when these cases work with the built-in stand-ins for the pro
 5. `BPNL000000FAIL02` (no callback), deadline in the test 1 minute: after expiry `FAILED` with `PROVIDER_TIMEOUT`. A late callback gives 409.
 6. Callback without the permission `submit_wallet_callback` or from another service account: 403. Callback for an unknown BPN: 404. Duplicate callback with the same DID: 204, no change. Every accepted callback is in the `audit_log` with `azp`.
 7. DID not resolvable (stand-in `DID_NOT_RESOLVABLE`), deadline in the test 2 minutes, interval 30 seconds: the wallet stays `VALIDATING`, then `FAILED` with `DID_NOT_RESOLVABLE`.
-8. `create-wallet` for `BPNL00000000CSP1` with `CSP`: the module fetches a token from the CSP; the client assertion is signed with the key of the OSP, `iss` and `sub` are the `ospId` from `SETTINGS_FILE`. Wallet `ACTIVE` within the call, DID `did:web:csp-wallet.example.org:BPNL00000000CSP1`, service `CredentialService` in the DID document, response `RUNNING`, `DataspaceWalletCreated` in the outbox. `holder-access` returns `HOLDER_REQUESTS` with `identityApiUrl`, `participantContextId` and `apiKey`.
+8. `create-wallet` for `BPNLIUK2REMLK3F4` with `CSP`: the module fetches a token from the CSP; the client assertion is signed with the key of the OSP, `iss` and `sub` are the `ospId` from `SETTINGS_FILE`. Wallet `ACTIVE` within the call, DID `did:web:csp-wallet.example.org:BPNLIUK2REMLK3F4`, service `CredentialService` in the DID document, response `RUNNING`, `DataspaceWalletCreated` in the outbox. `holder-access` returns `HOLDER_REQUESTS` with `identityApiUrl`, `participantContextId` and `apiKey`.
 9. `create-wallet` for `BPNL00000000IH01` with `IDENTITY_HUB`: participant context with identifier = BPN, DID `did:web:ih.example.org:BPNL00000000IH01`, service `CredentialService` in the DID document; wallet `ACTIVE` within the call, response `RUNNING`, event in the outbox. `holder-access` returns `HOLDER_REQUESTS` with `apiKey`.
 10. Parallel operation: cases 1, 8 and 9 in the same installation; `/internal/wallets/{companyId}` shows the right provider and issuance mode for each company.
 11. (later) Own wallet: the applicant P3 creates a challenge for their application and `did:web:wallet.beispiel.example` (DID document from 14.2 in `TEST_DID_DOCUMENTS_DIR`); the response has the `companyId` of the application. Control proof signed with the test key: `VERIFIED`. `create-wallet`: provider `BRING_YOUR_OWN`, wallet `ACTIVE`; `wallet_secret` has no row; `holder-access` returns `CREDENTIAL_OFFER` without a secret.
@@ -727,7 +727,7 @@ Test IDs per FRAMEWORK 7a; further ones are defined here.
 |---|---|---|---|
 | SAP DIV | `1a2b3c4d-0001-4000-8000-000000000001` | `BPNL0000000DIV01` | `SAP_DIV` |
 | IdentityHub | `1a2b3c4d-0002-4000-8000-000000000002` | `BPNL00000000IH01` | `IDENTITY_HUB` |
-| Dataspace wallet of the CSP (Beispiel Maschinenbau GmbH) | `11111111-1111-4111-8111-111111111111` | `BPNL00000000CSP1` | `CSP` |
+| Dataspace wallet of the CSP (Beispiel Maschinenbau GmbH, FRAMEWORK 7a) | `c0000001-0000-4000-8000-000000000001` | `BPNLIUK2REMLK3F4` | `CSP` |
 | CSP rejects | `1a2b3c4d-0007-4000-8000-000000000007` | `BPNL00000000CSP2` | `CSP` |
 | own wallet (later) | `5b0c9d1e-2f3a-4b5c-8d6e-7f8091a2b3c4` | `BPNL0000000BYO01` | `BRING_YOUR_OWN` |
 | wrong DID | `1a2b3c4d-0004-4000-8000-000000000004` | `BPNL000000FAIL01` | `SAP_DIV` |
@@ -740,10 +740,10 @@ People and service accounts in the test Portal IAM:
 
 | Who | Token | Purpose |
 |---|---|---|
-| P1 "Erika Mustermann" (test person per FRAMEWORK 7a) | `company_id` `11111111-1111-4111-8111-111111111111`, portal role `IT Admin` (`view_dataspace_wallet`, `retrieve_wallet_credentials`) | cases 15, 20 |
+| P1 "Erika Mustermann" (test person per FRAMEWORK 7a) | `company_id` `c0000001-0000-4000-8000-000000000001`, portal role `IT Admin` (`view_dataspace_wallet`, `retrieve_wallet_credentials`) | cases 15, 20 |
 | P2 | `company_id` `1a2b3c4d-0002-4000-8000-000000000002`, the same permissions | other company (case 15) |
-| P3 | without `company_id`, portal role `Applicant` (`prove_wallet_control`, later); application `a0000001-0000-4000-8000-000000000001` for `5b0c9d1e-2f3a-4b5c-8d6e-7f8091a2b3c4` in `stub-applications.json` | cases 11, 12, 15 |
-| P4 | `company_id` `11111111-1111-4111-8111-111111111111`, portal role `Member` without permissions of this module | case 15 |
+| P3 | without `company_id`, portal role `Applicant` (`prove_wallet_control`, later); application `a4200001-0000-4000-8000-000000000001` for `5b0c9d1e-2f3a-4b5c-8d6e-7f8091a2b3c4` in `stub-applications.json` | cases 11, 12, 15 |
+| P4 | `company_id` `c0000001-0000-4000-8000-000000000001`, portal role `Member` without permissions of this module | case 15 |
 | `sa-div-callback` | service account with `submit_wallet_callback` (= `SAP_DIV_CALLBACK_CLIENT_ID`) | SAP DIV callbacks |
 | `sa-other-callback` | service account with `submit_wallet_callback`, other client | case 6 |
 | `sa-modules` | client with `query_c4_m2`, `execute_steps_c4_m2`, `read_wallet_holder_access` | calls over HTTP |

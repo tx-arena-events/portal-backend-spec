@@ -218,8 +218,8 @@ paths:
       summary: Add a company role with consents
       description: |
         README 7.8. Only roles with assignableBy COMPANY, only with status ACTIVE.
-        agreementIds must contain all terms of the role. The time of the consent is
-        the call.
+        consents must contain all terms of the role (C1-M2) with their active version.
+        The time of the consent is the call.
       x-permission: edit_company_roles
       x-permission-scope: company
       parameters:
@@ -628,7 +628,7 @@ paths:
       tags: [Queries]
       operationId: queryCompanyRoleCatalog
       summary: Role catalogue
-      description: README 9.4. For C1-M2 and C2-M3.
+      description: README 9.4. For C2-M3 and other modules; the terms of the roles are at C1-M2.
       x-permission: query_c3_m1
       x-permission-scope: osp
       parameters:
@@ -1242,20 +1242,40 @@ components:
       examples:
         - { de: Nutzungsbedingungen Teilnehmer, en: Terms & Conditions - Active Participant }
 
+    AgreementKey:
+      type: string
+      description: Key of the terms at C1-M2 (C1-M2 6.8).
+      pattern: '^[a-z0-9-]{1,64}$'
+      examples: [terms-active-participant]
+
+    AgreementRef:
+      type: object
+      required: [agreementKey, version]
+      properties:
+        agreementKey: { $ref: '#/components/schemas/AgreementKey' }
+        version: { type: string, minLength: 1, maxLength: 20, examples: ['1.0'] }
+
     AgreementDefinition:
       type: object
-      required: [agreementId, name, names, documentUrl]
+      description: Terms of a role as kept by C1-M2, in the active version.
+      required: [agreementKey, version, name, names, documentUrl]
       properties:
-        agreementId: { type: string, format: uuid }
+        agreementKey: { $ref: '#/components/schemas/AgreementKey' }
+        version:
+          type: string
+          description: Active version at C1-M2.
         name:
           type: string
-          description: In the requested language.
+          description: Title in the requested language.
         names: { $ref: '#/components/schemas/LocalizedText' }
-        documentUrl: { type: string, format: uri }
+        documentUrl:
+          type: string
+          format: uri
+          description: Document in the requested language, otherwise in the other one.
 
     CompanyRoleDefinition:
       type: object
-      required: [companyRole, assignableBy, description, descriptions, agreements]
+      required: [companyRole, assignableBy, description, descriptions]
       properties:
         companyRole: { $ref: '#/components/schemas/CompanyRoleName' }
         assignableBy: { $ref: '#/components/schemas/AssignableBy' }
@@ -1263,10 +1283,6 @@ components:
           type: string
           description: In the requested language.
         descriptions: { $ref: '#/components/schemas/LocalizedText' }
-        agreements:
-          type: array
-          description: Terms that must be consented to for the role.
-          items: { $ref: '#/components/schemas/AgreementDefinition' }
 
     ConsentStatus:
       type: string
@@ -1283,6 +1299,9 @@ components:
               oneOf:
                 - $ref: '#/components/schemas/ConsentStatus'
                 - type: 'null'
+            consentedVersion:
+              type: [string, 'null']
+              description: Version the company consented to; empty without a declaration.
             consentedAt: { type: [string, 'null'], format: date-time }
 
     CompanyRoleState:
@@ -1302,14 +1321,14 @@ components:
 
     CompanyRoleAdd:
       type: object
-      required: [companyRole, agreementIds]
+      required: [companyRole, consents]
       properties:
         companyRole: { $ref: '#/components/schemas/CompanyRoleName' }
-        agreementIds:
+        consents:
           type: array
-          description: Terms of the role that the Company Admin consents to for the company. All terms of the role must be included.
+          description: Terms of the role that the Company Admin consents to for the company, each with the active version at C1-M2. All terms of the role must be included.
           uniqueItems: true
-          items: { type: string, format: uuid }
+          items: { $ref: '#/components/schemas/AgreementRef' }
 
     CompanyInternal:
       type: object
@@ -1702,8 +1721,8 @@ components:
           items: { type: string }
         missing:
           type: array
-          description: With consent-missing, the missing agreementIds.
-          items: { type: string, format: uuid }
+          description: With consent-missing, the keys of the missing terms.
+          items: { $ref: '#/components/schemas/AgreementKey' }
         errors:
           type: array
           description: With validation, the individual errors.

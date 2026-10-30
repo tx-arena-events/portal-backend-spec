@@ -1,6 +1,6 @@
 # C2-M3 Technical Users
 
-**Version:** 0.2, as of 2026-10-28
+**Version:** 0.2, as of 2026-10-30
 **Capability:** C2 Identity and Access
 **Kind:** Hackathon
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
@@ -21,9 +21,10 @@ It is the only module that writes these clients into the Portal IAM. It has no u
 |---|---|
 | IT Admin and Company Admin of a company (scope `company`) | create, view, change and delete technical users; rotate the secret; read assignable roles |
 | OSP staff (scope `osp`) | view the technical users of all companies |
-| Process Orchestration | steps: create accounts for a subscription; apply wallet access; delete an account after the wallet account has been deleted; disable and re-enable the technical users of a company |
+| Process Orchestration | steps: create accounts for a subscription and deactivate them when it ends; apply wallet access; delete an account after the wallet account has been deleted; disable and re-enable the technical users of a company |
 | Subscriptions | rotate the secret of a subscription account to pass it on to the provider |
 | Connectors | check whether a technical user is suitable for a connector |
+| Offers | read the technical user roles for the profile of an offer |
 
 ## 2. Terms
 
@@ -34,10 +35,11 @@ It is the only module that writes these clients into the Portal IAM. It has no u
 | Wallet role | role that triggers wallet access (configuration `WALLET_ROLES`). It is **not** assigned in the Portal IAM. |
 | Provider-only role | role that only the provider receives in a subscription (configuration `PROVIDER_ONLY_ROLES`) |
 | Wallet access | account of the technical user in the company's dataspace wallet (wallet account); created by the Dataspace Wallet Interface (C4-M2). Its identifier at C4-M2 is called `walletAccountRef`. |
-| Origin | `OWN`: created by a person of the company (7.2). `SUBSCRIPTION`: created when a subscription is activated (8.1). |
+| Origin | `OWN`: created by a person of the company (7.2). `SUBSCRIPTION`: created for a subscription (8.1): at the start of the setup for multi-instance apps and services, at the activation for single-instance apps (FRAMEWORK 5.8). |
 | Subscription party | for origin `SUBSCRIPTION`: `CUSTOMER` (account of the customer) or `PROVIDER` (account of the provider with the provider-only roles) |
 | Co-viewing company | company that may see and delete an account of another company: for customer accounts from a subscription, the provider |
 | Disabled | account of a deactivated company (`disabled`): client disabled in the Portal IAM, account and roles remain (6.2) |
+| Inactive | account of an ended or declined subscription (status `INACTIVE`, 8.6): client disabled in the Portal IAM; final, the account can only be deleted |
 | OSP staff | people with the portal roles `OSP Reviewer` or `OSP Admin` |
 
 ## 3. Not part of this module
@@ -100,7 +102,7 @@ It is the only module that writes these clients into the Portal IAM. It has no u
 | `iam_client_id` | text | unique; `CLIENT_ID_PREFIX` + value of the sequence `client_number`, for example `sa123` |
 | `iam_client_uuid` | text | internal ID of the client in Keycloak; empty as long as a step has not completed the creation |
 | `iam_service_account_user_id` | text | ID of the service account user in Keycloak |
-| `status` | text | `PENDING`, `ACTIVE`, `PENDING_DELETION`, `DELETED` |
+| `status` | text | `PENDING`, `ACTIVE`, `INACTIVE`, `PENDING_DELETION`, `DELETED` |
 | `wallet_access` | text | `NONE`, `REQUESTED`, `ACTIVE`, `FAILED`, `REMOVING`; default `NONE` |
 | `wallet_account_ref` | text | identifier of the wallet account at C4-M2 |
 | `disabled` | boolean | `true` as long as the owner's company is deactivated (6.2); default `false` |
@@ -156,16 +158,17 @@ One entry per changing operation and per changing execution of a step (FRAMEWORK
 | `PENDING`, client not created | step completes the creation, with wallet role | `PENDING`, wallet `REQUESTED` | `TechnicalUserCreated`, `WalletAccessRequested` |
 | `PENDING`, wallet `REQUESTED` | `apply-wallet-access` with `ACTIVE` | `ACTIVE`, wallet `ACTIVE` | – |
 | `PENDING`, wallet `REQUESTED` | `apply-wallet-access` with `FAILED` | `ACTIVE`, wallet `FAILED` | – |
-| `ACTIVE`, wallet `NONE` or `FAILED` | delete (7.5) | `DELETED`, wallet `NONE` | `TechnicalUserDeleted` |
-| `ACTIVE`, wallet `ACTIVE` | delete (7.5) | `PENDING_DELETION`, wallet `REMOVING` | `WalletAccessRemovalRequested` |
+| `PENDING`, `ACTIVE`, origin `SUBSCRIPTION` | step `disable-subscription-technical-users` (8.6) | `INACTIVE` | – |
+| `ACTIVE` or `INACTIVE`, wallet `NONE` or `FAILED` | delete (7.5) | `DELETED`, wallet `NONE` | `TechnicalUserDeleted` |
+| `ACTIVE` or `INACTIVE`, wallet `ACTIVE` | delete (7.5) | `PENDING_DELETION`, wallet `REMOVING` | `WalletAccessRemovalRequested` |
 | `PENDING_DELETION`, wallet `REMOVING` | step `delete` (8.3) | `DELETED`, wallet `NONE` | `TechnicalUserDeleted` |
 
-Deactivation does not change this status; it is a separate flag (6.2).
+Deactivation of the company does not change this status; it is a separate flag (6.2). `INACTIVE` is final: the client stays disabled, also after `enable-company-technical-users` (8.5).
 
 ### 6.2 Deactivation together with the company
 
 - `disable-company-technical-users` (8.4) sets `disabled` to `true` on all accounts that belong to the company (`company_id`) and disables their clients in the Portal IAM. Programs then get no new tokens; tokens already issued stay valid until they expire (C2-M5).
-- `enable-company-technical-users` (8.5) resets `disabled` and enables the clients again. Secret, roles, attributes and wallet access are unchanged.
+- `enable-company-technical-users` (8.5) resets `disabled` and enables the clients again, except for accounts with status `INACTIVE` (8.6). Secret, roles, attributes and wallet access are unchanged.
 - Accounts on which the company is only co-viewing are not touched; they belong to another company.
 - As long as an account is disabled: change (7.4) and rotate secret (7.6, 9.2) return 409 `invalid-state`. Delete (7.5) and the steps `apply-wallet-access` and `delete` still work. `usableForConnector` is `false` (9.1).
 - No new technical users are created for a company that is not `ACTIVE` in C3-M1 (7.2, 8.1: 409 `company-not-ready`). C4-M2 creates no new wallet accounts for a deactivated company (FRAMEWORK 5.4).
@@ -193,7 +196,7 @@ OSP staff see the accounts of all companies (7.9, 7.10), but change nothing.
 | `delete_technical_users` | `company` | delete (7.5) |
 | `view_all_technical_users` | `osp` | view the technical users of all companies (7.9, 7.10) |
 | `rotate_subscription_credentials` | `osp` | rotate the secret of a subscription account (9.2); only the service account of Subscriptions, only over HTTP |
-| `query_c2_m3` | `osp` | query 9.1, only over HTTP |
+| `query_c2_m3` | `osp` | queries 9.1 and 9.3, only over HTTP |
 | `execute_steps_c2_m3` | `osp` | steps under `/steps` (section 8), only over HTTP |
 
 Checks on calls by people, in this order:
@@ -307,7 +310,7 @@ Read the roles from the Portal IAM (roles of the service account user on the cli
 
 ### 7.5 `DELETE /companies/{companyId}/technical-users/{id}`
 
-1. Checks as in 6.4; owner or co-viewing company. Wallet `REQUESTED`: 409 `wallet-in-progress`. Status not `ACTIVE`: 409 `invalid-state`.
+1. Checks as in 6.4; owner or co-viewing company. Wallet `REQUESTED`: 409 `wallet-in-progress`. Status not `ACTIVE` or `INACTIVE`: 409 `invalid-state`.
 2. Ask Connectors whether a connector uses the account. Yes: 409 `in-use`.
 3. For `SUBSCRIPTION`: ask Subscriptions whether the subscription is active. Yes: 409 `in-use`.
 4. Wallet `NONE` or `FAILED`: read the roles of the service account (for the audit log), delete the client in the Portal IAM, status `DELETED`, wallet `NONE`. In the same transaction: `audit_log`, one entry `REMOVED` per role, event `TechnicalUserDeleted`. Response 204.
@@ -352,7 +355,8 @@ For orientation, the flows that use the steps (FRAMEWORK 5):
 
 | Flow | Triggered by | Steps of this module |
 |---|---|---|
-| Subscription activated (FRAMEWORK 5.8) | Subscriptions | `create-for-subscription` |
+| Subscription set up, or single-instance app activated (FRAMEWORK 5.8) | Subscriptions | `create-for-subscription` |
+| Subscription ended or declined (FRAMEWORK 5.8) | Subscriptions | `disable-subscription-technical-users` |
 | Wallet access (FRAMEWORK 5.7) | `WalletAccessRequested` → C4-M2 `create-wallet-account` → `WalletAccountCreated` or `WalletAccountFailed` | `apply-wallet-access` |
 | Remove wallet access (FRAMEWORK 5.7) | `WalletAccessRemovalRequested` → C4-M2 `delete-wallet-account` → `WalletAccountDeleted` | `delete` |
 | Deactivation of a company (FRAMEWORK 5.4) | `CompanyDeactivated` | `disable-company-technical-users` |
@@ -387,7 +391,7 @@ Preconditions: technical user with wallet `REQUESTED`; C4-M2 has reported `Walle
 - Wallet already `ACTIVE` or `FAILED` with the same `outcome` (and the same `walletAccountRef`): nothing to do.
 - Otherwise: 409 `invalid-state`.
 
-A disabled account stays disabled. No event of its own: people learn the result from `WalletAccountCreated` or `WalletAccountFailed` of C4-M2 and retrieve the credentials there (7.7). Result: `technicalUserId`, `status`, `walletAccess`, `walletAccountRef`.
+A disabled account stays disabled; an `INACTIVE` account keeps its status. No event of its own: people learn the result from `WalletAccountCreated` or `WalletAccountFailed` of C4-M2 and retrieve the credentials there (7.7). Result: `technicalUserId`, `status`, `walletAccess`, `walletAccountRef`.
 
 ### 8.3 `delete`
 
@@ -420,16 +424,28 @@ Input: `companyId`.
 Preconditions: company reactivated (`CompanyReactivated`, FRAMEWORK 5.5).
 
 1. Read all accounts with `company_id` = `companyId`, a status other than `DELETED` and `disabled` = `true`.
-2. Per account, each in its own transaction: with `iam_client_uuid`, enable the client (`enabled` = `true`); `disabled` = `false`, entry in `audit_log`.
+2. Per account, each in its own transaction: with `iam_client_uuid` and a status other than `INACTIVE`, enable the client (`enabled` = `true`); `disabled` = `false`, entry in `audit_log`.
 3. Result: `companyId`, `technicalUserIds` (all accounts of the company with a status other than `DELETED` and `disabled` = `false`).
 
 No event. The programs get tokens again with the same secret, with the same roles.
 
+### 8.6 `disable-subscription-technical-users`
+
+Input: `offerSubscriptionId`.
+
+Preconditions: the customer has ended the subscription or the provider has declined it (`SubscriptionDeactivated`, `SubscriptionDeclined`, FRAMEWORK 5.8). Without accounts of the subscription the step does nothing.
+
+1. Read all accounts with this `offer_subscription_id` (customer and provider account) and status `PENDING` or `ACTIVE`.
+2. Per account, each in its own transaction: with `iam_client_uuid`, disable the client in the Portal IAM (`enabled` = `false`); status `INACTIVE`, entry in `audit_log` (`actor_type` `PROCESS`).
+3. Result: `offerSubscriptionId`, `technicalUserIds` (all accounts of the subscription with status `INACTIVE`).
+
+No event; FRAMEWORK 6 does not provide one. Secret, roles and wallet access stay; the wallet account remains at C4-M2 until the account is deleted (7.5). A retry finds no open accounts any more and returns the same result.
+
 ## 9. Queries for other modules
 
-### 9.1 `GET /internal/technical-users/{id}?companyId=`
+### 9.1 `GET /internal/technical-users/{id}?companyId=&offerSubscriptionId=`
 
-For Connectors. The response is always 200, also for an unknown ID (then `exists: false`). `usableForConnector` is `true` if the account exists, `company_id` equals `companyId`, the status is `ACTIVE` or `PENDING`, the origin is `OWN` and `disabled` is `false`. Connectors checks itself whether another connector already uses the account.
+For Connectors (C6-M1 6.2). The response is always 200, also for an unknown ID (then `exists: false`). `usableForConnector` is `true` if the account exists, `company_id` equals `companyId`, the status is `ACTIVE` or `PENDING`, `disabled` is `false` and the origin is `OWN`. With the optional `offerSubscriptionId` (connector as a service, C6-M1 7.3), the customer account of this subscription is usable as well: origin `SUBSCRIPTION`, subscription party `CUSTOMER`, the same `offer_subscription_id`. The provider runs the connector and sees this account as co-viewing company; the own accounts of the customer are not visible to it. Connectors checks itself whether another connector already uses the account.
 
 ### 9.2 `POST /internal/technical-users/{id}/credentials/rotate`
 
@@ -440,6 +456,10 @@ For Subscriptions, when passing the credentials of a subscription account on to 
 - Create a new secret in the Portal IAM; an earlier one is no longer valid afterwards. Response 200 with `credentials`.
 
 The secret appears only in this response. The module writes an entry to `audit_log` (`actor_type` `PROCESS`), without the secret. If the hand-over is repeated, a new secret is created.
+
+### 9.3 `GET /internal/technical-roles?lang=`
+
+For Offers (C8-M1 7.11), to check the roles of a technical user profile. All roles on the client `TECHNICAL_ROLES_CLIENT`, independent of company roles (the check of 6.5 does not apply to subscription accounts). Per role as in 7.8: `name`, `description` in `lang`, `grantsWalletAccess`, `providerOnly`. Portal IAM not reachable: 502 `upstream-error`.
 
 ## 10. Events
 
@@ -485,10 +505,10 @@ In the shared process, the module calls the public interface of the neighbour; t
 | Neighbour (variable) | Call | Response | Built-in stand-in |
 |---|---|---|---|
 | C3-M1 Company Profile (`COMPANY_URL`) | `GET /api/c3-m1/internal/companies/{companyId}` | `{ "id", "status", "bpn", "companyRoles": [] }` (active roles only), status `REQUESTED`, `ACTIVE`, `REJECTED` or `INACTIVE`; 404 if unknown | reads `stub-companies.json` on every call |
-| Connectors (`CONNECTOR_URL`) | `GET /internal/connectors?technicalUserId={id}` (base as in the spec of Connectors) | list of `{ "connectorId", "status" }` | empty list |
-| Subscriptions (`SUBSCRIPTION_URL`) | `GET /internal/subscriptions/{offerSubscriptionId}` (base as in the spec of Subscriptions) | `{ "offerSubscriptionId", "status" }` | status `INACTIVE` |
+| C6-M1 Connectors (`CONNECTOR_URL`) | `GET /api/c6-m1/internal/connectors?technicalUserId={id}` (C6-M1 9.1) | list of `{ "connectorId", "status" }` of the `ACTIVE` connectors | empty list |
+| C10-M1 Subscriptions (`SUBSCRIPTION_URL`) | `GET /api/c10-m1/internal/subscriptions/{offerSubscriptionId}` (C10-M1 9.2) | `{ "offerSubscriptionId", "status", … }` | status `INACTIVE` |
 
-A connector "uses" the account if it is in the list with status `ACTIVE` or `PENDING`.
+A connector uses the account if it is in the list.
 
 ### 11.3 Stand-in for Process Orchestration
 
@@ -537,7 +557,7 @@ Technical users of the company:
 10. Delete while wallet `REQUESTED`: 409 `wallet-in-progress`.
 11. `create-for-subscription` (customer Beispiel Maschinenbau, provider Beispiel Logistik) with a provider-only role creates two accounts; the result contains no credentials. Hans Beispiel (Company Admin of Beispiel Logistik) sees the customer account with `viewerRole` `CO_VIEWER`. A retry, also with a new `stepRunId`, creates no further accounts, returns the same result and no second event. An interrupted creation (client created in the Portal IAM, `iam_client_uuid` not stored, simulated) is completed on retry through the same client ID.
 12. `POST /internal/technical-users/{id}/credentials/rotate` for the customer account from case 11 returns a secret with which one gets a token; with a wrong `offerSubscriptionId`: 404.
-13. `/internal/technical-users/{id}` reports `usableForConnector` only for own, active, not disabled accounts with origin `OWN`.
+13. `/internal/technical-users/{id}` reports `usableForConnector` only for own, active, not disabled accounts with origin `OWN`. With `offerSubscriptionId` of case 11 also for the customer account of this subscription; not for the provider account and not with another `offerSubscriptionId`.
 
 OSP staff:
 
@@ -553,6 +573,11 @@ Deactivation and reactivation:
 General:
 
 19. No secret appears in the log, in an event, in a step result or in the module's database. No audit log entry contains a name.
+
+End of a subscription and roles for offers:
+
+20. `disable-subscription-technical-users` for the subscription from case 11: both accounts `INACTIVE`, their clients disabled in the Portal IAM, client credentials no longer return a token. Retry: the same result. `enable-company-technical-users` for Beispiel Maschinenbau afterwards leaves the customer account disabled. Deleting an `INACTIVE` account works as in case 9; `PATCH` and rotate secret: 409 `invalid-state`.
+21. `GET /internal/technical-roles` returns all roles of `technical_roles_management`, also `BPDM Sharing Output Consumer` with `providerOnly` `true` and `Identity Wallet Management` with `grantsWalletAccess` `true`, independent of the company roles; without `query_c2_m3` over HTTP: 403.
 
 ## 14. Test data
 
@@ -601,3 +626,5 @@ For the subscription accounts from case 11: subscription `0b5d7e2a-3c4f-4a1b-9e8
 - **Tokens for central services at the CSP:** note on OP-37 (6.7).
 - **Audit log:** `actor_sub` from the token instead of PSP and `X-Acting-Person`; steps also write to `audit_log`.
 - Errors carry `retryable` for steps. Section 8 renumbered.
+- **End of a subscription** (30 Oct 2026, asked for by Subscriptions and Process Orchestration): step `disable-subscription-technical-users` (8.6) and status `INACTIVE`.
+- **Queries** (30 Oct 2026): `offerSubscriptionId` in 9.1 for connectors as a service; new 9.3 `GET /internal/technical-roles` for the technical user profiles of Offers. Calls to Connectors and Subscriptions with the paths of C6-M1 and C10-M1.

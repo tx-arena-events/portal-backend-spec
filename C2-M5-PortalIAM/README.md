@@ -1,6 +1,6 @@
 # C2-M5 Portal IAM
 
-**Version:** 0.2, as of 2026-10-29
+**Version:** 0.2, as of 2026-10-30
 **Capability:** C2 Identity and Access
 **Kind:** Configuration
 **Files:** this README (content of the configuration, tokens, acceptance), [openapi.yaml](openapi.yaml) (endpoints of the product in use, for reference only), [open-points.md](open-points.md)
@@ -364,7 +364,7 @@ Compared with today's installation (Portal 2.6.0), the following also applies: t
 
 ### 6.2 List of permissions
 
-**Status: aligned with all module specs of our own part (28 Oct 2026); permissions of the other part added as reported by it (29 Oct 2026).** Every permission that an `x-permission` in an `openapi.yaml` requires is listed here. The rows marked "proposal" for Connectors, Subscriptions and Offers are replaced by the other part with the permissions from its specs.
+**Status: aligned with all module specs (30 Oct 2026).** Every permission that an `x-permission` in an `openapi.yaml` requires is listed here.
 
 **Permissions of people:**
 
@@ -399,14 +399,14 @@ Compared with today's installation (Portal 2.6.0), the following also applies: t
 | `view_dataspace_wallet` | C4-M2 | `company` | Datenraum-Wallet und Wallet-Konten des Unternehmens lesen | Read the company's dataspace wallet and wallet accounts |
 | `retrieve_wallet_credentials` | C4-M2 | `company` | Zugangsdaten eines Wallet-Kontos einmal abholen | Retrieve the credentials of a wallet account once |
 | `prove_wallet_control` | C4-M2 | `own` | Kontrolle über eine eigene Datenraum-Wallet nachweisen (später) | Prove control of an own dataspace wallet (later) |
-| `view_notifications` | C11 Notifications (other part) | `own` | Eigene Benachrichtigungen im Portal lesen | Read own notifications in the portal |
-| `view_processes` | Process Orchestration (other part) | `osp` | Abläufe und ihre Schritte lesen | Read processes and their steps |
-| `retrigger_process_steps` | Process Orchestration (other part) | `osp` | Gescheiterte Schritte erneut anstoßen | Retrigger failed process steps |
-| `view_marketplace` | Marketplace (other part) | `company` | Marktplatz mit seinen Angeboten lesen | Read the marketplace and its offers |
-| `view_connectors`, `manage_connectors` | Connectors (proposal) | `company` | Connectoren des Unternehmens lesen bzw. verwalten | Read or manage the company's connectors |
-| `view_subscriptions`, `manage_subscriptions` | Subscriptions (proposal) | `company` | Abos des Unternehmens lesen bzw. abschließen und beenden | Read or manage the company's subscriptions |
-| `view_offers`, `manage_offers` | Offers (proposal) | `company` | Angebote des Unternehmens als Anbieter lesen bzw. verwalten | Read or manage the company's offers as provider |
-| `approve_offers` | Offers (proposal) | `osp` | Angebote prüfen und freigeben | Review and approve offers |
+| `view_notifications` | C11-M1 | `own` | Eigene Benachrichtigungen im Portal lesen | Read own notifications in the portal |
+| `view_processes` | C12-M1 | `osp` | Abläufe und ihre Schritte lesen | Read processes and their steps |
+| `retrigger_process_steps` | C12-M1 | `osp` | Gescheiterte Schritte erneut anstoßen | Retrigger failed process steps |
+| `view_marketplace` | C8-M1 | `company` | Marktplatz mit seinen Angeboten lesen | Read the marketplace and its offers |
+| `view_connectors`, `manage_connectors` | C6-M1 | `company` | Connectoren des Unternehmens lesen bzw. verwalten | Read or manage the company's connectors |
+| `view_subscriptions`, `manage_subscriptions` | C10-M1 | `company` | Abos des Unternehmens lesen bzw. abschließen und beenden | Read or manage the company's subscriptions |
+| `view_offers`, `manage_offers` | C8-M1; `manage_offers` also on the provider side of C10-M1 | `company` | Angebote des Unternehmens als Anbieter lesen bzw. verwalten | Read or manage the company's offers as provider |
+| `approve_offers` | C8-M1 | `osp` | Angebote prüfen und freigeben | Review and approve offers |
 
 **Permissions of service accounts for callbacks** (in no portal role, only for the client from 5.9):
 
@@ -420,12 +420,12 @@ Compared with today's installation (Portal 2.6.0), the following also applies: t
 
 | Permissions | `description.de` | `description.en` |
 |---|---|---|
-| `execute_steps_c1_m2`, `execute_steps_c1_m3`, `execute_steps_c2_m2`, `execute_steps_c2_m3`, `execute_steps_c3_m1`, `execute_steps_c3_m2`, `execute_steps_c4_m1`, `execute_steps_c4_m2`; other part: `execute_steps_c6`, `execute_steps_c8`, `execute_steps_c10`, `execute_steps_c12` | Schritte des Moduls `<Nr.>` über HTTP ausführen | Execute the steps of module `<no.>` via HTTP |
-| `query_c1_m2`, `query_c1_m3`, `query_c2_m2`, `query_c2_m3`, `query_c3_m1`, `query_c3_m2`, `query_c4_m1`, `query_c4_m2`; other part: `query_c6`, `query_c8`, `query_c10`, `query_c12` | Abfragen des Moduls `<Nr.>` über HTTP aufrufen | Call the queries of module `<no.>` via HTTP |
+| `execute_steps_c1_m2`, `execute_steps_c1_m3`, `execute_steps_c2_m2`, `execute_steps_c2_m3`, `execute_steps_c3_m1`, `execute_steps_c3_m2`, `execute_steps_c4_m1`, `execute_steps_c4_m2`, `execute_steps_c6_m1`, `execute_steps_c10_m1` | Schritte des Moduls `<Nr.>` über HTTP ausführen | Execute the steps of module `<no.>` via HTTP |
+| `query_c1_m2`, `query_c1_m3`, `query_c2_m2`, `query_c2_m3`, `query_c3_m1`, `query_c3_m2`, `query_c4_m1`, `query_c4_m2`, `query_c6_m1`, `query_c8_m1`, `query_c10_m1`, `query_c12_m1` | Abfragen des Moduls `<Nr.>` über HTTP aufrufen | Call the queries of module `<no.>` via HTTP |
 | `read_wallet_holder_access` | Zugang zur Holder-Wallet für die Ausstellung lesen | Read the holder wallet access for issuance |
 | `rotate_subscription_credentials` | Secret eines Abo-Kontos erneuern | Rotate the secret of a subscription account |
 
-`read_wallet_holder_access` (C4-M2) is granted only to the service account of C4-M1, `rotate_subscription_credentials` (C2-M3) only to the service account of the Subscriptions module.
+`read_wallet_holder_access` (C4-M2) is granted only to the service account of C4-M1, `rotate_subscription_credentials` (C2-M3) only to the service account of C10-M1. C8-M1, C11-M1 and C12-M1 offer no steps, C11-M1 offers no queries.
 
 C5-M1 (EBW-Connector) uses its own tokens and no permissions on the client `portal-core`.
 
@@ -720,6 +720,7 @@ Files under `iam/`:
 |---|---|
 | `realm-osp.json` | realm file for operation (sections 5 and 6) |
 | `test/realm-osp.test.json` | the same file plus test objects (14.2); generated by `test/build-test-realm.py` from the operation file and `test/test-objects.json`, so that the operation file stays the only source |
+| `test/realm-osp.hackathon.json` | the same, generated from `test/test-objects.hackathon.json`: the start state of a hackathon installation (14.2, FRAMEWORK 7a) |
 | `test/realm-test-ebw.json` | realm `TEST-EBW`, stand-in for the EBW-Connector (14.3) |
 | `test/keys/*.TEST-ONLY.pem` | private test keys (EC P-256) for `sa-csp`, `sa-csp-issuer`, `sa-csp-wallet` (shared test key of the CSP) and `sa-credential-issuer` |
 | `test/jwks/*.json` | the matching public JWKS |
@@ -738,6 +739,7 @@ IDs aligned with C2-M2 (test persons), C3-M1 (companies) and FRAMEWORK 7a. The v
 |---|---|---|
 | Erika Mustermann | account | ID `5a1c0001-0000-4000-8000-000000000001`; linked with `ebw-connector` (`sub` of the stand-in account `erika`); `company_id` `c0000001-0000-4000-8000-000000000001`, `bpn` `BPNLIUK2REMLK3F4` (Beispiel Maschinenbau GmbH); `Applicant`, `Company Admin` |
 | Max Mustermann | account | ID `5a1c0002-0000-4000-8000-000000000002`; linked (`max`); bound to Beispiel Maschinenbau GmbH; `Applicant`, `IT Admin` (as in C2-M3) |
+| Hans Beispiel | account | ID `5a1c0003-0000-4000-8000-000000000003`; linked (`hans`); without company; only `Applicant` |
 | Lieschen Müller | account | ID `5a1c0004-0000-4000-8000-000000000004`; linked (`lieschen`); without company; only `Applicant` |
 | Otto Normalverbraucher | account | ID `5a1c0012-0000-4000-8000-000000000012`; linked (`otto`); without company; `Applicant`, `OSP Admin` |
 | Rolf Prüfer | account | ID `bbede0f3-fbc4-433b-b7ca-1982e8724912` (R1 in C1-M3); linked (`rolf`); without company; `Applicant`, `OSP Reviewer` |
@@ -752,13 +754,15 @@ IDs aligned with C2-M2 (test persons), C3-M1 (companies) and FRAMEWORK 7a. The v
 
 In the test variant, `portal-ui` also has the redirects `http://localhost:8081/*` and `http://localhost/callback` for `get-token.py`.
 
+**Start state of a hackathon installation** (`test/test-objects.hackathon.json`, FRAMEWORK 7a): the same objects, but Erika and Max without company (no `company_id`, no `bpn`, no `Company Admin`, no `IT Admin`), without `sa-test-u1` and without `app-test`. So Erika can onboard Beispiel Maschinenbau GmbH herself (FRAMEWORK 5.2) and invite Max (5.3). The bindings in the table above serve the tests of this module (cases 8, 14, 15) and the tokens in 14.4; C2-M2 starts from the same unbound state in its tests.
+
 ### 14.3 Realm `TEST-EBW`
 
 Stand-in for the EBW-Connector, only in the test installation. It stands for an external system; the rule "no passwords" applies to `CX-Central`, not to this stand-in.
 
 | Object | Values |
 |---|---|
-| Users `erika`, `max`, `lieschen`, `otto`, `rolf`, `nina` | first and last name as in 14.2; fixed IDs (`sub`); test passwords from `.env.test` |
+| Users `erika`, `max`, `hans`, `lieschen`, `otto`, `rolf`, `nina` | first and last name as in 14.2; fixed IDs (`sub`); test passwords from `.env.test` |
 | Client `portal-iam` | `client-jwt` with JWKS address `http://localhost:8080/auth/realms/CX-Central/protocol/openid-connect/certs`, signature algorithm `ES256`; PKCE `S256` required; redirect `http://localhost:8080/auth/realms/CX-Central/broker/ebw-connector/endpoint`; mappers `given_name`, `family_name` into the ID token |
 | Client `portal-iam-claims` | like `portal-iam`, plus mappers with fixed values for `company_id`, `bpn` and `email` (only case 7; the test variant can switch the identity provider to it) |
 
@@ -784,3 +788,4 @@ The stand-in signs its ID token with RS256, the reference implementation of the 
 - **Second realm key** ES256 for the client assertion towards the EBW-Connector (5.3).
 - **Test installation** with stand-in realm `TEST-EBW` and test persons instead of test PSPs.
 - **Added on 29 Oct 2026:** permissions of the other part (`view_notifications` in `Applicant`, `view_marketplace` in `Member`, `view_processes` and `retrigger_process_steps` in `OSP Admin`; steps and queries of C6, C8, C10, C12).
+- **Aligned on 30 Oct 2026** with C6-M1, C8-M1, C10-M1, C11-M1, C12-M1: module column of 6.2 without "proposal"; `execute_steps_` and `query_` with the full module identifier as in FRAMEWORK 4.2 (`query_c6_m1`). Test variant for the start state of a hackathon installation (14.2).

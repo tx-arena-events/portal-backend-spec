@@ -1,6 +1,6 @@
 # C5-M1 EBW-Connector
 
-**Version:** 0.2, as of 2026-10-28
+**Version:** 0.2, as of 2026-10-30
 **Capability:** C5 Business Wallet
 **Kind:** Provided (built before the hackathon; a reference implementation is provided for the hackathon)
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
@@ -25,7 +25,7 @@ Callers:
 | Who | What for |
 |---|---|
 | Portal IAM of an OSP (OIDC client, identity provider) | sign-in of people at the OSP's portal |
-| User interface of an OSP (OIDC client) | onboarding of a company with verification attestation |
+| Server part of the user interface of an OSP (OIDC client, FRAMEWORK 5.2) | onboarding of a company with verification attestation |
 | Business Wallet (OIDC client) | sign-in of the company's employees |
 | EUDI Wallet of the person | fetch the request, send the response (OpenID4VP) |
 | Business Wallet of the company (as wallet) | fetch the request, send the response (OpenID4VP) |
@@ -50,7 +50,7 @@ Callers:
 | Transaction | one sign-in or onboarding, from the authorization request of the client to the redeemed code |
 | Step | one presentation from one wallet within a transaction: `person` (EUDI Wallet) or `company` (Business Wallet) |
 | Verification attestation | JWT signed by the EBW-Connector about a successful onboarding transaction (section 9) |
-| Client | registered OIDC client: Portal IAM or user interface of an OSP, Business Wallet |
+| Client | registered OIDC client: Portal IAM or server part of the user interface of an OSP, Business Wallet |
 | Same-device, cross-device | wallet on the same device as the browser (link) or on another device (QR code) |
 | DCQL | Digital Credentials Query Language of OpenID4VP |
 | KB-JWT | key binding JWT: proof of the wallet that it holds the key the credential is bound to |

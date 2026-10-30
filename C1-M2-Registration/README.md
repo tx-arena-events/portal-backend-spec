@@ -1,6 +1,6 @@
 # C1-M2 Registration
 
-**Version:** 0.2, as of 2026-10-28
+**Version:** 0.2, as of 2026-10-30
 **Capability:** C1 Onboarding
 **Kind:** Hackathon
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
@@ -94,7 +94,7 @@ The module has no user interface. Callers:
 | `ATTESTATION_JWKS_FILE` | tests only: JWKS as a file; set = no fetch | `test-ebw-jwks.json` |
 | `ATTESTATION_AUDIENCE` | value that `aud` of the verification attestation must contain (equal to `ATTESTATION_AUDIENCE` in C5-M1) | `portal-registration` |
 | `ATTESTATION_ALGORITHMS` | allowed signature algorithms, comma-separated | `ES256` |
-| `ATTESTATION_CLIENT_IDS` | allowed values of `client_id` in the verification attestation (client of the UI at the EBW-Connector), comma-separated; empty = no check | `osp-a-portal` |
+| `ATTESTATION_CLIENT_IDS` | allowed values of `client_id` in the verification attestation (client of the UI at the EBW-Connector), comma-separated; empty = no check | `osp-a-ui` |
 | `ATTESTATION_MAX_AGE` | maximum age of the verification attestation at submission, counted from `iat` (ISO 8601) | `P30D` |
 | `ATTESTATION_CLOCK_SKEW_SECONDS` | tolerance when comparing points in time | `60` |
 | `ATTESTATION_JWKS_CACHE_SECONDS` | cache time of the keys | `300` |
@@ -378,6 +378,7 @@ In the verification path `DOCUMENTS` all data comes from the person; `comparison
 ### 6.7 Company roles
 
 - Company roles with `selectable = true` are selectable. Initial values: `ACTIVE_PARTICIPANT`, `APP_PROVIDER`, `SERVICE_PROVIDER`. `ONBOARDING_SERVICE_PROVIDER` is not selectable (only the company of the OSP, C3-M1). The roles `PORTAL_SERVICE_PROVIDER` and `OPERATOR` are dropped with OSP 2.0.
+- The role names are the same as in the role catalogue of C3-M1 (C3-M1 6.5). This module keeps the assignment of terms to roles; C3-M1 reads it through 9.3.
 - If the module takes the roles of an existing company from C3-M1 (6.2), it takes only the selectable ones. If none remains: 400 `validation`; the person then gives the roles personally.
 
 ### 6.8 Terms and consents
@@ -599,7 +600,7 @@ Short form of several applications (`ApplicationSummary`), e.g. for the list of 
 
 ### 9.3 `GET /internal/agreements`
 
-Terms with their versions (`AgreementVersion`), filter `status` (default `ACTIVE`). For C3-M1, which handles the re-consent of existing companies (6.8, OP-11).
+Terms with their versions (`AgreementVersion`), filter `status` (default `ACTIVE`). For C3-M1: the terms of a company role (C3-M1 6.5, 7.8, 8.3) and the re-consent of existing companies (6.8, OP-11).
 
 ## 10. Events
 
@@ -712,11 +713,11 @@ Shared test IDs according to FRAMEWORK 7a; the installation is that of OSP A.
 
 | Account | `sub` | Claims | Permissions |
 |---|---|---|---|
-| Erika Mustermann (applicant) | `eee3c86e-a5fb-4684-b6f9-c23062a0d095` | `given_name` Erika, `family_name` Mustermann, without `company_id` | `register_company` |
-| Max Mustermann (second applicant) | `5540fcaf-75aa-44e7-b2ac-0b54d5b23c5b` | `given_name` Max, `family_name` Mustermann, without `company_id` | `register_company` |
+| Erika Mustermann (applicant) | `5a1c0001-0000-4000-8000-000000000001` | `given_name` Erika, `family_name` Mustermann, without `company_id` | `register_company` |
+| Max Mustermann (second applicant) | `5a1c0002-0000-4000-8000-000000000002` | `given_name` Max, `family_name` Mustermann, without `company_id` | `register_company` |
 | bound account | `d4fef928-56fe-4c94-a6c1-ffc6ea43704c` | `company_id` `11111111-1111-4111-8111-111111111111` | `register_company` |
 | OSP Reviewer | `bbede0f3-fbc4-433b-b7ca-1982e8724912` | | `view_applications` |
-| OSP Admin | `6e3cc6aa-b456-47e2-8888-2fb7cc0b36b8` | | `view_applications`, `manage_agreements` |
+| OSP Admin | `5a1c0012-0000-4000-8000-000000000012` | | `view_applications`, `manage_agreements` |
 | service account | – | | `execute_steps_c1_m2`, `query_c1_m2` |
 | account without permissions | `08f42539-b270-4ca0-805d-c2c8500f23cd` | | – (cases with 403) |
 

@@ -291,6 +291,11 @@ paths:
           in: query
           required: true
           schema: { type: string, format: uuid }
+        - name: offerSubscriptionId
+          in: query
+          required: false
+          description: Connector as a service (C6-M1 7.3); the customer account of this subscription is then usable as well.
+          schema: { type: string, format: uuid }
       responses:
         '200':
           description: Result of the check
@@ -327,6 +332,32 @@ paths:
         '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
         '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
+  /internal/technical-roles:
+    get:
+      tags: [Queries]
+      operationId: listTechnicalRoles
+      summary: All technical user roles, for the profiles of offers
+      description: |
+        README 9.3. For Offers. All roles on the client TECHNICAL_ROLES_CLIENT,
+        independent of company roles.
+      x-permission: query_c2_m3
+      x-permission-scope: osp
+      parameters:
+        - name: lang
+          in: query
+          description: Language of the description (attribute description.{lang}); otherwise the field description of the role.
+          schema: { type: string, pattern: '^[a-z]{2}$', default: de, examples: [de, en] }
+      responses:
+        '200':
+          description: Roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AssignableRole' }
+        '403': { $ref: '#/components/responses/Problem' }
         '502': { $ref: '#/components/responses/Problem' }
 
   /steps/create-for-subscription:
@@ -463,6 +494,31 @@ paths:
         '403': { $ref: '#/components/responses/Problem' }
         '502': { $ref: '#/components/responses/Problem' }
 
+  /steps/disable-subscription-technical-users:
+    post:
+      tags: [Steps]
+      operationId: stepDisableSubscriptionTechnicalUsers
+      summary: 'Step: deactivate the technical users of an ended or declined subscription'
+      description: |
+        README 8.6. Precondition: SubscriptionDeactivated or SubscriptionDeclined.
+        Customer and provider account become INACTIVE (final), their clients are
+        disabled in the Portal IAM. Idempotent through offerSubscriptionId. No event.
+      x-permission: execute_steps_c2_m3
+      x-permission-scope: osp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StepSubscriptionRef' }
+      responses:
+        '200':
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StepResultSubscriptionTechnicalUsers' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+
 components:
   securitySchemes:
     portalIam:
@@ -522,10 +578,11 @@ components:
   schemas:
     Status:
       type: string
-      enum: [PENDING, ACTIVE, PENDING_DELETION, DELETED]
+      description: INACTIVE = account of an ended or declined subscription (README 8.6); final.
+      enum: [PENDING, ACTIVE, INACTIVE, PENDING_DELETION, DELETED]
     Origin:
       type: string
-      description: OWN = created by a person of the company; SUBSCRIPTION = created when a subscription was activated.
+      description: OWN = created by a person of the company; SUBSCRIPTION = created for a subscription (README 8.1).
       enum: [OWN, SUBSCRIPTION]
     SubscriptionParty:
       type: string
@@ -693,7 +750,10 @@ components:
         disabled: { type: boolean }
         usableForConnector:
           type: boolean
-          description: true if the account belongs to the company, is ACTIVE or PENDING, has origin OWN and is not disabled.
+          description: |
+            true if the account belongs to the company, is ACTIVE or PENDING, is not disabled
+            and has origin OWN; with offerSubscriptionId also the customer account of this
+            subscription (README 9.1).
 
     StepRequest:
       type: object
@@ -757,6 +817,14 @@ components:
           required: [companyId]
           properties:
             companyId: { type: string, format: uuid }
+
+    StepSubscriptionRef:
+      allOf:
+        - $ref: '#/components/schemas/StepRequest'
+        - type: object
+          required: [offerSubscriptionId]
+          properties:
+            offerSubscriptionId: { type: string, format: uuid }
 
     StepResult:
       type: object
@@ -827,6 +895,21 @@ components:
                     disable-company-technical-users: all accounts of the company
                     (status other than DELETED) with disabled true; enable-company-technical-users:
                     all with disabled false.
+                  items: { type: string, format: uuid }
+
+    StepResultSubscriptionTechnicalUsers:
+      allOf:
+        - $ref: '#/components/schemas/StepResult'
+        - type: object
+          properties:
+            result:
+              type: object
+              required: [offerSubscriptionId, technicalUserIds]
+              properties:
+                offerSubscriptionId: { type: string, format: uuid }
+                technicalUserIds:
+                  type: array
+                  description: All accounts of the subscription with status INACTIVE.
                   items: { type: string, format: uuid }
 
     EventBase:

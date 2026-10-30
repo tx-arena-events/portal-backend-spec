@@ -1,6 +1,6 @@
 # C3-M1 Company Profile
 
-**Version:** 0.2, as of 2026-10-28
+**Version:** 0.2, as of 2026-10-30
 **Capability:** C3 Company
 **Kind:** Hackathon
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
@@ -36,9 +36,9 @@ Callers:
 | Change request | request of the Company Admin to change core data or further identifiers with supporting documents; OSP staff decide (6.6) |
 | Supporting document | document for a change request, for example an extract from the commercial register |
 | Company role | role of the company in the dataspace, for example `ACTIVE_PARTICIPANT` (6.5). Not to be confused with portal roles and app roles in the Portal IAM. |
-| Terms | document that a company must consent to for a company role, for example terms of use. Identifier `agreementId`. |
+| Terms | document that a company must consent to for a company role, for example terms of use. Kept by C1-M2 with key and versions (C1-M2 6.8); identifier `agreementKey`, consent to one `version`. |
 | Consent | declaration of the company on terms: given (`ACTIVE`) or withdrawn (`INACTIVE`) |
-| Role catalogue | configuration of the installation: company roles with description, terms and who assigns them |
+| Role catalogue | configuration of the installation: company roles with description and who assigns them. The terms of a role are kept by C1-M2 (6.5). |
 | OSP company | the company that owns the OSP (`ospCompanyId`, FRAMEWORK 4.8); created from the seed data at first start |
 | Installation settings | shared file that every module reads at start (FRAMEWORK 4.8) |
 
@@ -81,11 +81,11 @@ Callers:
 | `DATABASE_URL` | own database `c3_m1` | |
 | `SETTINGS_FILE` | installation settings (FRAMEWORK 4.8); empty = no seed data check, no dataspace name, reference data from 6.4 | `config/installation.json` |
 | `COMPANY_ROLES_FILE` | role catalogue (6.5) | `config/company-roles.json` |
-| `LANGUAGES` | languages for descriptions and names of terms | `de,en` |
+| `LANGUAGES` | languages for descriptions | `de,en` |
 | `OSP_COMPANY_FILE` | seed data of the OSP company; empty = no seed data | `config/osp-company.json` |
 | `QUERY_MAX_COMPANIES` | maximum number of companies in a bulk query (9.2) | `100` |
-| `REGISTRATION_URL` | C1-M2: empty = built-in stand-in, `in-process` = in the same process, otherwise HTTP address | `in-process` |
-| `STUB_APPLICATIONS_FILE` | stand-in for C1-M2 only: applications (11.1) | `stub-applications.json` |
+| `REGISTRATION_URL` | C1-M2 (applications and terms): empty = built-in stand-in, `in-process` = in the same process, otherwise HTTP address | `in-process` |
+| `STUB_APPLICATIONS_FILE` | stand-in for C1-M2 only: applications in the format of C1-M2 `ApplicationInternal` (11.1) | `stub-applications.json` |
 | `EBW_CONNECTOR_URL` | EBW-Connector of the installation: expected `iss` of the verification attestations; JWKS at `{EBW_CONNECTOR_URL}/jwks`; empty = built-in stand-in (11.2) | `https://ebw.osp-a.example.org` |
 | `STUB_EBW_JWKS_FILE` | stand-in only: JWKS with the test keys | `stub-ebw-jwks.json` |
 | `EBW_CLIENT_ID` | expected `client_id` in the verification attestation (client of the portal at the EBW-Connector); empty = no check | `demo-osp` |
@@ -152,8 +152,9 @@ One row per company and terms, with the latest state.
 
 | Field | Type | Rule |
 |---|---|---|
-| `company_id` | uuid | primary key together with `agreement_id` |
-| `agreement_id` | uuid | terms from the role catalogue |
+| `company_id` | uuid | primary key together with `agreement_key` |
+| `agreement_key` | text | key of the terms at C1-M2 |
+| `agreement_version` | text | version consented to |
 | `status` | text | `ACTIVE` (given) or `INACTIVE` (withdrawn) |
 | `source_kind` | text | `APPLICATION` or `COMPANY` |
 | `source_ref` | text | for example `applicationId`, up to 100 characters |
@@ -286,14 +287,7 @@ The role catalogue is configuration of the installation and is in `COMPANY_ROLES
     {
       "companyRole": "ACTIVE_PARTICIPANT",
       "assignableBy": "COMPANY",
-      "descriptions": { "de": "Teilnehmer am Datenaustausch …", "en": "Participant in data exchange …" },
-      "agreements": [
-        {
-          "agreementId": "aa0a0000-7fbc-1f2f-817f-bce0502c1010",
-          "names": { "de": "Nutzungsbedingungen Teilnehmer", "en": "Terms & Conditions – Active Participant" },
-          "documentUrl": "https://osp-a.example.org/terms/active-participant-v1.pdf"
-        }
-      ]
+      "descriptions": { "de": "Teilnehmer am Datenaustausch …", "en": "Participant in data exchange …" }
     }
   ]
 }
@@ -306,20 +300,22 @@ The role catalogue is configuration of the installation and is in `COMPANY_ROLES
 | `COMPANY` | selectable in the application (C1-M2) and added or removed by the Company Admin (7.8, 7.9) |
 | `SEED` | only through the seed data |
 
-Initial values, following today's portal (terms with status "active"):
+The terms of a role are kept by C1-M2: the active versions with `scope` `COMPANY_ROLE` that name the role in `companyRoles` (C1-M2 6.8, 9.3; read through 11.1). The module keeps no terms of its own. Initial values, following today's portal (terms as in C1-M2 14.3):
 
-| Company role | `assignableBy` | Terms | Remark |
+| Company role | `assignableBy` | Terms (`agreementKey` at C1-M2) | Remark |
 |---|---|---|---|
-| `ACTIVE_PARTICIPANT` | `COMPANY` | terms of use for participants (`aa0a0000-7fbc-1f2f-817f-bce0502c1010`), security rules for participants (`aa0a0000-7fbc-1f2f-817f-bce0502c1013`) | |
-| `APP_PROVIDER` | `COMPANY` | terms of use for app providers (`aa0a0000-7fbc-1f2f-817f-bce0502c1011`) | |
-| `SERVICE_PROVIDER` | `COMPANY` | terms of use for service providers (`aa0a0000-7fbc-1f2f-817f-bce0502c1017`) | |
+| `ACTIVE_PARTICIPANT` | `COMPANY` | `terms-active-participant`, `security-regulations` | |
+| `APP_PROVIDER` | `COMPANY` | `terms-app-provider` | |
+| `SERVICE_PROVIDER` | `COMPANY` | `terms-service-provider` | |
 | `ONBOARDING_SERVICE_PROVIDER` | `SEED` | none | only the OSP company; also exists today |
+
+The role names are the same as in the catalogue of C1-M2 (`CATALOG_FILE`).
 
 Rules:
 
-- A role is active only if the company has consented to all terms of the role in the catalogue (consent `ACTIVE`).
-- In 7.8 the module rejects consents to terms that do not belong to the role. At activation (8.3) it takes over only consents to terms of the requested roles. The consents to the terms of the OSP and the dataspace given at submission stay with C1-M2.
-- A new version of terms gets a new `agreementId`. Existing roles stay active; re-consent is not part of version 0.2 (OP-11).
+- A role is active only if the company has consented to all terms of the role (consent `ACTIVE`, to any version of the key).
+- In 7.8 the module rejects consents to terms that do not belong to the role. At activation (8.3) it takes over only consents to terms of the requested roles. The consents to the terms of the OSP (`scope` `ALL`) given at submission stay with C1-M2.
+- A new version of terms (C1-M2 7.16) keeps its key. Existing roles and consents stay; re-consent is not part of version 0.2 (OP-11).
 - An active company keeps at least one active role with `assignableBy` `COMPANY`.
 - If the Company Admin removes a role, the module sets the consents to its terms to `INACTIVE`, unless the terms also belong to another active role.
 
@@ -457,17 +453,17 @@ Permission `edit_company`, scope `company`. Unknown or of another company: 404. 
 
 ### 7.7 `GET /api/c3-m1/companies/{companyId}/company-roles?lang=`
 
-Permission `view_company`, scope `company`. All roles of the catalogue with `assignableBy` `COMPANY` and all roles that the company has or had, each with status (`ACTIVE`, `REQUESTED`, `INACTIVE` or `NONE`), description in `lang` (default `en`) and, for each of the terms: name, document URL, consent status and time. This way the UI also shows the Company Admin the roles that can be added.
+Permission `view_company`, scope `company`. All roles of the catalogue with `assignableBy` `COMPANY` and all roles that the company has or had, each with status (`ACTIVE`, `REQUESTED`, `INACTIVE` or `NONE`), description in `lang` (default `en`) and, for each of the terms: key, active version, title and document URL (from C1-M2, 11.1), consented version, consent status and time. This way the UI also shows the Company Admin the roles that can be added.
 
 ### 7.8 `POST /api/c3-m1/companies/{companyId}/company-roles`
 
-Permission `edit_company_roles`, scope `company`. Add a role. Input: `companyRole`, `agreementIds` (terms that the Company Admin consents to for the company).
+Permission `edit_company_roles`, scope `company`. Add a role. Input: `companyRole`, `consents` (list of `agreementKey` and `version`: the terms that the Company Admin consents to for the company).
 
 1. Company not `ACTIVE`: 409 `invalid-state`.
 2. Role not in the catalogue: 400 `validation`. `assignableBy` not `COMPANY`: 409 `role-not-assignable`.
 3. Role already `ACTIVE`: 200 with the roles, no change.
-4. All terms of the role must be in `agreementIds`, otherwise 400 `consent-missing` with the missing IDs in `missing`. An ID that does not belong to the role: 400 `validation`.
-5. Store the consents (status `ACTIVE`, source `COMPANY`, `consented_by` = `sub`, `consented_at` = now), role `ACTIVE` with source `COMPANY`.
+4. Read the terms of the role at C1-M2 (11.1); not reachable: 502 `upstream-error`. Every term of the role must be in `consents` with its active version, otherwise 400 `consent-missing` with the missing keys in `missing` (another version counts as missing). A key that does not belong to the role: 400 `validation`.
+5. Store the consents (status `ACTIVE`, version, source `COMPANY`, `consented_by` = `sub`, `consented_at` = now), role `ACTIVE` with source `COMPANY`.
 6. Audit log, event `CompanyRolesChanged` with all active roles. Response 200 with the roles as in 7.7.
 
 ### 7.9 `DELETE /api/c3-m1/companies/{companyId}/company-roles/{companyRole}`
@@ -558,8 +554,8 @@ In onboarding and in a transfer to this OSP, after `ApplicationSubmitted` (kind 
 - **Behaviour:**
   1. Company exists: the same `application_id` gives `DONE` with the stored state, without event; a different one gives 409 `conflict`.
   2. Read the application at C1-M2 (11.1). Unknown: 404 `not-found`. C1-M2 not reachable: 502 `upstream-error`. Different `companyId` in the application: 409 `conflict`. Kind `REACTIVATION`: 409 `conflict`; `reactivate-company` exists for that. Application not submitted: 409 `invalid-state`.
-  3. Check the data as in section 5 and 6.4, the requested roles against the catalogue (`assignableBy` `COMPANY`). Verification method with verification attestation but without EBWOID: 400 `validation`.
-  4. Create in one transaction: status `REQUESTED`, without BPN; core data source `EBW` (verification attestation) with `core_data_verified_at` = `verifiedAt` and `verification_ref` = `jti`, or `MANUAL` (supporting documents) without both; identifiers with the source from the application; requested roles with status `REQUESTED` and source `APPLICATION`. Audit log, event `CompanyCreated`.
+  3. Check the data as in section 5 and 6.4, the requested roles against the catalogue (`assignableBy` `COMPANY`). Verification `EBW` but without EBWOID: 400 `validation`.
+  4. Create in one transaction: status `REQUESTED`, without BPN; core data source `EBW` (verification `EBW`) with `core_data_verified_at` = `attestation.verifiedAt` and `verification_ref` = `attestation.attestationId` (the `jti`), or `MANUAL` (verification `DOCUMENTS`) without both; identifiers with the source from the application; requested roles with status `REQUESTED` and source `APPLICATION`. Audit log, event `CompanyCreated`.
 - **Result:** `companyId`, `status`, `bpn` (empty), `coreDataSource`.
 - **Event:** `CompanyCreated`.
 
@@ -592,7 +588,7 @@ In onboarding and in a transfer at the end, after `assign-company-admin` (C2-M2)
   1. Status `ACTIVE`: `DONE` with the state, without event. `REJECTED` or `INACTIVE`: 409 `invalid-state`.
   2. Without BPN: 409 `identifier-missing`.
   3. `applicationId` not equal to the `application_id` of the company: 409 `conflict`.
-  4. Read the consents of the application at C1-M2 (11.1). Every role with status `REQUESTED` whose terms all have consent becomes active; the consents are stored with source `APPLICATION`, `consented_by` and the time from the application. A role with missing consent stays `REQUESTED` and is listed in the result under `pendingCompanyRoles`. If no role would become active: 409 `roles-without-consent`, nothing is changed.
+  4. Read the application (`consents`, `applicant.sub`) and the terms of the requested roles at C1-M2 (11.1). Every role with status `REQUESTED` for whose terms the application has a consent (same `agreementKey`) becomes active; the consents are stored with source `APPLICATION`, the version, `consented_by` = `applicant.sub` and `consented_at` = `givenAt`. A role with missing consent stays `REQUESTED` and is listed in the result under `pendingCompanyRoles`. If no role would become active: 409 `roles-without-consent`, nothing is changed.
   5. In one transaction: roles and consents as in 4; with source `MANUAL` `core_data_verified_at` = now, if empty (OSP staff have approved the supporting documents in C1-M3); status `ACTIVE`, `activated_at`; audit log; event `CompanyActivated` with BPN and active roles. There is no separate `CompanyRolesChanged` in this case.
 - **Result:** `companyId`, `status`, `bpn`, `companyRoles`, `pendingCompanyRoles`.
 - **Event:** `CompanyActivated`.
@@ -633,8 +629,8 @@ In a reactivation after `ApplicationApproved` with kind `REACTIVATION` (FRAMEWOR
   1. Unknown: 404 `not-found`. Status `ACTIVE`: `DONE` with the state, without event. `REQUESTED` or `REJECTED`: 409 `invalid-state`.
   2. Read the application at C1-M2 (11.1). Unknown: 404 `not-found`. C1-M2 not reachable: 502 `upstream-error`. Different `companyId`: 409 `conflict`. Kind does not match the reason: 409 `invalid-state`.
   3. Core data from the application:
-     - Verification method with verification attestation: EBWOID equal to the stored one, country equal to `countryCode`, otherwise 409 `company-mismatch`. Name, address and EUID as in 6.3; source `EBW`, `core_data_verified_at` = `verifiedAt`, `verification_ref` = `jti`.
-     - Verification method with supporting documents: country equal to `countryCode`, otherwise 409 `company-mismatch`. Name, address and the identifiers with source `DECLARED` from the application; identifiers with source `BUSINESS_WALLET` stay. Source `MANUAL`, `core_data_verified_at` = now (OSP staff have approved the supporting documents in C1-M3).
+     - Verification `EBW`: EBWOID equal to the stored one, country equal to `countryCode`, otherwise 409 `company-mismatch`. Name, address and EUID as in 6.3; source `EBW`, `core_data_verified_at` = `attestation.verifiedAt`, `verification_ref` = `attestation.attestationId`.
+     - Verification `DOCUMENTS`: country equal to `countryCode`, otherwise 409 `company-mismatch`. Name, address and the identifiers with source `DECLARED` from the application; identifiers with source `BUSINESS_WALLET` stay. Source `MANUAL`, `core_data_verified_at` = now (OSP staff have approved the supporting documents in C1-M3).
      - Check the values as in section 5 and 6.4, otherwise 400 `validation`.
   4. In one transaction: core data, status `ACTIVE`, `deactivation_reason` empty, `reactivated_at`; audit log; events `CompanyDataChanged` (if data has changed) and `CompanyReactivated` with BPN and active roles.
 - **Result:** `companyId`, `status`, `bpn`, `companyRoles`, `changedFields`.
@@ -668,7 +664,7 @@ C1-M3 decides whether a match is a duplicate.
 
 ### 9.4 `GET /api/c3-m1/internal/company-roles?lang=`
 
-Role catalogue: per role `companyRole`, `assignableBy`, description in `lang` and all descriptions, terms with names and document URL. For C1-M2 (selectable roles in the application and terms to be consented to at submission) and C2-M3 (assignable roles of technical users per company role). People do not read the catalogue here, but through C1-M2 (application) or 7.7 (own company).
+Role catalogue: per role `companyRole`, `assignableBy`, description in `lang` and all descriptions. For C2-M3 (assignable roles of technical users per company role) and other modules. The terms of the roles are at C1-M2 (9.3 there). People do not read the catalogue here, but through C1-M2 (application) or 7.7 (own company).
 
 ## 10. Events
 
@@ -697,9 +693,10 @@ Every neighbour has a built-in stand-in (FRAMEWORK 4.7): empty address = stand-i
 
 | Call | Response (fields used) | Built-in stand-in |
 |---|---|---|
-| `get_application(applicationId)`, over HTTP `GET /api/c1-m2/internal/applications/{applicationId}` | `applicationId`, `companyId`, `kind` (`ONBOARDING`, `REACTIVATION`, `TRANSFER`), `status`, `verificationMethod` (`ATTESTATION` or `DOCUMENTS`), with `ATTESTATION` the evaluated verification attestation with `jti` and `verifiedAt`; `company` (`legalName`, `shortName`, `address`, `identifiers` with `type`, `value`, `source`); `requestedCompanyRoles`; `consents` (each with `agreementId`, `status`, `consentedAt`, `consentedBy`; empty before submission) | reads `STUB_APPLICATIONS_FILE`; unknown ID: 404 |
+| `get_application(applicationId)`, over HTTP `GET /api/c1-m2/internal/applications/{applicationId}` (`ApplicationInternal`, C1-M2 9.1) | `id`, `companyId`, `kind` (`ONBOARDING`, `REACTIVATION`, `TRANSFER`), `existingCompany`, `status`, `verification` (`EBW` or `DOCUMENTS`), `applicant.sub`; `companyData` (`legalName`, `shortName`, `address` with `streetName`, `streetNumber`, `postalCode`, `city`, `region`, `countryCode`; `identifiers` with `type`, `value`, `source` `ATTESTATION` or `APPLICANT`); `companyRoles`; with `EBW` `attestation` (`attestationId` = `jti`, `verifiedAt`); `consents` (each with `agreementKey`, `version`, `language`, `givenAt`; empty before submission) | reads `STUB_APPLICATIONS_FILE` (same format); unknown ID: 404 |
+| `list_agreements()`, over HTTP `GET /api/c1-m2/internal/agreements` (`AgreementVersion`, C1-M2 9.3) | active versions: `agreementKey`, `version`, `scope`, `companyRoles`, `title`, `documentUrls` | the initial values of C1-M2 14.3 |
 
-Mapping: `legalName` → `name`; `address.streetName` → `street`, `address.streetNumber` → `houseNumber`, the other address fields with the same name; identifiers with source from the verification attestation → `BUSINESS_WALLET`, all others → `DECLARED`; `verificationMethod` `ATTESTATION` → `EBW`, `DOCUMENTS` → `MANUAL`.
+Mapping: `companyData.legalName` → `name`, `companyData.shortName` → `shortName`; `address.streetName` → `street`, `address.streetNumber` → `houseNumber`, the other address fields with the same name; identifier source `ATTESTATION` → `BUSINESS_WALLET`, `APPLICANT` → `DECLARED`; `verification` `EBW` → core data source `EBW`, `DOCUMENTS` → `MANUAL`; `companyRoles` are the requested roles; `applicant.sub` → `consented_by`; `givenAt` → `consented_at`.
 
 ### 11.2 C5-M1 EBW-Connector of the installation (`EBW_CONNECTOR_URL`)
 
@@ -779,6 +776,8 @@ The module is done when these cases work with the built-in stand-ins for C1-M2 a
 24. `identifier-matches` with the VAT ID of U1 in a different spelling (`de 123.456.789`): match U1 with `matchedOn` `VAT_ID`; with `excludeCompanyId` = U1: no match.
 25. Seed data: At first start the OSP company `11111111-1111-4111-8111-111111111111` is created, `ACTIVE` with `ONBOARDING_SERVICE_PROVIDER` and `BPNL00000000OSPA`, without events; a second start changes nothing. `OSP_COMPANY_FILE` with a `companyId` other than `ospCompanyId`: the start aborts with an error message.
 26. Privacy: neither logs nor events nor `audit_log` contain a verification attestation, the content of a supporting document, a token or names of people.
+27. P1 adds `APP_PROVIDER` to U1 with `consents` `[{ "agreementKey": "terms-app-provider", "version": "1.0" }]`: 200, role `ACTIVE`, consent stored with version `1.0`, `CompanyRolesChanged`. Without consents: 400 `consent-missing` with `missing` `["terms-app-provider"]`; with version `0.9`: the same; with `security-regulations` in addition: 400 `validation`.
+28. `create-company` and `activate-company` read the stand-in file in the format of C1-M2 `ApplicationInternal` (`id`, `verification`, `companyData`, `companyRoles`, `attestation.attestationId`, `consents` with `agreementKey`); `consentedBy` is the `applicant.sub` of A1.
 
 ## 14. Test data
 
@@ -804,7 +803,7 @@ Test IDs as in FRAMEWORK 7a; test person and test company as in C5-M1 and C3-M2.
 | P2 | `5a1c0002-0000-4000-8000-000000000002` | U1 | `view_company` | Member of U1 |
 | P3 | `5a1c0003-0000-4000-8000-000000000003` | U2 | `view_company`, `edit_company`, `edit_company_roles` | Company Admin of U2 |
 | P4 | `5a1c0004-0000-4000-8000-000000000004` | – | none of this module | `Applicant` |
-| S1 | `5a1c0011-0000-4000-8000-000000000011` | OSP company | `view_companies`, `review_company_changes` | `OSP Reviewer` |
+| S1 | `bbede0f3-fbc4-433b-b7ca-1982e8724912` | – | `view_companies`, `review_company_changes` | Rolf Prüfer, `OSP Reviewer` |
 | S2 | `5a1c0012-0000-4000-8000-000000000012` | OSP company | `view_companies`, `manage_companies`, `review_company_changes`, `view_company`, `edit_company` | `OSP Admin`, also `Company Admin` of the OSP company |
 | M1 | service account | – | `query_c3_m1`, `execute_steps_c3_m1` | other modules over HTTP |
 
@@ -822,13 +821,13 @@ Test IDs as in FRAMEWORK 7a; test person and test company as in C5-M1 and C3-M2.
 
 | Application | `applicationId` | Kind | Verification method | Company | Content |
 |---|---|---|---|---|---|
-| A1 | `a0000001-0000-4000-8000-000000000001` | `ONBOARDING` | `ATTESTATION`, `jti` `3f6c1e2a-7b4d-4e8f-9a51-2c0d6b8e4f17` | U1 | Musterstraße 1, 70569 Stuttgart, region `BW`, `DE`; `EBWOID` `EBWOID-DE-0000000001` and `EUID` `DEXX001T.HRB100001` from the verification attestation, `VAT_ID` `DE123456789` declared; role `ACTIVE_PARTICIPANT`; consents to both terms of the role, `consentedBy` P1 |
-| A2 | `a0000002-0000-4000-8000-000000000002` | `ONBOARDING` | `DOCUMENTS` | U2 | Hafenstraße 5, 68159 Mannheim, `BW`, `DE`; `COMMERCIAL_REG_NUMBER` `HRB 200002`, `VAT_ID` `DE987654321`; role `ACTIVE_PARTICIPANT` with consents, `consentedBy` P3 |
+| A1 | `a0000001-0000-4000-8000-000000000001` | `ONBOARDING` | `EBW`, `attestationId` `3f6c1e2a-7b4d-4e8f-9a51-2c0d6b8e4f17` | U1 | Musterstraße 1, 70569 Stuttgart, region `BW`, `DE`; `EBWOID` `EBWOID-DE-0000000001` and `EUID` `DEXX001T.HRB100001` from the verification attestation, `VAT_ID` `DE123456789` declared; role `ACTIVE_PARTICIPANT`; consents to `terms-active-participant` and `security-regulations` (version `1.0`), applicant P1 |
+| A2 | `a0000002-0000-4000-8000-000000000002` | `ONBOARDING` | `DOCUMENTS` | U2 | Hafenstraße 5, 68159 Mannheim, `BW`, `DE`; `COMMERCIAL_REG_NUMBER` `HRB 200002`, `VAT_ID` `DE987654321`; role `ACTIVE_PARTICIPANT` with consents, applicant P3 |
 | A3 | `a0000003-0000-4000-8000-000000000003` | `ONBOARDING` | `DOCUMENTS` | U3 | Ringstraße 3, 76131 Karlsruhe, `DE`; `VAT_ID` `DE111111111`; role `ACTIVE_PARTICIPANT`, no consents |
-| A5 | `a0000005-0000-4000-8000-000000000005` | `REACTIVATION` | `ATTESTATION`, new `jti`, `verifiedAt` at test time | U1 | as A1, address Musterstraße 7 |
+| A5 | `a0000005-0000-4000-8000-000000000005` | `REACTIVATION` | `EBW`, new `attestationId`, `verifiedAt` at test time | U1 | as A1, address Musterstraße 7 |
 | A6 | `a0000006-0000-4000-8000-000000000006` | `REACTIVATION` | `DOCUMENTS` | U2 | as A2 |
 | A7 | `a0000007-0000-4000-8000-000000000007` | `TRANSFER` | `DOCUMENTS` | U2 | as A2 (return) |
-| A8 | `a0000008-0000-4000-8000-000000000008` | `TRANSFER` | `ATTESTATION` | U4 | Beispielweg 2, 80331 München, `BY`, `DE`; `EBWOID` `EBWOID-DE-0000000002`; role `ACTIVE_PARTICIPANT` with consents |
+| A8 | `a0000008-0000-4000-8000-000000000008` | `TRANSFER` | `EBW` | U4 | Beispielweg 2, 80331 München, `BY`, `DE`; `EBWOID` `EBWOID-DE-0000000002`; role `ACTIVE_PARTICIPANT` with consents |
 
 **Verification attestations for 7.3**, created at test time and signed with the test key from `stub-ebw-jwks.json` (private part only in the test data). Content as the example in C5-M1 14.5 with `iss` `https://ebw-connector.example.org`, `aud` `portal-registration`, `client_id` `demo-osp`, `purpose` `onboarding`, own `jti`. Differences:
 
@@ -843,7 +842,7 @@ Test IDs as in FRAMEWORK 7a; test person and test company as in C5-M1 and C3-M2.
 
 **Further files:**
 
-- `company-roles.json`: initial values from 6.5, descriptions `de` and `en`.
+- `company-roles.json`: initial values from 6.5, descriptions `de` and `en`. The terms come from the stand-in for C1-M2 (11.1).
 - `osp-company.json`: `11111111-1111-4111-8111-111111111111`, "OSP A Beispiel GmbH", Am Prüfstand 1, 70569 Stuttgart, `DE`, BPN `BPNL00000000OSPA`, identifier `VAT_ID` `DE222222222`, roles `ONBOARDING_SERVICE_PROVIDER` and `ACTIVE_PARTICIPANT`.
 - Supporting documents: a small valid PDF file `auszug.pdf`, a text file with the same name.
 
@@ -860,3 +859,4 @@ Test IDs as in FRAMEWORK 7a; test person and test company as in C5-M1 and C3-M2.
 - **Identifiers:** types and patterns from the shared file of the reference data (OP-13); EUID and EBWOID with loose validation (OP-12).
 - **New events:** `CompanyChangeRequestSubmitted`, `CompanyChangeRequestClosed`. `CompanyDataChanged` with `coreDataChanged` and `coreDataSource`; `CompanyCreated` with `coreDataSource` instead of `registeringPspId`.
 - **Queries:** `CompanyInternal` returns address, identifiers, source of the core data and reason of the deactivation; `registeringPspId` and `identifierStatus` are dropped. The duplicate search 9.3 complements the duplicate check at the CSP.
+- **Terms and application (30 Oct 2026):** terms are those of C1-M2 (`agreementKey` with `version`) instead of an own `agreementId`; the role catalogue holds no terms, 7.8 takes `consents`. 11.1 reads the application with the field names of C1-M2 `ApplicationInternal` (`id`, `verification`, `companyData`, `companyRoles`, `attestation`, `consents`).

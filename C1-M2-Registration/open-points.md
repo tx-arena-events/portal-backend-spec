@@ -1,6 +1,6 @@
 # C1-M2 Registration: open points
 
-**As of:** 2026-10-28, version 0.2 (OSP 2.0)
+**As of:** 2026-10-30, version 0.2 (OSP 2.0)
 
 For version 0.2 the README fixes each of these points so that the module can be built. The decisions are provisional and still to be agreed. Questions that concern several modules are listed with their number (OP-xx) in `../open-points.md`.
 
@@ -43,7 +43,7 @@ Taken over into FRAMEWORK 5 to 7 on 28 Oct 2026 (events with their fields, queri
 | 2 | addition to the framework | 6: `ApplicationCreated` with `kind`; `ApplicationWithdrawn`, `ApplicationCompleted` with `applicationId`, `companyId` | `ApplicationCreated` and `ApplicationWithdrawn` additionally with `existingCompany`; `ApplicationWithdrawn` and `ApplicationCompleted` additionally with `kind` | The flow must know whether a company must be created or declined (`create-company`, `reject-company`): not for `REACTIVATION` and return |
 | 3 | addition to the framework | 6: no events about terms | new event `AgreementVersionActivated` (`agreementKey`, `version`, `party`, `reconsentRequired`, `reconsentDueAt`) | trigger the re-consent of existing companies (OP-11) by event, without polling |
 | 4 | addition to the framework | 7: queries C1-M3 → C3-M2, C1-M2 → C3-M1 | new query C1-M2 → C1-M3 `GET /internal/review-cases?applicationId=` (C1-M3 section 9) | withdrawal only until the decision; `reviewStatus` for the person |
-| 5 | addition to the framework | 7: queries | new query `GET /internal/agreements` (9.3) for C3-M1 | versions of the terms for the re-consent |
+| 5 | addition to the framework | 7: queries | new query `GET /internal/agreements` (9.3) for C3-M1 | terms of the company roles and versions for the re-consent |
 | 6 | addition to the framework | 5.6: transfer without return | `TRANSFER` with reference to a company of this installation that has transferred away (return) | C3-M2 provides for the return (`TRANSFERRED_AWAY` → `transfer-company`); without a reference there would be two companies with the same BPN |
 | 7 | deviation | 4.3: `own` applies to own objects | reference data and terms (7.1) with `register_company` in scope `own`, without object check | reference data belongs to nobody; the applicant needs it |
 
@@ -67,7 +67,7 @@ Taken over into FRAMEWORK 5 to 7 on 28 Oct 2026 (events with their fields, queri
 3. **Applications by OSP staff.** May a member of OSP staff file an application personally, and is their account bound to the company of the OSP? Cross-module, OP-41.
 4. **Name change between sign-in and onboarding.** If the Portal IAM does not update the names at every sign-in, the binding to the person fails (6.4 step 10). To be agreed with C2-M5.
 5. **Return for correction** instead of decline: would need a transition `SUBMITTED` → `CREATED` (see open questions in C1-M3).
-6. **Role catalogue in one place.** C1-M2 keeps the selectable company roles with their terms, C3-M1 has its own role catalogue. Cross-module, OP-13.
+6. **Role catalogue in one place.** C1-M2 keeps the selectable company roles and the terms; C3-M1 reads the terms from here since 30 Oct 2026 and keeps only its list of roles. Cross-module, OP-46.
 7. **Re-consent of existing companies:** place (C3-M1) and flow. Cross-module, OP-11.
 8. **Supporting documents:** malware scan, storage outside the database for large volumes, retention. Cross-module for the retention periods, OP-20.
 9. **Formats of EUID and EBWOID.** Cross-module, OP-12.

@@ -1,6 +1,6 @@
 # Cross-module open points
 
-**As of:** 2026-10-29, after the switch to OSP 2.0
+**As of:** 2026-10-30, after the switch to OSP 2.0
 
 This file lists the open questions that concern several modules or need a fundamental decision. Questions that concern only one module stay in that module's `open-points.md`. There, cross-module questions are referred to only by their number (OP-xx).
 
@@ -26,8 +26,13 @@ Important for the hackathon on 6 Nov 2026: **OP-36**, **OP-37**, **OP-40**, **OP
 | OP-43 | **Presentations as strings:** For the hackathon, C5-M1 is lenient: `vp_token` per credential also as a string, several presentations per credential (the first valid one counts), `"apu": null` in the JWE header (C5-M1 6.3, 7.8). Later perhaps strict again according to OpenID4VP 1.0. | C5-M1 | project owner | decided 28 Oct 2026 (for the hackathon) |
 | OP-44 | **Several CSPs:** federation of trust lists and company identifier, connection between dataspaces. | C3-M2, C5-M1 | association | later |
 | OP-45 | **Accounts on deactivation and reactivation:** The accounts stay active but, for the duration of the deactivation, lose the company, the portal roles in the company and the app roles; C2-M2 remembers them and restores them on reactivation. This way a person with a mandate can apply for the reactivation themselves; after the approval they become `Company Admin` (FRAMEWORK 5.4, 5.5; C2-M2 8.9, 8.10). Replaces "accounts deactivated" in OP-07. | C1-M2, C2-M2, Process Orchestration | project owner | proposal |
-| OP-46 | **One catalogue of company roles:** C1-M2 (selection in the application, terms) and C3-M1 (roles and consents on the company) both keep a role catalogue. Proposal: a common file in the installation settings (OP-36) that both read; the versions of the terms stay in C1-M2. | C1-M2, C3-M1 | project owner | proposal |
+| OP-46 | **One catalogue of company roles:** Since 30 Oct 2026, C1-M2 alone keeps the terms and their assignment to roles (`agreementKey` with `version`); C3-M1 reads them (C3-M1 6.5). Both still keep the list of roles. Proposal: a common file in the installation settings (OP-36) that both read. | C1-M2, C3-M1 | project owner | partly |
 | OP-47 | **E-mail addresses of persons:** the PID provides no e-mail address, and the Portal IAM stores none (C2-M5). Notifications (C11) are therefore only in the portal for now. Proposal for later: the person gives a contact address voluntarily and confirms it with a code; stored in C11, not in the Portal IAM; apps do not get it (FRAMEWORK 4.6). | C2-M5, C11, user interface | project owner | open |
+| OP-48 | **Query for OSP staff:** Notifications addresses OSP staff through a permission (C11-M1 6.1). A query `GET /internal/osp-staff?permission=` in C2-M2 would allow personal notifications for staff; needed only if tasks of staff should differ per person (C11-M1 open question 2). | C2-M2, C11-M1 | other part | open |
+| OP-49 | **Second approval:** C1-M3 has no event for the status `AWAITING_SECOND_APPROVAL`, so Notifications cannot inform the second reviewer (OP-19, C11-M1 open question 3). Proposal: event `ApplicationAwaitingSecondApproval` with `applicationId`. | C1-M3, C11-M1 | other part | proposal |
+| OP-50 | **Provider systems without a person:** Today a provider system starts the setup of a subscription by machine. With OSP 2.0, technical users do not call modules (FRAMEWORK 4.2), so providers work through the UI (C10-M1 open question 1). Is a permission for technical users of providers needed? | C2-M3, C2-M5, C10-M1 | project owner | open |
+| OP-51 | **Notice on new terms:** Who is informed on `AgreementVersionActivated` with `reconsentRequired`, and who collects the re-consent of existing companies (OP-11, C11-M1 open question 5)? | C1-M2, C3-M1, C11-M1 | project owner | open |
+| OP-52 | **Notice on deactivation:** After `disable-company-users` the people no longer belong to the company, so a notice "company deactivated" finds nobody. Notify before, or not at all (C11-M1 open question 4)? | C2-M2, C3-M1, C11-M1 | other part | open |
 
 ## A. Portal Service Provider (PSP)
 
@@ -69,7 +74,7 @@ With OSP 2.0, PSPs, PSP admission and delegation are dropped. The points keep th
 | OP-16 | **Four-eyes principle:** configurable cases in C1-M3; the `sub` in the token is compared. PSP admission is dropped. | C1-M3 | OSP | decided 26 Oct 2026, carried over to OSP 2.0 on 28 Oct 2026 |
 | OP-17 | **Verification attestation bound to the PSP:** dropped 28 Oct 2026. The verification attestation comes from the EBW-Connector of the own installation; the person gives the consents themselves on submission. | C1-M2, C5-M1 | – | dropped 28 Oct 2026 |
 | OP-18 | **Retry after errors:** steps report `retryable`; Process Orchestration retries with growing wait times, then notifies OSP staff. | all modules with steps | other part | proposal |
-| OP-19 | **Notifications:** notice to OSP staff about new review cases, invitations to people, notice to providers about new app roles. | C1-M3, C2-M2 | other part, project owner | open |
+| OP-19 | **Notifications:** notice to OSP staff about new review cases, invitations to people, notice to providers about new app roles. C11-M1 covers these with its rules R1 to R17, except for the second approval (OP-49); invitation links are passed on by the UI. | C1-M3, C2-M2, C11-M1 | other part, project owner | partly |
 | OP-20 | **Retention and deletion periods:** verification attestations, supporting documents, audit logs, audit log of the EBW-Connector. | C1-M2, C2-M2, C2-M3, C5-M1, others | OSP, data protection | open |
 
 ## D. Delegation and change of PSP

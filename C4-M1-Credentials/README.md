@@ -1,6 +1,6 @@
 # C4-M1 Credentials
 
-**Version:** 0.2, as of 2026-10-28
+**Version:** 0.2, as of 2026-10-30
 **Capability:** C4 Dataspace
 **Kind:** Hackathon
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
@@ -508,8 +508,8 @@ The test Portal IAM needs:
 Files:
 
 - `installation.json` (`SETTINGS_FILE`): `ospId` of OSP A `22222222-2222-4222-8222-222222222222` (or, for cases 14 to 16, OSP B `99a5685c-7397-402c-88de-b1b3a939ecc9`), `dataspace.memberOf` `catena-x`, `dataspace.name` `Catena-X` (example values, OP-14).
-- `stub-companies.json`: U1 `11111111-1111-4111-8111-111111111111` (Beispiel Maschinenbau GmbH, `REQUESTED`, BPN `BPNLC00000010000`; for case 17 `ACTIVE`), U2 `c0000002-0000-4000-8000-000000000002` (`REQUESTED`, without BPN), U3 `c0000003-0000-4000-8000-000000000003` (`REQUESTED`, BPN `BPNL0000000000U3`), U4 `c0000004-0000-4000-8000-000000000004` (`ACTIVE`, BPN `BPNL0000000000U4`), U5 `c0000005-0000-4000-8000-000000000005` (`ACTIVE`, BPN `BPNL0000000000U5`; for case 18 `INACTIVE`), U6 `c0000006-0000-4000-8000-000000000006` (`REQUESTED`, BPN `BPNL0000000000U6`).
-- `stub-wallets.json`: U1 `ACTIVE`, provider `STUB`, DID `did:web:wallet.example.org:BPNLC00000010000`; U3 not ready (`REQUESTED`); U4 `ACTIVE`, provider `SAP_DIV`, issuance mode `ISSUER_WRITES`, location of the DID document `https://wallet.example.org/BPNL0000000000U4/did.json`, holder access with test values; U5 `ACTIVE`, provider `IDENTITY_HUB`, `HOLDER_REQUESTS`, `providerRef` `BPNL0000000000U5`, holder access with a test API key; U6 `ACTIVE`, provider `CSP`, `HOLDER_REQUESTS`, DID `did:web:csp-wallet.example.org:BPNL0000000000U6`, holder access with a test API key; one more company with provider `BRING_YOUR_OWN`, `CREDENTIAL_OFFER`.
+- `stub-companies.json`: U1 `c0000001-0000-4000-8000-000000000001` (Beispiel Maschinenbau GmbH, FRAMEWORK 7a, `REQUESTED`, BPN `BPNLIUK2REMLK3F4`; for case 17 `ACTIVE`), and without names only for the tests of this module: U2 `c4100002-0000-4000-8000-000000000002` (`REQUESTED`, without BPN), U3 `c4100003-0000-4000-8000-000000000003` (`REQUESTED`, BPN `BPNL0000000000U3`), U4 `c4100004-0000-4000-8000-000000000004` (`ACTIVE`, BPN `BPNL0000000000U4`), U5 `c4100005-0000-4000-8000-000000000005` (`ACTIVE`, BPN `BPNL0000000000U5`; for case 18 `INACTIVE`), U6 `c4100006-0000-4000-8000-000000000006` (`REQUESTED`, BPN `BPNL0000000000U6`).
+- `stub-wallets.json`: U1 `ACTIVE`, provider `STUB`, DID `did:web:wallet.example.org:BPNLIUK2REMLK3F4`; U3 not ready (`REQUESTED`); U4 `ACTIVE`, provider `SAP_DIV`, issuance mode `ISSUER_WRITES`, location of the DID document `https://wallet.example.org/BPNL0000000000U4/did.json`, holder access with test values; U5 `ACTIVE`, provider `IDENTITY_HUB`, `HOLDER_REQUESTS`, `providerRef` `BPNL0000000000U5`, holder access with a test API key; U6 `ACTIVE`, provider `CSP`, `HOLDER_REQUESTS`, DID `did:web:csp-wallet.example.org:BPNL0000000000U6`, holder access with a test API key; one more company with provider `BRING_YOUR_OWN`, `CREDENTIAL_OFFER`.
 - Key of the OSP (`OSP_SIGNING_KEY_FILE`): a key generated in the test (ES256); the CSP test server knows the public part for the `ospId`.
 - For cases 12 and 13: `ISSUER_MODE` = `OWN`, `ISSUER_ROUTES` = `SAP_DIV:CREDENTIAL_ISSUER,IDENTITY_HUB:ISSUER_SERVICE,CSP:ISSUER_SERVICE` and the addresses of the test servers.
 - For cases 14 to 16: `ISSUER_MODE` = `CSP`, `CSP_ISSUER_URL` and `CSP_TOKEN_URL` pointing to the test server, `CSP_ISSUER_DID` = `did:web:issuer.csp.example.org`.

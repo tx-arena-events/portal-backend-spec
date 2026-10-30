@@ -1,6 +1,6 @@
 # Framework for the module specs (OSP 2.0)
 
-**As of:** 2026-10-29 (switch to OSP 2.0 on 2026-10-28). Binding for all module specs of this part. Modules take over what is written here and do not reinvent it. Deviations go into the module's `open-points.md`. Open questions that concern several modules are in the cross-module [open-points.md](open-points.md). The version for the PSP architecture is in the git history of this repository.
+**As of:** 2026-10-30 (switch to OSP 2.0 on 2026-10-28). Binding for all module specs of this part. Modules take over what is written here and do not reinvent it. Deviations go into the module's `open-points.md`. Open questions that concern several modules are in the cross-module [open-points.md](open-points.md). The version for the PSP architecture is in the git history of this repository.
 
 Overview graphic: [architecture-overview.png](architecture-overview.png).
 
@@ -98,7 +98,7 @@ Sections that do not fit a module are dropped with a one-sentence reason; the nu
 - **Permissions** are client roles on the client `portal-core` in the Portal IAM, named in English in snake_case, in the form `<verb>_<object>`, e.g. `register_company`, `review_application`. Each module lists its permissions in section 6, with their scope (4.3).
 - **Portal roles** are composite roles on the client `portal-core` (defined in C2-M5) and bundle permissions. For people of a company: `Company Admin`, `IT Admin`, `Member`. For OSP staff: `OSP Reviewer`, `OSP Admin`. Every new account has the portal role `Applicant` (submit applications only, 5.2).
 - **Technical users** of companies (connectors, programs) and **app users** (people at apps) do not call the modules; they get tokens only for apps and central services.
-- **Process Orchestration and other modules** call in the same process without a token. For calls over HTTP, the permissions `execute_steps_<module>` (e.g. `execute_steps_c1_m2`) and `query_<module>` apply.
+- **Process Orchestration and other modules** call in the same process without a token. For calls over HTTP, the permissions `execute_steps_<module>` and `query_<module>` apply, with the full module identifier in lower case (e.g. `execute_steps_c1_m2`, `query_c6_m1`).
 - **Callbacks from external systems** (issuer, dataspace wallet, CSP): one service account per system in the Portal IAM with exactly one permission; authentication with `private_key_jwt` where the system supports it, otherwise a client secret as a transition (decided on 26 Oct 2026, OP-22).
 
 ### 4.3 Company reference instead of delegation
@@ -162,8 +162,8 @@ No flow in the installation. The governance of the dataspace admits an OSP, and 
 **Two ways** (OP-35, still valid): **with Business Wallet** as below; **without Business Wallet** with supporting documents and a manual review by OSP staff (C1-M2, C1-M3). The OSP can switch off the way without Business Wallet by configuration. From step 4, both ways are the same.
 
 1. **Sign-in.** The person signs in at the OSP's portal: the Portal IAM forwards to the EBW-Connector (scopes `openid profile`; PID from the EUDI Wallet). At the first login, an account without a company and with the portal role `Applicant` is created (C2-M5).
-2. **Verification attestation.** "Register company": the UI fetches the verification attestation from the EBW-Connector (scopes `openid profile representation company attestation`): PID and mandate from the EUDI Wallet, LPID from the Business Wallet. The mandate is required.
-3. **Application.** The person creates the application (C1-M2, permission `register_company`, scope `own`): company data, verification attestation, requested company roles. C1-M2 assigns the future `companyId` and checks the verification attestation against the EBW-Connector of the installation. → `ApplicationCreated`
+2. **Verification attestation.** "Register company": the server part of the UI (backend for frontend) fetches the verification attestation from the EBW-Connector, as an OIDC client of its own (client ID as in 7a; authorization code with PKCE and `private_key_jwt` with a key of the UI, C5-M1 6.8; a browser application alone cannot hold this key). Scopes `openid profile representation company attestation`: PID and mandate from the EUDI Wallet, LPID from the Business Wallet. The mandate is required. The attestation comes in the token response as `ebw_attestation`.
+3. **Application.** The person creates the application (C1-M2, permission `register_company`, scope `own`): the UI sends company data, verification attestation and requested company roles with the person's token from the Portal IAM. C1-M2 assigns the future `companyId` and checks the verification attestation against the EBW-Connector of the installation. → `ApplicationCreated`
 4. **Submission** with the consents (terms of the OSP and of the dataspace). → `ApplicationSubmitted`
    - Flow: C3-M1 `create-company` (status `REQUESTED`) → `CompanyCreated`, only without an existing company (`existingCompany` `false`); C1-M3 `open-review`. The automatic pre-check asks C3-M2 `find-companies`: is the company (EBWOID, EUID, name and country) already registered with an OSP, here or with another one?
 5. **Decision** by OSP staff (C1-M3, portal role `OSP Reviewer`). → `ApplicationApproved` or `ApplicationDeclined` (then C1-M2 `close-application`, C3-M1 `reject-company`). Until the decision, the person can withdraw the application (C1-M2) → `ApplicationWithdrawn` → C1-M3 `close-review`, C3-M1 `reject-company`. `reject-company` only without an existing company. If C1-M3 has already approved, `close-review` answers with 409; Process Orchestration stops and notifies OSP staff.
@@ -283,7 +283,7 @@ Names in English in PascalCase. Content only IDs and business values, never secr
 | C2-M2 | `assign-company-admin` | Onboarding, transfer, reactivation |
 | C2-M2 | `disable-company-users`, `enable-company-users` | Deactivation, reactivation |
 | C2-M2 | `create-client-template`, `create-instance-client`, `enable-instance-client`, `disable-instance-client`, `update-instance-url`, `add-app-roles`, `update-role-descriptions` | App approval, app subscription |
-| C2-M3 | `create-for-subscription`, `apply-wallet-access`, `delete` | Subscription, wallet access |
+| C2-M3 | `create-for-subscription`, `disable-subscription-technical-users`, `apply-wallet-access`, `delete` | Subscription, wallet access |
 | C2-M3 | `disable-company-technical-users`, `enable-company-technical-users` | Deactivation, reactivation |
 | C3-M1 | `create-company`, `assign-identifier`, `activate-company`, `reject-company` | Onboarding |
 | C3-M1 | `deactivate-company`, `reactivate-company` | Deactivation, transfer, reactivation |
@@ -299,7 +299,7 @@ Queries between modules (direct, without Process Orchestration), at least:
 
 - C1-M3 → C3-M2 `find-companies` (duplicates at the CSP) and → C3-M1 local duplicate search and master data;
 - C1-M2 → C3-M1 master data of the company (reactivation, return); C1-M2 → C1-M3 state of the review case (withdrawal only until the decision);
-- C3-M1 → C1-M2 application (`create-company`) and versions of the terms;
+- C3-M1 → C1-M2 application (`create-company`, `activate-company`) and terms of the company roles (C1-M2 keeps the terms, identifier `agreementKey` with `version`);
 - C4-M1 → C3-M1 company, → C4-M2 wallet and holder access;
 - C2-M2 → C3-M1 company (invitation to a company without binding); Notifications → C2-M2 people of a company per portal role.
 
@@ -307,14 +307,31 @@ Further queries per module in section 9.
 
 ## 7a. Common test IDs
 
+Binding for all modules. An ID stands for exactly one object; a module defines further test IDs only for objects that are not listed here.
+
 | Object | ID |
 |---|---|
 | Company of OSP A (in the installation of OSP A, `ospCompanyId`): "OSP A Beispiel GmbH", BPN `BPNL00000000OSPA`, company role `ONBOARDING_SERVICE_PROVIDER` | `11111111-1111-4111-8111-111111111111` |
 | OSP A (`ospId`) | `22222222-2222-4222-8222-222222222222` |
 | OSP B (`ospId`) | `99a5685c-7397-402c-88de-b1b3a939ecc9` |
 | CSP | `92cb10a9-0a9e-4c96-aa09-16d3990b7a51` |
+| Beispiel Maschinenbau GmbH, with Business Wallet (as in C5-M1): `EBWOID-DE-0000000001`, EUID `DEXX001T.HRB100001`, BPN from the stand-in of the CSP `BPNLIUK2REMLK3F4` (C3-M2 11.3) | `c0000001-0000-4000-8000-000000000001` |
+| Beispiel Logistik GmbH, without Business Wallet: `COMMERCIAL_REG_NUMBER` `HRB 200002` | `c0000002-0000-4000-8000-000000000002` |
 
-Test person and test company as in C5-M1 (Erika Mustermann; Beispiel Maschinenbau GmbH, `EBWOID-DE-0000000001`). Each module defines further test IDs itself.
+Test persons. `sub` in the token is the ID of the account in the Portal IAM (a UUID), not the user name `ebw.<sub at the EBW-Connector>` (C2-M5 5.5):
+
+| Person | `sub` | In the scenario |
+|---|---|---|
+| Erika Mustermann (as in C5-M1) | `5a1c0001-0000-4000-8000-000000000001` | applicant, then `Company Admin` of Beispiel Maschinenbau GmbH |
+| Max Mustermann | `5a1c0002-0000-4000-8000-000000000002` | invited to Beispiel Maschinenbau GmbH by Erika |
+| Hans Beispiel | `5a1c0003-0000-4000-8000-000000000003` | applicant, then `Company Admin` of Beispiel Logistik GmbH |
+| Lieschen Müller | `5a1c0004-0000-4000-8000-000000000004` | without a company, only `Applicant` |
+| Otto Normalverbraucher | `5a1c0012-0000-4000-8000-000000000012` | `OSP Admin`; invites himself as `Company Admin` of the company of OSP A if it offers apps (C2-M2 7.20) |
+| Rolf Prüfer | `bbede0f3-fbc4-433b-b7ca-1982e8724912` | `OSP Reviewer` |
+
+**Start state of a hackathon installation:** C3-M1 holds only the company of the OSP (seed data). Erika, Max, Hans and Lieschen have accounts without a company, Otto and Rolf are OSP staff without a company. The flows bind them (5.2, 5.3). A module test may start from another state (for example C2-M5 14.2, where Erika is already bound).
+
+**Client of the UI at the EBW-Connector** (5.2 step 2): `osp-a-ui` and `osp-b-ui`, each registered in `CLIENTS_FILE` (C5-M1 6.8) and allowed in `ATTESTATION_CLIENT_IDS` (C1-M2). Test data of single modules may use `demo-osp` (C5-M1 14.2).
 
 ## 8. Terms (binding)
 

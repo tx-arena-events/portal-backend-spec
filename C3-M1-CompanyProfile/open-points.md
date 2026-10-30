@@ -1,6 +1,6 @@
 # C3-M1 Company Profile: open points
 
-**Version:** 0.2, as of 2026-10-28 (move to OSP 2.0)
+**Version:** 0.2, as of 2026-10-30 (move to OSP 2.0)
 
 The [README](README.md) fixes every point so that the module can be built. The following decisions are provisional and still to be agreed. Questions that affect several modules are listed with their number (OP-xx) in `../open-points.md`.
 
@@ -23,7 +23,7 @@ The [README](README.md) fixes every point so that the module can be built. The f
 | 13 | Country | Cannot be changed after the BPN has been assigned, not even with a verification attestation (6.6). | Project owner, CSP |
 | 14 | Direct changes | Without approval the Company Admin changes only the short name; the address belongs to the core data (6.6). In version 0.1 the PSP was allowed to change the address directly. | Project owner |
 | 15 | Company roles | `assignableBy` `COMPANY` or `SEED`; the Company Admin assigns and removes roles with consents, the time is the call. Seed role `ONBOARDING_SERVICE_PROVIDER` for the OSP company instead of `OPERATOR` (6.5). | C2-M3, C2-M5, project owner |
-| 16 | Role catalogue | Configuration per installation with today's `agreementId`s; new version = new `agreementId`; no re-consent in version 0.2 (6.5, OP-11). | OSP, project owner |
+| 16 | Role catalogue | Configuration per installation, without terms. The terms of a role are read from C1-M2 (`agreementKey` with `version`, 6.5, 11.1); a new version keeps its key; no re-consent in version 0.2 (OP-11, OP-46). | C1-M2, OSP, project owner |
 | 17 | Role catalogue for people | no separate path any more. Applicants see it through C1-M2, people of a company through 7.7 (9.4). | C1-M2 |
 | 18 | Deactivation | Operation of OSP staff (reason `MANUAL`, 7.13) and step `deactivate-company` (mainly reason `TRANSFERRED`, 8.5). The justification is only in the audit log. A later `TRANSFERRED` overwrites a `MANUAL`. | Process Orchestration, project owner |
 | 19 | Reactivation | Step with `applicationId`; takes over the core data from the application; the kind must match the reason (`REACTIVATION` with `MANUAL`, `TRANSFER` with `TRANSFERRED`); roles and consents stay (8.6). | C1-M2, Process Orchestration, OP-38 |
@@ -59,7 +59,7 @@ None. FRAMEWORK 4.1 and 4.3 have covered the scope `osp` for steps, queries and 
 
 | Module | Assumption |
 |---|---|
-| C1-M2 Registration | assigns the `companyId`; offers `get_application(applicationId)` with the fields from README 11.1, among them `kind`, `verificationMethod`, `jti` and `verifiedAt` of the verification attestation and, per consent, `consentedBy` (`sub`); checks company data by the same rules (README 5, 6.4) and consents against the role catalogue (9.4); shows the role catalogue in the application; reads the master data through 9.1 in reactivation and return and checks the EBWOID in doing so; represents the return of a company that transferred away as an application of kind `TRANSFER` with the existing `companyId`. |
+| C1-M2 Registration | assigns the `companyId`; offers `get_application(applicationId)` (`ApplicationInternal`) with the fields from README 11.1, among them `kind`, `verification`, `attestation.attestationId` and `attestation.verifiedAt`, `consents` with `agreementKey` and `version`, and `applicant.sub`; checks company data by the same rules (README 5, 6.4); keeps the terms of the company roles and offers them through `GET /internal/agreements`; shows the roles and terms in the application; reads the master data through 9.1 in reactivation and return and checks the EBWOID in doing so; represents the return of a company that transferred away as an application of kind `TRANSFER` with the existing `companyId`. |
 | C1-M3 Application Review | uses C3-M2 `find-companies` and the local duplicate search 9.3; on the path without Business Wallet checks the supporting documents before `ApplicationApproved`, also in reactivation and return. |
 | C3-M2 CSP Connection | reports `CompanyRegisteredAtCsp` with `companyId` and `bpn`, also in a transfer and on return (then with the same BPN); receives the data for `register-company` from 9.1 through Process Orchestration; reports `CompanyTransferredAway`, upon which the flow calls `deactivate-company` with `TRANSFERRED`; alone manages the membership (`register-membership`, `deregister-membership`); passes changed core data to the CSP with `update-company` (decision 7). |
 | C5-M1 EBW-Connector | verification attestation as in C5-M1 9.1 (version 0.2), JWKS at `{iss}/jwks`, `aud` from `ATTESTATION_AUDIENCE`, purpose `onboarding` only. If C5-M1 later introduces a purpose for changes, C3-M1 accepts it in addition. |

@@ -323,7 +323,7 @@ components:
       type: string
       description: Company identifier, today BPN (BPNL).
       pattern: '^[Bb][Pp][Nn][Ll][A-Za-z0-9]{12}$'
-      examples: [BPNLC00000010000]
+      examples: [BPNLIUK2REMLK3F4]
 
     CredentialStatusView:
       type: object

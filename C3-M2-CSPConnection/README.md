@@ -1,6 +1,6 @@
 # C3-M2 CSP Connection
 
-**Version:** 0.1, as of 2026-10-29 (new with OSP 2.0)
+**Version:** 0.1, as of 2026-10-30 (new with OSP 2.0)
 **Capability:** C3 Company
 **Kind:** Hackathon
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
@@ -55,7 +55,7 @@ Callers:
 | Create the dataspace wallet of the CSP | C4-M2 Dataspace Wallet Interface (its own adapter) |
 | Read the trust list and check issuers | C5-M1 EBW-Connector |
 | Admission of the OSP to the trust list | governance and CSP (FRAMEWORK 5.1) |
-| Keeping the connectors of the companies (address, status) | Connectors (other part of the spec); this module only enters them at the CSP (8.6) |
+| Keeping the connectors of the companies (address, status) | C6-M1 Connectors; this module only enters them at the CSP (8.6) |
 | Take data, technical users and wallet along on a transfer | later work (FRAMEWORK 5.6) |
 
 ## 4. Technical frame
@@ -100,7 +100,7 @@ One row per connector that the module has entered at the CSP.
 
 | Field | Type | Rule |
 |---|---|---|
-| `connector_id` | uuid | primary key; identifier from the Connectors module |
+| `connector_id` | uuid | primary key; identifier from C6-M1 Connectors |
 | `company_id` | uuid | company of the connector |
 | `bpn` | text | BPN when entered |
 | `endpoint_url` | text | address of the connector (DSP endpoint) |
@@ -159,7 +159,7 @@ Without a Business Wallet (OP-35) a company has no EBWOID. Therefore `register-c
 
 - A connector can be entered only for a company with status `REGISTERED`.
 - In its discovery, the CSP names only connectors of companies with an active membership. On deactivation (membership deregistered, FRAMEWORK 5.4) no own step is therefore needed; after reactivation the connectors appear again.
-- A connector is removed only when the Connectors module deletes it (`deregister-connector`).
+- A connector is removed when C6-M1 deletes it or sets it `INACTIVE` (`ConnectorDeleted`, `ConnectorDeactivated` → `deregister-connector`); a new address is entered again with `register-connector` (`ConnectorEndpointChanged`).
 
 ## 7. Operations
 
@@ -220,7 +220,7 @@ Input always with `processId`, `stepRunId` and `companyId` (FRAMEWORK 4.4).
 ### 8.6 `POST /api/c3-m2/steps/register-connector` and `deregister-connector`
 
 - **Input:** in addition `connectorId`; for `register-connector` also `endpointUrl` (address of the connector, HTTPS).
-- **Precondition:** status `REGISTERED` (otherwise 409 `invalid-state`); connector created or deleted in the Connectors module.
+- **Precondition:** status `REGISTERED` (otherwise 409 `invalid-state`); connector registered, changed, deactivated or deleted in C6-M1 (FRAMEWORK 5.9). `companyId` is the host company of the connector.
 - **Behaviour:** `PUT {CSP_URL}/companies/{bpn}/connectors/{connectorId}` with `endpointUrl`, or `DELETE {CSP_URL}/companies/{bpn}/connectors/{connectorId}`; store the row in `csp_connector`.
 - **Result:** `DONE` with `bpn` and `connectorId`. **Event:** `ConnectorRegisteredAtCsp` or `ConnectorDeregisteredAtCsp`, only if something changed.
 
@@ -316,7 +316,7 @@ Problem Details, `type` = `urn:c3-m2:problem:<name>`.
 | OSP B (`ospId`) | `99a5685c-7397-402c-88de-b1b3a939ecc9` |
 | Test company | Beispiel Maschinenbau GmbH, `EBWOID-DE-0000000001`, EUID `DEXX001T.HRB100001`, DE |
 | Company without a Business Wallet | Beispiel Logistik GmbH, `COMMERCIAL_REG_NUMBER` `HRB 200002`, DE |
-| Connector of Beispiel Maschinenbau | `connectorId` `7c1e5a2b-4d3f-4e6a-9b8c-0d1e2f3a4b5c`, `endpointUrl` `https://edc.beispiel-maschinenbau.example/api/v1/dsp` |
+| Connector of Beispiel Maschinenbau | `connectorId` `7c1e5a2b-4d3f-4e6a-9b8c-0d1e2f3a4b5c`, `endpointUrl` `https://edc.beispiel-maschinenbau.example/dsp` (as in C6-M1 14) |
 | Company at OSP B (`CSP_STUB_FILE`) | Andere Beispiel AG, `EBWOID-DE-0000000002`, BPN `BPNL00000000002B`, home OSP OSP B |
 
 `CSP_STUB_FILE`:

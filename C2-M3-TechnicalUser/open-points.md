@@ -1,6 +1,6 @@
 # C2-M3 Technical Users: open points
 
-**Version:** 0.2, as of 2026-10-28
+**Version:** 0.2, as of 2026-10-30
 
 For version 0.2, the README fixes each of these points so that the module can be built. The following decisions are provisional and still to be agreed. Decided on 28 Oct 2026 is OSP 2.0: every OSP runs its own installation with its own Portal IAM; people call the modules with their own token; no delegation, no PSP and therefore no API access for PSPs. The binding framework is `../FRAMEWORK.md`; version 0.1, the version for the PSP architecture, is in the git history of this repository.
 
@@ -26,6 +26,9 @@ For version 0.2, the README fixes each of these points so that the module can be
 | 16 | Owner and co-viewing company | only the owner changes and rotates the secret (403 `not-owner`); the co-viewing company may also see and delete (README 6.3) | Subscriptions |
 | 17 | Customer account without other roles | The customer account of a subscription is always created, even if no other roles remain after the split | Offers, Subscriptions |
 | 18 | Connection to the neighbours | variable empty = stand-in, `in-process` = same process, otherwise HTTP address (FRAMEWORK 4.7) | base skeleton |
+| 19 | End of a subscription | step `disable-subscription-technical-users`: the accounts become `INACTIVE` (final), client disabled, can only be deleted; today's portal also deactivates them (README 8.6). Alternative: delete them directly | C10-M1, C12-M1 |
+| 20 | Connector as a service | `usableForConnector` with `offerSubscriptionId` also for the customer account of this subscription (README 9.1) | C6-M1 |
+| 21 | Roles for the profiles of offers | new query `GET /internal/technical-roles` (README 9.3) | C8-M1 |
 
 ## Additions to the framework
 
@@ -48,7 +51,7 @@ What C2-M3 expects from other modules. The form is provisional until their specs
 | C4-M2 Dataspace Wallet Interface | steps `create-wallet-account` (input from `WalletAccessRequested`: `technicalUserId`, `companyId`) and `delete-wallet-account` (from `WalletAccessRemovalRequested`: additionally `walletAccountRef`); events `WalletAccountCreated`, `WalletAccountFailed`, `WalletAccountDeleted` with `walletAccountRef`; one-time retrieval of the credentials by a person of the company in scope `company`; no new wallet accounts for deactivated companies. |
 | Process Orchestration | flows from FRAMEWORK 5.4, 5.5, 5.7 and 5.8: `create-for-subscription` in the subscription flow, then, where needed, waiting for the wallet access; `disable-company-technical-users` on `CompanyDeactivated`, `enable-company-technical-users` on `CompanyReactivated`. |
 | Subscriptions | query `GET /internal/subscriptions/{offerSubscriptionId}` → `{ status }`; calls 9.2 to pass the secret of a subscription account on to the provider. |
-| Connectors | query `GET /internal/connectors?technicalUserId=` → list with `status`; use `usableForConnector` from 9.1. |
+| Connectors | query `GET /internal/connectors?technicalUserId=` → list with `status`; use `usableForConnector` from 9.1, for a connector as a service with `offerSubscriptionId`. |
 | Notifications | show the events of this module to the people of the company and to the co-viewing provider. |
 | Token validation library | provides `sub`, `company_id` and the permissions; accepts a JWKS with a test key in the test (README 14.2). |
 

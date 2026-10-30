@@ -1,6 +1,6 @@
 # C3-M2 CSP Connection: open points
 
-**Version:** 0.1, as of 2026-10-29
+**Version:** 0.1, as of 2026-10-30
 
 The module is new with OSP 2.0. The README fixes every point so that the module can be built; the following decisions are provisional.
 
@@ -17,7 +17,7 @@ The module is new with OSP 2.0. The README fixes every point so that the module 
 | 7 | Transfer | `transfer` at the CSP; the CSP notifies the old home OSP; data does not move along (README 8.2, FRAMEWORK 5.6) | project owner, CSP |
 | 8 | Stand-in | BPN from the hash of the EBWOID, otherwise of the EUID, otherwise of the first identifier; companies of other OSPs from `CSP_STUB_FILE` (README 11.3) | – |
 | 9 | Identifiers at registration | `ebwoid` optional; required is `ebwoid`, `euid` or an identifier in `identifiers`, because without a Business Wallet (OP-35) there is no EBWOID (README 6.5, 8.1); the same for the transfer (8.2). Pointed out by the other part of the spec on 29 Oct 2026 | CSP, C1-M2 |
-| 10 | Connectors in the discovery | steps `register-connector` and `deregister-connector`; the CSP names only connectors of companies with an active membership, so there is no own step on deactivation (README 6.6, 8.6). Requested by the other part of the spec on 29 Oct 2026 | CSP, Connectors (other part) |
+| 10 | Connectors in the discovery | steps `register-connector` and `deregister-connector`; the CSP names only connectors of companies with an active membership, so there is no own step on deactivation (README 6.6, 8.6). Requested by the other part of the spec on 29 Oct 2026 | CSP, C6-M1 |
 
 ## Assumptions about other modules and systems
 
@@ -28,7 +28,7 @@ The module is new with OSP 2.0. The README fixes every point so that the module 
 | C3-M1 | takes over the BPN from `CompanyRegisteredAtCsp` through the step `assign-identifier` |
 | C4-M2 | reports the DID with `DataspaceWalletCreated`; Process Orchestration then calls `register-did` |
 | CSP | keeps the company identifier, home OSP, directory BPN → DID and membership; checks the home OSP on every changing call |
-| Connectors (other part) | reports creating, changing the address of and deleting a connector as an event; Process Orchestration then calls `register-connector` or `deregister-connector` with `connectorId` and `endpointUrl` |
+| C6-M1 Connectors | reports registering, changing the address of, deactivating and deleting a connector as an event (`ConnectorRegistered`, `ConnectorEndpointChanged`, `ConnectorDeactivated`, `ConnectorDeleted`); Process Orchestration then calls `register-connector` or `deregister-connector` with `connectorId` and `endpointUrl` (C12-M1 `flows.yaml`) |
 | Test tools | provide a shared CSP stand-in with the same core services API for the hackathon (still to be built) |
 
 ## Open questions
