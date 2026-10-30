@@ -13,6 +13,7 @@
 | 5 | Applicant | `applicantSub` from `ApplicationSubmitted` is kept until the application is finished | data protection |
 | 6 | Retention | read or done notifications are deleted after 180 days (OP-20) | OSP, data protection |
 | 7 | Recipients without `IT Admin` | R14 and R16 go to `Company Admin` if the company has no `IT Admin`; after onboarding a company has only its `Company Admin` (C2-M2 8.8). Alternative: onboarding also assigns `IT Admin` | C2-M2 |
+| 8 | Live updates of the inbox | Server-Sent Events, no WebSockets (decided on 30 Oct 2026), `GET /notifications/events` (README 7.6). Events carry only IDs, types and states, no `content`; without `Last-Event-ID` only new events, so the UI opens the stream before it reads the list; replay from a buffer in memory, otherwise `resync`. Token only in the header `Authorization`, through the server part of the UI; no `access_token` in the URL | user interface |
 
 ## Assumptions about other modules
 
@@ -33,7 +34,10 @@
 3. **Four-eyes principle:** no event for the second approval; see OP-49 (proposal `ApplicationAwaitingSecondApproval`).
 4. **Deactivation of a company:** notice before `disable-company-users`, or none; see OP-52.
 5. **New versions of the terms** (`AgreementVersionActivated` with `reconsentRequired`): see OP-51.
-6. **Live updates in the UI:** polling `GET /notifications/count` or Server-Sent Events.
+6. **Live updates in the UI:** closed. Server-Sent Events (README 7.6, decided on 30 Oct 2026).
+7. **Staff notifications in an open stream:** the permissions are read from the token that opened the stream. A permission granted or removed later counts from the next stream (at the latest when the token expires).
+8. **Several instances:** the buffer for `Last-Event-ID` is per instance in memory; after a reconnect to another instance the client gets `resync`. A shared buffer is needed only if that is too frequent.
+9. **Event streams in FRAMEWORK 4.1:** FRAMEWORK does not yet say that paths ending in `/events` are Server-Sent Events streams with the token in the header (also C12-M1 7.6). Proposal: one sentence in FRAMEWORK 4.1.
 
 ## Legacy endpoints (portal backend 2.6.0)
 

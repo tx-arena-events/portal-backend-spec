@@ -9,6 +9,9 @@ info:
     - Calls carry a token of the Portal IAM; required permission in `x-permission`,
       scope in `x-permission-scope` (FRAMEWORK 4.3).
     - Errors as Problem Details (RFC 9457), identifiers in README section 12.
+    - `GET /notifications/events` is a Server-Sent Events stream for the UI (README 7.6):
+      `Content-Type: text/event-stream`, events `notification-created`, `notification-done`,
+      `resync`. The token is sent in the `Authorization` header, never in the URL.
 servers:
   - url: /api/c11-m1
 security:
@@ -59,6 +62,52 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/NotificationCount' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /notifications/events:
+    get:
+      tags: [Company]
+      operationId: streamNotificationEvents
+      summary: Live changes of the own inbox (Server-Sent Events)
+      description: |
+        README 7.6. Without `Last-Event-ID` only new events; with an `id` the module no longer
+        keeps, `resync` first.
+      x-permission: view_notifications
+      x-permission-scope: own
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          required: false
+          description: '`id` of the last event the client received; the browser sends it on reconnect (README 7.6).'
+          schema: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: |
+            Event stream (README 7.6). Each message has `id`, `event` and one `data` line with a
+            JSON object; the schema below describes the `data` object per event name
+            (`notification-created`: NotificationCreated, `notification-done`: NotificationDone,
+            `resync`: empty object), not the whole body. Comment lines `: keep-alive` every
+            `SSE_HEARTBEAT_SECONDS`.
+          content:
+            text/event-stream:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/NotificationCreated'
+                  - $ref: '#/components/schemas/NotificationDone'
+                  - { type: object, additionalProperties: false, description: '`data` of `resync`' }
+              example: |
+                retry: 3000
+
+                id: 7
+                event: notification-created
+                data: {"notificationId":"3c6b1f2a-8d4e-4a5b-9c7d-0e1f2a3b4c5d","type":"PROCESS_STEP_FAILED","topic":"ACTION","forStaff":true,"done":false,"createdAt":"2026-11-06T09:31:00Z"}
+
+                id: 8
+                event: notification-done
+                data: {"notificationId":"3c6b1f2a-8d4e-4a5b-9c7d-0e1f2a3b4c5d","doneAt":"2026-11-06T09:40:00Z"}
+
+                : keep-alive
         '401': { $ref: '#/components/responses/Problem' }
         '403': { $ref: '#/components/responses/Problem' }
 
@@ -207,6 +256,26 @@ components:
           description: Tasks only.
         createdAt: { type: string, format: date-time }
         doneAt: { type: [string, 'null'], format: date-time }
+    NotificationCreated:
+      type: object
+      description: '`data` of the stream event `notification-created` (README 7.6); no `content`.'
+      required: [notificationId, type, topic, forStaff, createdAt]
+      properties:
+        notificationId: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/NotificationType' }
+        topic: { $ref: '#/components/schemas/Topic' }
+        forStaff: { type: boolean }
+        done:
+          type: [boolean, 'null']
+          description: Tasks only; `true` if the task was created as done (README 6.2).
+        createdAt: { type: string, format: date-time }
+    NotificationDone:
+      type: object
+      description: '`data` of the stream event `notification-done` (README 7.6).'
+      required: [notificationId, doneAt]
+      properties:
+        notificationId: { type: string, format: uuid }
+        doneAt: { type: string, format: date-time }
     NotificationPage:
       type: object
       required: [items, page, size, total]

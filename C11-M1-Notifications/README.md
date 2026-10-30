@@ -19,7 +19,7 @@ Callers:
 
 | Who | What for |
 |---|---|
-| People of a company and applicants (UI) | read their inbox, mark as read, hide |
+| People of a company and applicants (UI) | read their inbox, mark as read, hide, learn about new notifications without polling (7.6) |
 | OSP staff (UI) | the same, including tasks for OSP staff |
 | Event bus of the installation | delivers the events of section 11.1 |
 
@@ -62,6 +62,8 @@ Callers:
 | `SUBSCRIPTION_URL` | C10-M1 | `in-process` |
 | `RETENTION_DAYS` | notifications that are read or done are deleted after this many days | `180` |
 | `DISABLED_RULES` | rules the OSP switches off, e.g. `R14,R16` | |
+| `SSE_HEARTBEAT_SECONDS` | interval of the heartbeat comment in the event stream (7.6) | `15` |
+| `SSE_REPLAY_SIZE` | number of stream events the module keeps in memory for a reconnect (7.6) | `1000` |
 
 ## 5. Data
 
@@ -136,7 +138,7 @@ A closing event sets `done` on all open tasks of the rule for the same object. A
 
 | Permission | Scope | What for |
 |---|---|---|
-| `view_notifications` | `own` | read, mark and hide the own notifications |
+| `view_notifications` | `own` | read, mark and hide the own notifications; follow the own inbox live (7.6) |
 
 `view_notifications` is in the portal role `Applicant`, which every account keeps; so every person has it, with or without a company, including OSP staff (C2-M5 6.2, 6.3). Scope `own` as in FRAMEWORK 4.3: the own inbox is the personal notifications with the person's `sub` and the staff notifications whose permission is in the token (section 4).
 
@@ -171,6 +173,26 @@ Sets or removes `read_at` for the calling person. Response 204.
 
 Hides the notification for the calling person. An open task: 409 `task-open`. Response 204. Hidden notifications are deleted with the retention period (`RETENTION_DAYS`).
 
+### 7.6 `GET /api/c11-m1/notifications/events`
+
+Server-Sent Events for the own inbox, so that the UI learns about new notifications without polling. Data flows only from the server to the browser; marking and hiding use 7.4 and 7.5.
+
+- **Format:** response 200 with `Content-Type: text/event-stream` (Server-Sent Events, HTML Living Standard). Errors before the stream starts (401, 403) as Problem Details.
+- **Token:** in the header `Authorization: Bearer`, as for every other operation. The browser holds only a session cookie; the server part of the UI (backend for frontend, as in FRAMEWORK 5.2 step 2) opens the stream with the person's token and passes the events on to the browser. The module accepts no token in the query string, because URLs end up in access logs, and reads no cookie. When `exp` of the token has passed, the module closes the stream; the UI opens it again with a new token and `Last-Event-ID`.
+- **Which notifications:** those of the own inbox (section 4): personal notifications with the `sub` of the token, and staff notifications whose permission is in the token that opened the stream.
+- **Events** (`data` is one JSON object, schemas in [openapi.yaml](openapi.yaml)); only IDs, types and states, no `content`, never names or secrets. The UI reads the notification with 7.3 if it needs the content:
+
+| Event | When | `data` |
+|---|---|---|
+| `notification-created` | a notification for the own inbox was stored | `notificationId`, `type`, `topic`, `forStaff`, `done`, `createdAt` |
+| `notification-done` | a task of the own inbox was closed (`done`) | `notificationId`, `doneAt` |
+| `resync` | the module cannot replay after the given `Last-Event-ID` | `{}`; the UI reads 7.1 and 7.2 again |
+
+- **Start and reconnect:** without the header `Last-Event-ID`, the stream sends only new events. The UI therefore opens the stream first and then reads 7.1 and 7.2, so that it misses nothing. With `Last-Event-ID`, the module sends the kept events after this `id` that belong to the own inbox, then new ones. The module keeps the last `SSE_REPLAY_SIZE` events in memory. If it no longer has this `id` (too old, restart, another instance), it sends `resync` first.
+- **`id`:** every event has an `id`. Clients treat it as an opaque value and only send it back. In this version it consists of an identifier of the module instance and a number that increases.
+- **Heartbeat:** a comment line (`: keep-alive`) every `SSE_HEARTBEAT_SECONDS`, so that proxies keep the connection open. The first message of a stream sets `retry: 3000`.
+- Reading, marking and hiding by the person send no event.
+
 ## 8. Steps for Process Orchestration
 
 None. The module reacts to events only.
@@ -181,7 +203,7 @@ None.
 
 ## 10. Events
 
-None. The module only consumes events (11.1).
+None. The module only consumes events (11.1). The stream messages of 7.6 go only to the UI; they are not published on the event bus.
 
 ## 11. Calls to other modules and external systems
 
@@ -222,6 +244,10 @@ Problem Details, `type` = `urn:c11-m1:problem:<name>`.
 10. Another person's notification: 404. Notification contents contain no names (check against the stand-in data).
 11. `DISABLED_RULES=R14`: `WalletAccountCreated` creates no notification.
 12. `ConnectorRegistered` for a company without an `IT Admin` (stand-in): every `Company Admin` of the company has `CONNECTOR_REGISTERED`.
+13. Erika opens 7.6, then `ApplicationSubmitted` arrives: the stream sends `notification-created` with type `APPLICATION_SUBMITTED` and without `content`. Lieschen's stream receives nothing.
+14. Otto (`retrigger_process_steps`) has the stream open: `ProcessStepFailed` sends `notification-created` (`PROCESS_STEP_FAILED`, `forStaff` `true`); `ProcessStepRetriggered` for the same step sends `notification-done`.
+15. Reconnect with `Last-Event-ID` of an earlier event: the missed events of the own inbox follow. With an unknown `Last-Event-ID`: `resync` first.
+16. 7.6 without a token, with an invalid token, or with the token only in the query string (`access_token`): 401 as Problem Details, no stream.
 
 ## 14. Test data
 
@@ -250,4 +276,5 @@ IDs, persons and portal roles as in FRAMEWORK 7a and C2-M5 6.3.
 - R14 and R16 go to `Company Admin` if the company has no `IT Admin` (e.g. right after onboarding).
 - Recipients from C2-M2 are read from `userId` (= `sub`); `appId` of `AppRolesAdded` is the `offerId` for the query at C10-M1.
 - Tag `Company` instead of `Inbox` (FRAMEWORK 4.1) (30 Oct 2026).
+- Live updates of the inbox as Server-Sent Events, no WebSockets (7.6, decided on 30 Oct 2026; open question 6 closed): events `notification-created`, `notification-done`, `resync`; `Last-Event-ID` with a buffer in memory; token in the header only. Configuration `SSE_HEARTBEAT_SECONDS`, `SSE_REPLAY_SIZE` (30 Oct 2026).
 - Test data with the common test IDs and test persons of FRAMEWORK 7a; `sub` values are account IDs, not user names (renamed from `ebw.test-erika`, `ebw.test-otto`, `ebw.test-lieschen`, `ebw.test-staff`) (30 Oct 2026).

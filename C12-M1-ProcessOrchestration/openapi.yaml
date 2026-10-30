@@ -9,6 +9,9 @@ info:
     - Calls carry a token of the Portal IAM; required permission in `x-permission`,
       scope in `x-permission-scope` (FRAMEWORK 4.3).
     - Other modules call the paths under `/internal`.
+    - The paths ending in `/events` are Server-Sent Events streams for the UI (README 7.6):
+      `Content-Type: text/event-stream`, event name `process-changed`, `data` one JSON object
+      `ProcessChanged`. The token is sent in the `Authorization` header, never in the URL.
     - The module offers no steps; it calls the steps of the other modules.
     - Errors as Problem Details (RFC 9457), identifiers in README section 12.
 servers:
@@ -18,6 +21,8 @@ security:
 tags:
   - name: OSP
     description: For OSP staff
+  - name: Company
+    description: For applicants, own application only (scope own, FRAMEWORK 4.1)
   - name: Queries
     description: For other modules
 
@@ -117,6 +122,45 @@ paths:
         '404': { $ref: '#/components/responses/Problem' }
         '409': { $ref: '#/components/responses/Problem' }
 
+  /processes/{processId}/events:
+    get:
+      tags: [OSP]
+      operationId: streamProcessEvents
+      summary: Live changes of one process (Server-Sent Events)
+      description: |
+        README 7.6 and 7.7. Without `Last-Event-ID` the first event is the current state.
+        Every `process-changed` event carries the full state of the process.
+      x-permission: view_processes
+      x-permission-scope: osp
+      parameters:
+        - $ref: '#/components/parameters/ProcessId'
+        - $ref: '#/components/parameters/LastEventId'
+      responses:
+        '200': { $ref: '#/components/responses/ProcessEventStream' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /applications/{applicationId}/events:
+    get:
+      tags: [Company]
+      operationId: streamApplicationProcessEvents
+      summary: Live changes of the processes of the own application (Server-Sent Events)
+      description: |
+        README 7.6 and 7.8. Only processes with subject `APPLICATION` and this `applicationId`
+        whose `applicantSub` is the caller. For another person's application the stream stays
+        empty (no 404).
+      x-permission: register_company
+      x-permission-scope: own
+      parameters:
+        - { name: applicationId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/LastEventId'
+      responses:
+        '200': { $ref: '#/components/responses/ProcessEventStream' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
   /flows:
     get:
       tags: [OSP]
@@ -202,6 +246,12 @@ components:
       required: true
       description: Key of the step in the flow, e.g. `register-company`.
       schema: { type: string, pattern: '^[a-z][a-z0-9-]*$' }
+    LastEventId:
+      name: Last-Event-ID
+      in: header
+      required: false
+      description: '`id` of the last event the client received; the browser sends it on reconnect (README 7.6).'
+      schema: { type: string, maxLength: 64 }
     Page:
       name: page
       in: query
@@ -216,6 +266,22 @@ components:
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
+    ProcessEventStream:
+      description: |
+        Event stream (README 7.6). Each message has `id`, `event: process-changed` and one
+        `data` line with a JSON object `ProcessChanged` (the schema below describes this object,
+        not the whole body). Comment lines `: keep-alive` every `SSE_HEARTBEAT_SECONDS`.
+      content:
+        text/event-stream:
+          schema: { $ref: '#/components/schemas/ProcessChanged' }
+          example: |
+            retry: 3000
+
+            id: 42
+            event: process-changed
+            data: {"processId":"9d2f6c1e-3b4a-4e5f-8a7b-1c2d3e4f5a6b","flowKey":"onboarding","subjectType":"APPLICATION","subjectId":"0f8e2d4c-6b1a-4c3e-8f7d-2a9b1c0d3e4f","status":"WAITING","currentStep":"register-company","endReason":null,"steps":[{"stepKey":"create-company","state":"DONE"},{"stepKey":"open-review","state":"DONE"},{"stepKey":"register-company","state":"WAITING"}],"updatedAt":"2026-11-06T09:30:01Z"}
+
+            : keep-alive
   schemas:
     SubjectType:
       type: string
@@ -322,6 +388,34 @@ components:
         finishedAt: { type: [string, 'null'], format: date-time }
         outcome: { type: [string, 'null'], enum: [DONE, RUNNING, ERROR, null] }
         errorType: { type: [string, 'null'] }
+    ProcessChanged:
+      type: object
+      description: |
+        `data` of the stream event `process-changed` (README 7.6): the full state of one process.
+        Only IDs, keys and states; no variables, results, errors or secrets.
+      required: [processId, flowKey, subjectType, subjectId, status, steps, updatedAt]
+      properties:
+        processId: { type: string, format: uuid }
+        flowKey: { type: string, examples: [onboarding] }
+        subjectType: { $ref: '#/components/schemas/SubjectType' }
+        subjectId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/ProcessStatus' }
+        currentStep:
+          type: [string, 'null']
+          description: First step that is not `DONE` or `SKIPPED`.
+        endReason:
+          type: [string, 'null']
+          description: With `ENDED`, the event that ended the process.
+        steps:
+          type: array
+          description: All step runs in the order of the flow.
+          items:
+            type: object
+            required: [stepKey, state]
+            properties:
+              stepKey: { type: string, examples: [register-company] }
+              state: { $ref: '#/components/schemas/StepState' }
+        updatedAt: { type: string, format: date-time }
     RetriggerRequest:
       type: object
       properties:

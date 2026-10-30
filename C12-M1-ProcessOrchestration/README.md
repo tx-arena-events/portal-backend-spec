@@ -15,7 +15,8 @@ Process Orchestration runs the flows of an installation. A flow is data: a trigg
 - calls the steps of the modules in the order of the flow, with the input the flow defines;
 - waits for the event of a long-running step (`RUNNING`), or for an event that the flow waits for (for example `ApplicationApproved`);
 - repeats steps after temporary errors and notifies OSP staff when a step fails for good (OP-18);
-- lets OSP staff view processes and retrigger a failed step.
+- lets OSP staff view processes and retrigger a failed step;
+- sends changes of a process to the UI as Server-Sent Events, so that the UI does not poll (7.6).
 
 Modules do not know Process Orchestration (FRAMEWORK 1). They offer steps under `/steps/...`, publish events, and name their preconditions.
 
@@ -24,7 +25,8 @@ Callers:
 | Who | What for |
 |---|---|
 | Event bus of the installation | delivers every published event (in the same process) |
-| OSP staff (through the UI) | view processes and steps, retrigger a failed step |
+| OSP staff (through the UI) | view processes and steps, retrigger a failed step, follow a process live (7.7) |
+| Applicants (through the UI) | follow the processes of their own application live (7.8) |
 | Other modules | query the processes of a subject (section 9), e.g. Subscriptions for the setup status |
 | Notifications | react to `ProcessStepFailed` and inform OSP staff |
 
@@ -72,6 +74,8 @@ Callers:
 | `AWAIT_TIMEOUT` | longest wait for a completing event, unless the flow sets its own (ISO 8601) | `PT24H` |
 | `WORKER_POLL_SECONDS` | interval of the worker for due repetitions | `2` |
 | `STANDIN_FILE` | optional results of the built-in stand-ins that replace the defaults of 11.3 | `config/standins.yaml` |
+| `SSE_HEARTBEAT_SECONDS` | interval of the heartbeat comment in an event stream (7.6) | `15` |
+| `SSE_REPLAY_SIZE` | number of stream events the module keeps in memory for a reconnect (7.6) | `1000` |
 
 ## 5. Data
 
@@ -203,10 +207,11 @@ Derived from the step runs and stored for queries:
 | `view_processes` | `osp` | view processes, step runs and flows (portal role `OSP Admin`) |
 | `retrigger_process_steps` | `osp` | retrigger a failed step (portal role `OSP Admin`) |
 | `query_c12_m1` | `osp` | query processes of a subject over HTTP (FRAMEWORK 4.2) |
+| `register_company` | `own` | follow the processes of the own application live (7.8); permission of C1-M2 that every applicant has (portal role `Applicant`) |
 
 The permissions and portal roles are defined in C2-M5 6.2 and 6.3.
 
-Companies do not see processes; they see the status at the owning module (proposal, open-points No. 2).
+Companies do not see processes; they see the status at the owning module (proposal, open-points No. 2). An applicant sees only the live state of the processes of their own application (7.8), without variables, results or errors.
 
 ### 6.7 Repeatability
 
@@ -252,7 +257,7 @@ A failed lookup is never `found: false`; otherwise steps with a `when` on the lo
 
 ## 7. Operations
 
-All operations by OSP staff over HTTP with a token of the Portal IAM (tag `OSP`).
+All operations by OSP staff over HTTP with a token of the Portal IAM (tag `OSP`), except 7.8 for applicants (tag `Company`, scope `own`).
 
 ### 7.1 `GET /api/c12-m1/processes`
 
@@ -279,6 +284,32 @@ Permission `retrigger_process_steps`. Input optional `comment` (up to 500 charac
 
 Permission `view_processes`. The loaded flow definitions as JSON, so that the UI can show the steps of a process before they run.
 
+### 7.6 Live updates (Server-Sent Events)
+
+The UI learns about changes of a process without polling. Data flows only from the server to the browser; commands use the other operations. These rules apply to 7.7 and 7.8:
+
+- **Format:** response 200 with `Content-Type: text/event-stream` (Server-Sent Events, HTML Living Standard). Errors before the stream starts (400, 401, 403, 404) as Problem Details.
+- **Token:** in the header `Authorization: Bearer`, as for every other operation, and checked in the same way. The browser holds only a session cookie; the server part of the UI (backend for frontend, as in FRAMEWORK 5.2 step 2) opens the stream with the person's token and passes the events on to the browser. The module accepts no token in the query string, because URLs end up in access logs, and reads no cookie.
+- **End of the token:** the module checks the token when the stream opens. When `exp` of the token has passed, the module closes the stream. The UI opens it again with a new token and `Last-Event-ID`.
+- **Event:** name `process-changed`; `data` is one JSON object `ProcessChanged` ([openapi.yaml](openapi.yaml)): `processId`, `flowKey`, `subjectType`, `subjectId`, `status`, `currentStep`, `endReason`, `steps` (per step run `stepKey` and `state`), `updatedAt`. Only IDs, keys and states: no process variables, no step results, no error details, never secrets. Every event carries the full state of the process, so a missed event leaves no gap.
+- **When:** after every stored change of the status of a process (6.4) or of the state of a step run (6.3). States that a step passes within one call (e.g. `IN_PROGRESS` of a step that answers `DONE` at once) may be combined into one event. A process that is `COMPLETED` or `ENDED` sends no further events; the stream stays open until the UI closes it.
+- **`id`:** every event has an `id`. Clients treat it as an opaque value and only send it back. In this version it consists of an identifier of the module instance and a number that increases.
+- **Start and reconnect:** without the header `Last-Event-ID`, the stream first sends one `process-changed` with the current state of each process of the stream. With `Last-Event-ID`, the module sends the kept events after this `id` that belong to the stream, then new ones. The module keeps the last `SSE_REPLAY_SIZE` events in memory. If it no longer has this `id` (too old, restart, another instance), it sends the current state as without the header.
+- **Heartbeat:** the module sends a comment line (`: keep-alive`) every `SSE_HEARTBEAT_SECONDS`, so that proxies keep the connection open. The first message of a stream sets `retry: 3000` (the browser reconnects after 3 seconds).
+- The event stream is a message to the UI, not an event of the event bus (section 10).
+
+### 7.7 `GET /api/c12-m1/processes/{processId}/events`
+
+Permission `view_processes` (scope `osp`), as 7.2. Events of this process (7.6). Unknown process: 404.
+
+### 7.8 `GET /api/c12-m1/applications/{applicationId}/events`
+
+Permission `register_company` (scope `own`, FRAMEWORK 4.3). The applicant follows the processes of their own application, e.g. the onboarding after submission (FRAMEWORK 5.2), without access to 7.1 to 7.5.
+
+1. `applicationId` is not a UUID: 400.
+2. The stream contains the processes with subject `APPLICATION` and this `applicationId` whose process variable `applicantSub` equals `sub` in the token (from `ApplicationSubmitted`). Other processes are never sent, e.g. `application-declined`, whose trigger does not carry `applicantSub`; the onboarding process shows the end with status `ENDED` and `endReason`.
+3. The stream opens even if no such process exists yet: the process starts only when `ApplicationSubmitted` has been delivered, so the UI may open the stream right after submitting. For the application of another person, the stream stays empty; there is no 404, and nothing about the application is revealed.
+
 ## 8. Steps for Process Orchestration
 
 None. This module calls the steps of the other modules; it offers none itself.
@@ -301,6 +332,8 @@ Parameters `subjectType`, `subjectId` (both required). Response 200: list of `Pr
 `errorType` in `ProcessStepFailed`: the `type` of the Problem Details of the last error (also of a failed lookup, 6.8); `event:<EventType>` for an event from `failsOn`; `await-timeout` when `await_until` has passed.
 
 Notifications reacts to `ProcessStepFailed` (notice to OSP staff with `OSP Admin`) and closes the notice on `ProcessStepRetriggered`, `ProcessCompleted` or `ProcessEnded` (OP-18, OP-19).
+
+The stream messages `process-changed` of 7.6 go only to the UI; they are not published on the event bus.
 
 ## 11. Calls to other modules and external systems
 
@@ -403,6 +436,10 @@ Errors of the called steps are not passed on; they are stored in `last_error` of
 17. Lookup `subscription-instance-client` with the answer `[{ "id": "…" }]`: `found` `true`, `appInstanceClientId` is the `id`; with `[]`: `found` `false`, `disable-instance-client` `SKIPPED`.
 18. All neighbours as stand-ins: the onboarding runs to `COMPLETED`; `assign-identifier` receives the stand-in BPN and `register-did` the stand-in DID. Mixed: real C3-M1, all other stand-ins: the same.
 19. `ApplicationWithdrawn` after `ApplicationApproved`: the onboarding process is not `ENDED` and continues; the flow `application-withdrawn` fails at `close-review` with `ProcessStepFailed`.
+20. OSP staff (Otto) open 7.7 for the onboarding process of case 2: the first event `process-changed` shows `WAITING`, `create-company` and `open-review` `DONE`. After `ApplicationApproved`, further events follow; the last one has status `COMPLETED`. No event contains process variables, results or secrets.
+21. The applicant (Erika, `applicantSub` of the trigger event) opens 7.8 for the application of case 2 before `ApplicationSubmitted` is delivered: the stream stays open without events, then sends the state of the onboarding process. Lieschen opens 7.8 for the same application: no event. 7.7 with Erika's token: 403.
+22. Reconnect with `Last-Event-ID` of an earlier event: the stream sends the events after it that were missed, then new ones. With an unknown `Last-Event-ID`: the current state, as at the start.
+23. 7.7 or 7.8 without a token or with an invalid token: 401 as Problem Details, no stream. A token in the query string (`access_token`) counts as no token.
 
 ## 14. Test data
 
@@ -442,3 +479,4 @@ Example event that starts the onboarding:
 - Flows `subscription-ended` and `subscription-declined` call C2-M3 `disable-subscription-technical-users` (C2-M3 8.6); open question 1 closed (30 Oct 2026).
 - Permission `query_c12_m1` (renamed from `query_c12`) with the full module identifier as in FRAMEWORK 4.2 (30 Oct 2026).
 - Test data with the common test IDs of FRAMEWORK 7a; `applicantSub` is the account ID (renamed from `ebw.test-erika`) (30 Oct 2026).
+- Live updates for the UI as Server-Sent Events, no WebSockets (decided on 30 Oct 2026; open question 6 closed): 7.6 to 7.8, event `process-changed` with the full state of the process, `Last-Event-ID` with a buffer in memory, heartbeat, token in the header only. Applicants follow the processes of their own application with `register_company` (7.8, 6.6). Configuration `SSE_HEARTBEAT_SECONDS`, `SSE_REPLAY_SIZE` (30 Oct 2026).
