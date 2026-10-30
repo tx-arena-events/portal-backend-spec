@@ -19,7 +19,7 @@ Today's portal is a monolith: the user interface owns orchestration and business
 - **Every onboarding service provider (OSP) runs the portal modules itself** and configures its own portal. Its Helm chart decides which service runs where.
 - **The core service provider (CSP) provides trust** through central core services: the trust list of admitted OSPs and issuers, the company identifier (BPN) with the home OSP of each company, the directory from BPN to DID (BDRS), discovery, and common rules. The OSPs feed these services through the OSP–CSP interface.
 - **The CSP may offer further services**, such as an issuer or a dataspace wallet. An OSP uses them through a facade or runs its own.
-- **Hackathon scenario:** one CSP and two OSPs. OSP A issues credentials itself, OSP B uses the CSP's issuer.
+- **Hackathon scenario:** one CSP and two OSPs. In the target picture, OSP A issues credentials itself and OSP B uses the CSP's issuer. At the hackathon no real credentials are issued; both run on the stand-in of C4-M1 (OP-53). The aim for the demo at the Community Days is a real issuer.
 - **Later:** several CSPs with federation, and connectivity between dataspaces.
 
 ### Identity

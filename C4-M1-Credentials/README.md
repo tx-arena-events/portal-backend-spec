@@ -18,7 +18,7 @@ The configuration of the installation of the onboarding service provider (OSP) d
   - **IssuerService** (IdentityHub family, DCP): The module registers the company as a holder with the IssuerService and triggers the request in the company's dataspace wallet. The wallet fetches the credential via DCP.
 - **CSP issuer** (`CSP`). The CSP offers an issuer as an optional service. It works like an IssuerService: the module grants the credential types for the company at the CSP issuer and triggers the request in the wallet; the wallet fetches the credential via DCP. The module signs in at the CSP with the OSP's key.
 
-In the hackathon, OSP A issues credentials itself (own IssuerService), and OSP B uses the CSP issuer (FRAMEWORK 1). For Process Orchestration, the user interface and other modules, the module is the same in both cases: the same steps, queries, events and status reports.
+In the target picture, OSP A issues credentials itself (own IssuerService), and OSP B uses the CSP issuer (FRAMEWORK 1). At the hackathon both run on the stand-in `STUB` (11.6), so no real credentials are issued; the aim for the demo at the Community Days is a real issuer (OP-53). For Process Orchestration, the user interface and other modules, the module is the same in both cases: the same steps, queries, events and status reports.
 
 In all cases the issuer or a callback adapter tells the module as soon as a credential is issued or has failed. The module does not poll.
 
@@ -514,7 +514,9 @@ Files:
 - For cases 12 and 13: `ISSUER_MODE` = `OWN`, `ISSUER_ROUTES` = `SAP_DIV:CREDENTIAL_ISSUER,IDENTITY_HUB:ISSUER_SERVICE,CSP:ISSUER_SERVICE` and the addresses of the test servers.
 - For cases 14 to 16: `ISSUER_MODE` = `CSP`, `CSP_ISSUER_URL` and `CSP_TOKEN_URL` pointing to the test server, `CSP_ISSUER_DID` = `did:web:issuer.csp.example.org`.
 
-Hackathon scenario: installation of OSP A with `ISSUER_MODE` = `OWN` (own IssuerService, `ISSUER_ROUTES` = `IDENTITY_HUB:ISSUER_SERVICE,CSP:ISSUER_SERVICE`); installation of OSP B with `ISSUER_MODE` = `CSP`.
+Hackathon scenario (OP-53): installation of OSP A with `ISSUER_MODE` = `OWN` and empty `ISSUER_ROUTES`, so route `STUB`; installation of OSP B with `ISSUER_MODE` = `CSP` and empty `CSP_ISSUER_URL`, also `STUB` (11.6).
+
+Target for the demo at the Community Days: installation of OSP A with its own IssuerService (`ISSUER_ROUTES` = `IDENTITY_HUB:ISSUER_SERVICE,CSP:ISSUER_SERVICE`).
 
 ## 15. Changes from version 0.1
 

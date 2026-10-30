@@ -33,6 +33,7 @@ Important for the hackathon on 6 Nov 2026: **OP-36**, **OP-37**, **OP-40**, **OP
 | OP-50 | **Provider systems without a person:** Today a provider system starts the setup of a subscription by machine. With OSP 2.0, technical users do not call modules (FRAMEWORK 4.2), so providers work through the UI (C10-M1 open question 1). Is a permission for technical users of providers needed? | C2-M3, C2-M5, C10-M1 | project owner | open |
 | OP-51 | **Notice on new terms:** Who is informed on `AgreementVersionActivated` with `reconsentRequired`, and who collects the re-consent of existing companies (OP-11, C11-M1 open question 5)? | C1-M2, C3-M1, C11-M1 | project owner | open |
 | OP-52 | **Notice on deactivation:** After `disable-company-users` the people no longer belong to the company, so a notice "company deactivated" finds nobody. Notify before, or not at all (C11-M1 open question 4)? | C2-M2, C3-M1, C11-M1 | other part | open |
+| OP-53 | **Real issuer:** At the hackathon on 6 Nov 2026 no real credentials are issued: OSP A and OSP B run on the stand-in `STUB` of C4-M1 (11.6). The aim for the demo at the Community Days is a real issuer: own IssuerService with IdentityHub and callback adapter (C4-M1 11.4, open questions 2 and 3). Still to do for this: check the paths against the version in use, settle the callback adapter, enter the DID of the issuer in the trust list. | C4-M1, C4-M2 | both parts of the spec | decided 30 Oct 2026 for the hackathon; real issuer is the aim for the Community Days |
 
 ## A. Portal Service Provider (PSP)
 

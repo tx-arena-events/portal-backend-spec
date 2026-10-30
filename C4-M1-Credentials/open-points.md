@@ -1,6 +1,6 @@
 # C4-M1 Credentials: open points
 
-**Version:** 0.2, as of 2026-10-28
+**Version:** 0.2, as of 2026-10-30
 
 The [README](README.md) fixes each point for version 0.2, so that the module can be built. The following decisions are provisional and still to be agreed. Decided on 28 Oct 2026: OSP 2.0 (each OSP runs its own installation, the CSP provides the core services and, optionally, an issuer); in the hackathon, OSP A issues credentials itself and OSP B uses the CSP issuer.
 
@@ -60,7 +60,7 @@ Adopted into FRAMEWORK 5 to 7 on 28 Oct 2026 (events with their fields, queries,
 | CSP | offers the issuer API (proposal, README 11.5); checks home OSP, directory BPN → DID and dataspace; issues via DCP; calls back with its own service account, only to addresses of the installation from the trust list. The dataspace wallet of the CSP reports arrived credentials like a callback adapter. The CSP issuer is on the trust list. |
 | Governance | when admitting an OSP that issues credentials itself, adds the DID and the key of its issuer to the trust list (FRAMEWORK 5.1). Without this entry, connectors of other companies do not accept the credentials. |
 | Connectors (another part) | accept credentials of the issuers on the trust list. |
-| Test tools | test servers for the Credential Issuer, the IssuerService with IdentityHub and the issuer API of the CSP; for the hackathon, the shared CSP stand-in also offers the issuer API (still to be built). |
+| Test tools | test servers for the Credential Issuer, the IssuerService with IdentityHub and the issuer API of the CSP. The hackathon does not need them: it runs on the stand-in `STUB` (OP-53). |
 | Base skeleton | outbox, token validation, Problem Details; ingress of the installation with forwarding of the old status report paths. |
 
 ## Open questions
