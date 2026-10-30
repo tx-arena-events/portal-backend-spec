@@ -1,6 +1,6 @@
 # C6-M1 Connectors: open points
 
-**Version:** 0.2, as of 2026-10-29
+**Version:** 0.2, as of 2026-10-30
 
 ## Provisional decisions
 
@@ -18,10 +18,10 @@
 | Who | Assumption |
 |---|---|
 | C3-M2 | steps `register-connector` (`companyId`, `connectorId`, `endpointUrl`) and `deregister-connector` (`companyId`, `connectorId`), C3-M2 8.6; `companyId` is the host company; the company must have the status `REGISTERED` at the CSP |
-| C2-M3 | `/internal/technical-users/{id}?companyId=` with `usableForConnector` (C2-M3 9.1); event `TechnicalUserDeleted` with `technicalUserId`, `companyId`; C2-M3 calls README 9.1 before deleting an account (C2-M3 7.5, 11.2) |
+| C2-M3 | `/internal/technical-users/{id}?companyId=&offerSubscriptionId=` with `usableForConnector` (C2-M3 9.1; `offerSubscriptionId` for a connector as a service); event `TechnicalUserDeleted` with `technicalUserId`, `companyId`; C2-M3 calls README 9.1 before deleting an account (C2-M3 7.5, 11.2) |
 | C10-M1 | `/internal/subscriptions/{id}` with `status`, `providerCompanyId`, `customerCompanyId` |
 | C12-M1 | flows `subscription-ended` and `subscription-declined` (step 8.1), `technical-user-deleted` (step 8.2) and `connector-registered`, `connector-endpoint-changed`, `connector-deactivated`, `connector-deleted` (No. 1) |
-| C2-M5 | `view_connectors`, `manage_connectors` in the portal roles `IT Admin` and `Company Admin`; `execute_steps_c6` for the service account of Process Orchestration, `query_c6` for the service account of C2-M3 (C2-M5 6.2, 6.3) |
+| C2-M5 | `view_connectors`, `manage_connectors` in the portal roles `IT Admin` and `Company Admin`; `execute_steps_c6_m1` for the service account of Process Orchestration, `query_c6_m1` for the service account of C2-M3 (C2-M5 6.2, 6.3) |
 | C11-M1 | rule R16 on `ConnectorRegistered` |
 
 ## Open questions

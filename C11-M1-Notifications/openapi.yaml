@@ -14,13 +14,13 @@ servers:
 security:
   - portalIam: []
 tags:
-  - name: Inbox
-    description: Own notifications
+  - name: Company
+    description: Own notifications of a person, with or without a company (scope own, FRAMEWORK 4.1)
 
 paths:
   /notifications:
     get:
-      tags: [Inbox]
+      tags: [Company]
       operationId: listNotifications
       summary: Own notifications
       description: README 7.1. Personal notifications and staff notifications of the own permissions; hidden ones are left out.
@@ -47,7 +47,7 @@ paths:
 
   /notifications/count:
     get:
-      tags: [Inbox]
+      tags: [Company]
       operationId: countNotifications
       summary: Counters of the own inbox
       description: README 7.2.
@@ -64,7 +64,7 @@ paths:
 
   /notifications/{notificationId}:
     get:
-      tags: [Inbox]
+      tags: [Company]
       operationId: getNotification
       summary: One own notification
       description: README 7.3.
@@ -84,7 +84,7 @@ paths:
 
   /notifications/{notificationId}/read:
     post:
-      tags: [Inbox]
+      tags: [Company]
       operationId: markRead
       summary: Mark as read
       description: README 7.4. Idempotent.
@@ -100,7 +100,7 @@ paths:
 
   /notifications/{notificationId}/unread:
     post:
-      tags: [Inbox]
+      tags: [Company]
       operationId: markUnread
       summary: Mark as unread
       description: README 7.4. Idempotent.
@@ -116,7 +116,7 @@ paths:
 
   /notifications/{notificationId}/hide:
     post:
-      tags: [Inbox]
+      tags: [Company]
       operationId: hideNotification
       summary: Hide for the calling person
       description: README 7.5. Not for an open task.

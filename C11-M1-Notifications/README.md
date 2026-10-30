@@ -1,6 +1,6 @@
 # C11-M1 Notifications
 
-**Version:** 0.2, as of 2026-10-29 (OSP 2.0)
+**Version:** 0.2, as of 2026-10-30 (OSP 2.0)
 **Capability:** C11 Notifications
 **Kind:** Hackathon
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
@@ -149,7 +149,7 @@ There are no other operations. Nobody can create notifications through the API.
 
 ## 7. Operations
 
-All operations on the own inbox (tag `Inbox`), permission `view_notifications`, scope `own`. A notification that is not in the own inbox: 404.
+All operations on the own inbox (tag `Company`, FRAMEWORK 4.1), permission `view_notifications`, scope `own`. A notification that is not in the own inbox: 404.
 
 ### 7.1 `GET /api/c11-m1/notifications`
 
@@ -214,11 +214,11 @@ Problem Details, `type` = `urn:c11-m1:problem:<name>`.
 2. `ApplicationApproved` for the same `applicationId`: the task is `done` for everyone.
 3. The same event a second time (same `eventId`): no second notification.
 4. `ApplicationDeclined`: the applicant has `APPLICATION_DECLINED` with `reason`; afterwards the row in `applicant` is deleted.
-5. `SubscriptionRequested`: every `Company Admin` of the provider company (stand-in with two people) has an open task; `SubscriptionActivated` closes it and creates `SUBSCRIPTION_ACTIVATED` for the `Company Admin` of the customer.
+5. `SubscriptionRequested`: every `Company Admin` of the provider company (stand-in: Otto) has an open task; `SubscriptionActivated` closes it and creates `SUBSCRIPTION_ACTIVATED` for the `Company Admin` of the customer.
 6. `ProcessStepFailed`: a person with `retrigger_process_steps` sees `PROCESS_STEP_FAILED`; `ProcessStepRetriggered` for the same step closes it; a new `ProcessStepFailed` creates a new task.
 7. A closing event arrives before the event of the task, and the task event has an earlier or equal `occurredAt`: the task is created as `done`. A task event with a later `occurredAt` (case 6 after a retrigger): the task is created open.
 8. Hide an open task: 409; after `done`: 204, it no longer appears in the list.
-9. One person marks a staff notification as read: for another staff member it stays unread.
+9. One person marks a staff notification as read: for another staff member it stays unread (Rolf and Otto, both with `review_company_changes`, rule R5).
 10. Another person's notification: 404. Notification contents contain no names (check against the stand-in data).
 11. `DISABLED_RULES=R14`: `WalletAccountCreated` creates no notification.
 12. `ConnectorRegistered` for a company without an `IT Admin` (stand-in): every `Company Admin` of the company has `CONNECTOR_REGISTERED`.
@@ -227,10 +227,13 @@ Problem Details, `type` = `urn:c11-m1:problem:<name>`.
 
 | Object | Value |
 |---|---|
-| Applicant | `sub` `ebw.test-erika`, application `0f8e2d4c-6b1a-4c3e-8f7d-2a9b1c0d3e4f` |
-| Provider company (OSP A) | `11111111-1111-4111-8111-111111111111`, `Company Admin` `ebw.test-otto`, `ebw.test-lieschen` |
-| Customer company | `5b0c7a52-3f7e-4b1e-9d0a-1c2d3e4f5a6b`, `Company Admin` `ebw.test-erika` |
-| OSP staff | `ebw.test-staff` with `review_application`, `approve_offers`, `retrigger_process_steps` |
+| Applicant | Erika Mustermann, `sub` `5a1c0001-0000-4000-8000-000000000001`, application `0f8e2d4c-6b1a-4c3e-8f7d-2a9b1c0d3e4f` |
+| Provider company (company of OSP A) | `11111111-1111-4111-8111-111111111111`, `Company Admin` Otto Normalverbraucher `5a1c0012-0000-4000-8000-000000000012` (he invites himself, C2-M2 7.20) |
+| Customer company | Beispiel Maschinenbau GmbH `c0000001-0000-4000-8000-000000000001`, `Company Admin` Erika `5a1c0001-0000-4000-8000-000000000001`, no `IT Admin` (case 12) |
+| OSP staff | Rolf Prüfer `bbede0f3-fbc4-433b-b7ca-1982e8724912` (`OSP Reviewer`: `review_application`, `review_company_changes`); Otto (`OSP Admin`: `review_company_changes`, `approve_offers`, `retrigger_process_steps`) |
+| Person without a company | Lieschen Müller `5a1c0004-0000-4000-8000-000000000004`, only `Applicant` |
+
+IDs, persons and portal roles as in FRAMEWORK 7a and C2-M5 6.3.
 
 `stub-company-users.json` maps `companyId` and portal role to these `sub` values.
 
@@ -246,3 +249,5 @@ Problem Details, `type` = `urn:c11-m1:problem:<name>`.
 - A remembered closing event closes a new task only if the task event is not later (`occurredAt`, 6.2).
 - R14 and R16 go to `Company Admin` if the company has no `IT Admin` (e.g. right after onboarding).
 - Recipients from C2-M2 are read from `userId` (= `sub`); `appId` of `AppRolesAdded` is the `offerId` for the query at C10-M1.
+- Tag `Company` instead of `Inbox` (FRAMEWORK 4.1) (30 Oct 2026).
+- Test data with the common test IDs and test persons of FRAMEWORK 7a; `sub` values are account IDs, not user names (renamed from `ebw.test-erika`, `ebw.test-otto`, `ebw.test-lieschen`, `ebw.test-staff`) (30 Oct 2026).

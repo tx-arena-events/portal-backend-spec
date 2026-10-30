@@ -279,7 +279,7 @@ paths:
       operationId: findSubscriptions
       summary: Subscriptions by company, offer and status
       description: README 9.1. At least one parameter.
-      x-permission: query_c10
+      x-permission: query_c10_m1
       x-permission-scope: osp
       parameters:
         - { name: customerCompanyId, in: query, schema: { type: string, format: uuid } }
@@ -303,7 +303,7 @@ paths:
       operationId: getSubscriptionInternal
       summary: One subscription for other modules
       description: README 9.2.
-      x-permission: query_c10
+      x-permission: query_c10_m1
       x-permission-scope: osp
       parameters:
         - $ref: '#/components/parameters/OfferSubscriptionId'
@@ -323,7 +323,7 @@ paths:
       operationId: stepNotifyProvider
       summary: Inform the provider of a new subscription
       description: README 8.1. A subscription that is no longer `PENDING` gives `DONE` with `notified` false.
-      x-permission: execute_steps_c10
+      x-permission: execute_steps_c10_m1
       x-permission-scope: osp
       requestBody:
         required: true
@@ -348,7 +348,7 @@ paths:
       operationId: stepSendActivationCallback
       summary: Send the activation callback to the provider
       description: README 8.2. The secret is neither stored nor in the result.
-      x-permission: execute_steps_c10
+      x-permission: execute_steps_c10_m1
       x-permission-scope: osp
       requestBody:
         required: true

@@ -1,6 +1,6 @@
 # C8-M1 Offers: open points
 
-**Version:** 0.2, as of 2026-10-29
+**Version:** 0.2, as of 2026-10-30
 
 ## Provisional decisions
 
@@ -19,9 +19,9 @@
 
 | Who | Assumption |
 |---|---|
-| C2-M5 | `view_marketplace` in `Member`; `view_offers`, `manage_offers` in `Company Admin`; `approve_offers` in `OSP Admin`; `query_c8` for the service account of Process Orchestration (C2-M5 6.2, 6.3) |
+| C2-M5 | `view_marketplace` in `Member`; `view_offers`, `manage_offers` in `Company Admin`; `approve_offers` in `OSP Admin`; `query_c8_m1` for the service accounts of Process Orchestration and C10-M1; `query_c2_m3` for the service account of this module (C2-M5 6.2, 6.3) |
 | C2-M2 | `create-client-template` takes the planned roles as `{ name, descriptions: [{ lang, text }] }`; `/internal/app-roles?appId=` returns the roles of an active app; `appId` equals `offerId` |
-| C2-M3 | a query for the assignable technical roles for modules (today only for people) |
+| C2-M3 | `GET /internal/technical-roles` returns all technical user roles with `name` (C2-M3 9.3) |
 | C3-M1 | `GET /internal/companies/{companyId}` returns `companyRoles` with `APP_PROVIDER`, `SERVICE_PROVIDER` |
 | C12-M1 | flows `app-approval`, `app-roles-added`, `app-role-descriptions-changed`; lookup `offer` uses section 9 |
 | C10-M1 | reads status, instance and agreements through section 9 |
@@ -33,6 +33,7 @@
 2. **Offer deactivated:** what happens to the subscriptions (C10 open question 3) and to the clients in the Portal IAM?
 3. **Change the URL of a single-instance app** after the approval: C2-M2 has the step `update-instance-url`, this module has no event for it yet.
 4. **Use cases and language tags:** reference data (OP-13) or own tables?
+5. **Approval of offers of the OSP company:** in FRAMEWORK 7a the only `OSP Admin` (Otto) is also `Company Admin` of the company of OSP A, which offers apps in the test data. README 6.2 forbids him to approve them (403 `own-offer`). Options: a second `OSP Admin` without a binding to the company, or another provider company (e.g. Beispiel Logistik GmbH). To be agreed for FRAMEWORK 7a.
 
 ## Legacy endpoints (portal backend 2.6.0)
 

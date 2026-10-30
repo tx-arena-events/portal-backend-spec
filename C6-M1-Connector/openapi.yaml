@@ -20,7 +20,7 @@ tags:
     description: Connectors of the own company
   - name: Steps
     description: For Process Orchestration
-  - name: Internal
+  - name: Queries
     description: Queries for other modules
 
 paths:
@@ -75,7 +75,10 @@ paths:
       tags: [Company]
       operationId: registerConnectorAsAService
       summary: Register a connector as a service for a customer
-      description: README 7.3. The offer of the subscription belongs to the own company.
+      description: |
+        README 7.3. The offer of the subscription belongs to the own company. The technical
+        user is checked at C2-M3 with offerSubscriptionId, so the customer account of the
+        subscription is usable (README 6.2).
       x-permission: manage_connectors
       x-permission-scope: company
       requestBody:
@@ -161,7 +164,7 @@ paths:
       operationId: stepDeactivateSubscriptionConnectors
       summary: Deactivate the connector of an ended subscription
       description: README 8.1.
-      x-permission: execute_steps_c6
+      x-permission: execute_steps_c6_m1
       x-permission-scope: osp
       requestBody:
         required: true
@@ -184,7 +187,7 @@ paths:
       operationId: stepUnlinkTechnicalUser
       summary: Remove the link to a deleted technical user
       description: README 8.2.
-      x-permission: execute_steps_c6
+      x-permission: execute_steps_c6_m1
       x-permission-scope: osp
       requestBody:
         required: true
@@ -203,11 +206,11 @@ paths:
 
   /internal/connectors:
     get:
-      tags: [Internal]
+      tags: [Queries]
       operationId: listConnectorsInternal
       summary: Active connectors that use a technical user
       description: README 9.1. Used by C2-M3 before it deletes a technical user.
-      x-permission: query_c6
+      x-permission: query_c6_m1
       x-permission-scope: osp
       parameters:
         - { name: technicalUserId, in: query, required: true, schema: { type: string, format: uuid } }

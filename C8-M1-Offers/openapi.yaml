@@ -474,7 +474,7 @@ paths:
       - Provider
       operationId: putTechnicalUserProfile
       summary: Set the technical user profile
-      description: README 7.11. Only in `CREATED`.
+      description: README 7.11. Only in `CREATED`. The roles are checked against C2-M3 `GET /internal/technical-roles`; an unknown role gives 400.
       x-permission: manage_offers
       x-permission-scope: company
       requestBody:
@@ -499,6 +499,8 @@ paths:
         '404':
           $ref: '#/components/responses/Problem'
         '409':
+          $ref: '#/components/responses/Problem'
+        '502':
           $ref: '#/components/responses/Problem'
     delete:
       tags:
@@ -1071,7 +1073,7 @@ paths:
       operationId: getOfferInternal
       summary: Offer for other modules
       description: README 9.1. Lookup `offer` of Process Orchestration, Subscriptions.
-      x-permission: query_c8
+      x-permission: query_c8_m1
       x-permission-scope: osp
       parameters:
       - $ref: '#/components/parameters/OfferId'

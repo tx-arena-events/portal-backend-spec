@@ -1,6 +1,6 @@
 # C12-M1 Process Orchestration: open points
 
-**Version:** 0.2, as of 2026-10-29
+**Version:** 0.2, as of 2026-10-30
 
 ## Provisional decisions
 
@@ -18,7 +18,7 @@
 | 10 | Mapping in lookups | nested objects and `join` in `fields` build the input of the target step, e.g. the C3-M2 `Address` from the C3-M1 address; C3-M1 and C3-M2 keep their formats (README 6.8) | C3-M1, C3-M2 |
 | 11 | Lists of internal queries | `GET /internal/processes` answers with a list without paging, as C2-M2 `GET /internal/app-instance-clients`; lookups address such answers with `[0]` | FRAMEWORK 4.1 |
 | 12 | `endOn` after a decision | an `endOn` event after all `waitFor` events of the flow is only recorded; the process continues (README 6.5). Compensation (e.g. undo a registration at the CSP) is not part of the first version | C1-M2, project owner |
-| 13 | Single-instance apps and declined subscriptions | flows `single-instance-activation` (technical user and callback after `SubscriptionActivated`) and `subscription-declined` (disable the instance client, deactivate connectors) | C10-M1, C2-M2, C2-M3, C6-M1 |
+| 13 | Single-instance apps and declined subscriptions | flows `single-instance-activation` (technical user and callback after `SubscriptionActivated`) and `subscription-declined` (disable the instance client, deactivate the technical users of the subscription, deactivate connectors) | C10-M1, C2-M2, C2-M3, C6-M1 |
 
 ## Assumptions about other modules
 
@@ -28,6 +28,7 @@
 | C1-M3 | `ApplicationApproved` carries `bpn` for `TRANSFER` and `REACTIVATION` (used for `transfer-company` and `assign-company-admin`) |
 | C3-M1 | `GET /internal/companies/{companyId}` (`queryCompany`) provides `name`, `identifiers` (type and value) and `address` (`street`, `houseNumber`, `postalCode`, `city`, `countryCode`); used as input of the C3-M2 steps. The list `identifiers` also contains `EBWOID` and `EUID` |
 | C3-M2 | `register-company` needs `ebwoid`, `euid` or an entry in `identifiers` (C3-M2 6.5); the flows pass all three, so a company without a Business Wallet (OP-35) can be registered. Steps `register-connector`, `deregister-connector` (C3-M2 8.6) |
+| C2-M3 | step `disable-subscription-technical-users` with `offerSubscriptionId` (C2-M3 8.6) in the flows `subscription-ended` and `subscription-declined` |
 | C4-M2 | the result of `create-wallet` or the event `DataspaceWalletCreated` contains `did`; the result of `create-wallet-account` or `WalletAccountCreated` contains `walletAccountRef` |
 | Modules with long-running steps | publish the completing event also if they answer `DONE` at once; Process Orchestration takes the step result in that case |
 | Offers (version 0.2) | events `OfferApproved` (`offerId`, `offerType`, `providerCompanyId`), `OfferRolesAdded`, `OfferRoleDescriptionsChanged` (`offerId`, `roles`); query `GET /internal/offers/{offerId}` (`getOfferInternal`) with the fields of README 11.2 |
@@ -38,7 +39,7 @@
 
 ## Open questions
 
-1. **Technical users at the end of a subscription:** FRAMEWORK 5.8 names only `disable-instance-client`. Today the technical users of the subscription are deactivated as well. C2-M3 has no step for one subscription. To be agreed with C2-M3.
+1. **Technical users at the end of a subscription:** closed. The flows `subscription-ended` and `subscription-declined` call C2-M3 `disable-subscription-technical-users` (C2-M3 8.6, FRAMEWORK 7).
 2. **URL of a single-instance app:** C2-M2 `update-instance-url` exists, but Offers has no event for it yet (C2-M2 open points).
 3. **Order of `register-did` and `issue-credentials`:** closed. C4-M1 8.1 issues in onboarding after `CompanyDidRegistered`; the flow keeps `register-did` before `issue-credentials`.
 4. **Several workers and the event bus:** with an in-process bus, every instance of the monolith receives every event. The unique index on open processes (README 5) prevents double processes; whether one instance should be the only consumer is open (decision on the event transport of 22 Oct 2026).

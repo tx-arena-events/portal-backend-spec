@@ -1,6 +1,6 @@
 # C10-M1 Subscriptions
 
-**Version:** 0.2, as of 2026-10-29 (OSP 2.0)
+**Version:** 0.2, as of 2026-10-30 (OSP 2.0)
 **Capability:** C10 Subscriptions
 **Kind:** Hackathon
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
@@ -42,7 +42,7 @@ Callers:
 |---|---|
 | Offers, agreements, technical user profiles, app roles | C8-M1 Offers |
 | Client of an app instance in the Portal IAM | C2-M2 (steps `create-instance-client`, `enable-instance-client`, `disable-instance-client`, `update-instance-url`) |
-| Technical users of a subscription, their secrets | C2-M3 (step `create-for-subscription`, call `credentials/rotate` with permission `rotate_subscription_credentials`) |
+| Technical users of a subscription, their secrets | C2-M3 (step `create-for-subscription`, call `credentials/rotate` with permission `rotate_subscription_credentials`; step `disable-subscription-technical-users` when the subscription ends or is declined, C2-M3 8.6) |
 | Order of the setup steps, retries | C12-M1 Process Orchestration |
 | Messages to people | C11-M1 Notifications |
 | Connectors linked to a subscription | C6-M1 Connectors |
@@ -137,7 +137,7 @@ As FRAMEWORK 4.3: time, `sub`, `company_id`, operation, object ID. No secrets, n
 | `view_subscriptions` | `company` | view subscriptions of the own company, as customer or as provider |
 | `manage_subscriptions` | `company` | subscribe and end subscriptions of the own company (customer side) |
 | `manage_offers` | `company` | provider side: start the setup, activate, decline, change the instance URL, manage the provider configuration (the company must be the provider of the offer) |
-| `execute_steps_c10`, `query_c10` | `osp` | steps and queries over HTTP (FRAMEWORK 4.2) |
+| `execute_steps_c10_m1`, `query_c10_m1` | `osp` | steps and queries over HTTP (FRAMEWORK 4.2) |
 
 The permissions are listed in C2-M5 6.2. `view_subscriptions` is in the portal roles `IT Admin` and `Company Admin`, `manage_subscriptions` and `manage_offers` in `Company Admin` (C2-M5 6.3). A subscription of another company is answered with 404 (FRAMEWORK 4.3).
 
@@ -239,10 +239,10 @@ Every event also carries `eventId`, `eventType`, `occurredAt`. No secrets, no na
 
 | Neighbour (variable) | Call | Permission of the service account | Built-in stand-in |
 |---|---|---|---|
-| C8-M1 Offers (`OFFER_URL`) | `GET /api/c8-m1/internal/offers/{offerId}`: `status`, `offerType`, `instanceKind`, `instanceUrl`, `providerCompanyId`, `agreements` (with `mandatory`) | `query_c8` | reads `stub-offers.json` |
+| C8-M1 Offers (`OFFER_URL`) | `GET /api/c8-m1/internal/offers/{offerId}`: `status`, `offerType`, `instanceKind`, `instanceUrl`, `providerCompanyId`, `agreements` (with `mandatory`) | `query_c8_m1` | reads `stub-offers.json` |
 | C3-M1 Company Profile (`COMPANY_URL`) | `GET /api/c3-m1/internal/companies/{companyId}`: `status`, `name`, `address.countryCode` | `query_c3_m1` | every company `ACTIVE` |
 | C2-M3 Technical Users (`TECHNICAL_USER_URL`) | `POST /api/c2-m3/internal/technical-users/{id}/credentials/rotate` with `offerSubscriptionId` | `rotate_subscription_credentials` | fixed test credentials |
-| C12-M1 Process Orchestration (`PROCESS_URL`) | `GET /api/c12-m1/internal/processes?subjectType=SUBSCRIPTION&subjectId=`: `flowKey`, `status` | `query_c12` | empty list (no setup status, activation allowed) |
+| C12-M1 Process Orchestration (`PROCESS_URL`) | `GET /api/c12-m1/internal/processes?subjectType=SUBSCRIPTION&subjectId=`: `flowKey`, `status` | `query_c12_m1` | empty list (no setup status, activation allowed) |
 
 ### 11.2 Systems of the provider
 
@@ -294,8 +294,8 @@ Problem Details, `type` = `urn:c10-m1:problem:<name>`.
 
 | Object | Value |
 |---|---|
-| Provider company (OSP A) | `11111111-1111-4111-8111-111111111111` |
-| Customer company | `5b0c7a52-3f7e-4b1e-9d0a-1c2d3e4f5a6b` (Beispiel Maschinenbau GmbH) |
+| Provider company (company of OSP A, FRAMEWORK 7a) | `11111111-1111-4111-8111-111111111111` |
+| Customer company | Beispiel Maschinenbau GmbH `c0000001-0000-4000-8000-000000000001` (FRAMEWORK 7a) |
 | Multi-instance app | `7c1d9e3a-2b4f-4a6c-8d0e-5f1a2b3c4d5e` |
 | Single-instance app | `8d2e0f4b-3c5a-4b7d-9e1f-6a2b3c4d5e6f`, URL `https://app.example.org` |
 | Service | `9e3f1a5c-4d6b-4c8e-8f2a-7b3c4d5e6f70` |
@@ -318,3 +318,6 @@ Problem Details, `type` = `urn:c10-m1:problem:<name>`.
 - `notify-provider` answers `DONE` with `notified` `false` instead of 409 when the subscription is no longer `PENDING`.
 - `send-activation-callback` takes `clientId`; it also runs in the flow `single-instance-activation`. `SubscriptionActivated` carries `offerType` and `instanceKind`.
 - The call to C2-M3 `credentials/rotate` names its permission `rotate_subscription_credentials`; section 11.1 names the permission for every call.
+- Permissions with the full module identifier as in FRAMEWORK 4.2: `execute_steps_c10_m1`, `query_c10_m1` (renamed from `execute_steps_c10`, `query_c10`); calls with `query_c8_m1` and `query_c12_m1` (30 Oct 2026).
+- Technical users of an ended or declined subscription are deactivated by C2-M3 `disable-subscription-technical-users` in the flows `subscription-ended` and `subscription-declined` (section 3; open question 2 closed) (30 Oct 2026).
+- Test data with the common test IDs of FRAMEWORK 7a (customer company Beispiel Maschinenbau GmbH) (30 Oct 2026).

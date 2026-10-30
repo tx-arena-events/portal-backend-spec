@@ -1,4 +1,4 @@
-# Flow definitions of Process Orchestration (C12-M1), version 0.2, as of 2026-10-29.
+# Flow definitions of Process Orchestration (C12-M1), version 0.2, as of 2026-10-30.
 # Format: README section 6. Flows: FRAMEWORK section 5. Every OSP may replace this file
 # in its installation (configuration FLOWS_FILE); the module code does not change.
 #
@@ -476,6 +476,9 @@ flows:
         lookup: subscription-instance-client
         when: { lookup.subscription-instance-client.found: true }
         input: { appInstanceClientId: lookup.subscription-instance-client.appInstanceClientId }
+      - key: disable-subscription-technical-users
+        call: c2-m3.disable-subscription-technical-users
+        input: { offerSubscriptionId: offerSubscriptionId }
       - key: deactivate-subscription-connectors
         call: c6-m1.deactivate-subscription-connectors
         input: { offerSubscriptionId: offerSubscriptionId }
@@ -490,6 +493,9 @@ flows:
         lookup: subscription-instance-client
         when: { lookup.subscription-instance-client.found: true }
         input: { appInstanceClientId: lookup.subscription-instance-client.appInstanceClientId }
+      - key: disable-subscription-technical-users
+        call: c2-m3.disable-subscription-technical-users
+        input: { offerSubscriptionId: offerSubscriptionId }
       - key: deactivate-subscription-connectors
         call: c6-m1.deactivate-subscription-connectors
         input: { offerSubscriptionId: offerSubscriptionId }

@@ -1,13 +1,13 @@
 # C10-M1 Subscriptions: open points
 
-**Version:** 0.2, as of 2026-10-29
+**Version:** 0.2, as of 2026-10-30
 
 ## Provisional decisions
 
 | No. | Topic | Decision in the README | To be agreed with |
 |---|---|---|---|
 | 1 | Catalogue per installation | a company subscribes only to offers of its own installation (README 3) | project owner (OP-39) |
-| 2 | Provider operations by people | start the setup, activate, decline through the UI with `manage_offers`. Today providers call the setup by machine with a technical user; FRAMEWORK 4.2 does not let technical users call modules (open question 1) | C2-M3, C2-M5 |
+| 2 | Provider operations by people | start the setup, activate, decline through the UI with `manage_offers`. Today providers call the setup by machine with a technical user; FRAMEWORK 4.2 does not let technical users call modules (OP-50) | C2-M3, C2-M5 |
 | 3 | Secret in the activation callback | a new secret through C2-M3 `credentials/rotate` on every callback (decided 21 Oct 2026, C2-M3 R5) | provider systems |
 | 4 | Declined subscriptions | kept with `DECLINED` (today deleted) | project owner, data protection |
 | 5 | Several subscriptions | apps: one open subscription per company; services: several (as today) | project owner |
@@ -23,15 +23,15 @@
 | C8-M1 Offers | `GET /internal/offers/{offerId}` with `status`, `offerType`, `instanceKind`, `instanceUrl`, `providerCompanyId`, `agreements` |
 | C3-M1 | `GET /internal/companies/{companyId}` with `status`, `name`, `address.countryCode` |
 | C2-M2 | creates, enables, disables the client of the instance in the flows; queries `/internal/subscriptions` |
-| C2-M3 | step `create-for-subscription` creates the technical user (result `accounts`); `POST /internal/technical-users/{id}/credentials/rotate` with `offerSubscriptionId`, permission `rotate_subscription_credentials` |
-| C2-M5 | `view_subscriptions` in `IT Admin` and `Company Admin`, `manage_subscriptions` and `manage_offers` in `Company Admin`; `execute_steps_c10`, `query_c10` for the service account of Process Orchestration; `rotate_subscription_credentials`, `query_c8`, `query_c3_m1`, `query_c12` for the service account of this module (C2-M5 6.2, 6.3) |
+| C2-M3 | step `create-for-subscription` creates the technical user (result `accounts`); step `disable-subscription-technical-users` deactivates the accounts of an ended or declined subscription (C2-M3 8.6); `POST /internal/technical-users/{id}/credentials/rotate` with `offerSubscriptionId`, permission `rotate_subscription_credentials` |
+| C2-M5 | `view_subscriptions` in `IT Admin` and `Company Admin`, `manage_subscriptions` and `manage_offers` in `Company Admin`; `execute_steps_c10_m1`, `query_c10_m1` for the service account of Process Orchestration; `rotate_subscription_credentials`, `query_c8_m1`, `query_c3_m1`, `query_c12_m1` for the service account of this module (C2-M5 6.2, 6.3) |
 | C12-M1 | flows `subscription-requested`, `subscription-setup`, `single-instance-activation`, `subscription-declined`, `subscription-ended`, `instance-url-changed` in `flows.yaml`; `GET /internal/processes` for the setup status |
 | C6-M1, C11-M1 | react to `SubscriptionDeactivated` and the other events |
 
 ## Open questions
 
-1. **Provider systems without a person:** today a provider calls `start-autoSetup` by machine. With OSP 2.0, technical users get tokens only for apps and central services (FRAMEWORK 4.2). Is a provider permission for technical users needed (C2-M3, C2-M5)?
-2. **Technical users at the end of a subscription:** today they are deactivated. C2-M3 has no step for one subscription (C12 open question 1).
+1. **Provider systems without a person:** today a provider calls `start-autoSetup` by machine; see OP-50 in the cross-module [open-points.md](../open-points.md).
+2. **Technical users at the end of a subscription:** closed. C2-M3 `disable-subscription-technical-users` (C2-M3 8.6) runs in the flows `subscription-ended` and `subscription-declined` (C12-M1 flows.yaml).
 3. **Offer deactivated:** what happens to `PENDING` and `ACTIVE` subscriptions? Today nothing changes.
 4. **Compatibility for existing providers:** webhook fields and the old path `start-autoSetup`. Alias during the migration?
 5. **Subscriptions across installations** (OP-39): a company of OSP B subscribes to an app of a provider at OSP A.

@@ -1,6 +1,6 @@
 # C8-M1 Offers
 
-**Version:** 0.2, as of 2026-10-29 (OSP 2.0)
+**Version:** 0.2, as of 2026-10-30 (OSP 2.0)
 **Capability:** C8 Offers (apps and services)
 **Kind:** Hackathon
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
@@ -64,6 +64,7 @@ Callers:
 | `COMPANY_URL` | C3-M1: empty = built-in stand-in, `in-process`, or HTTP address (FRAMEWORK 4.7) | `in-process` |
 | `APP_ACCESS_URL` | C2-M2 | `in-process` |
 | `SUBSCRIPTION_URL` | C10-M1 | `in-process` |
+| `TECHNICAL_USER_URL` | C2-M3 | `in-process` |
 | `SETTINGS_FILE` | installation settings with the release agreements and languages (OP-36) | `config/installation.json` |
 | `MAX_DOCUMENT_MB` | largest document | `8` |
 | `LANGUAGES` | languages of descriptions | `de,en` |
@@ -148,7 +149,7 @@ What can be changed: `CREATED` everything · `IN_REVIEW` nothing · `ACTIVE` des
 | `view_offers` | `company` | read own offers as provider, including drafts and documents |
 | `manage_offers` | `company` | create, edit, submit, deactivate, delete own offers |
 | `approve_offers` | `osp` | read offers in review, approve, decline (portal role `OSP Admin`) |
-| `query_c8` | `osp` | queries over HTTP (FRAMEWORK 4.2) |
+| `query_c8_m1` | `osp` | queries over HTTP (FRAMEWORK 4.2) |
 
 The permissions are listed in C2-M5 6.2. `view_marketplace` is in the portal role `Member` and therefore in every portal role of a company; `view_offers` and `manage_offers` are in `Company Admin`, `approve_offers` in `OSP Admin` (C2-M5 6.3).
 
@@ -229,7 +230,7 @@ Permission `manage_offers`, own offer in `ACTIVE`. Status `INACTIVE`; event `Off
 
 ### 7.11 Technical user profile
 
-`GET`, `PUT`, `DELETE /offers/{offerId}/technical-user-profile` (`view_offers` / `manage_offers`, `CREATED`). Input `name`, `roles` (names of technical roles; checked against the assignable roles of C2-M3).
+`GET`, `PUT`, `DELETE /offers/{offerId}/technical-user-profile` (`view_offers` / `manage_offers`, `CREATED`). Input `name`, `roles` (names of technical roles). `PUT` checks every role against C2-M3 `GET /internal/technical-roles` (C2-M3 9.3): an unknown role gives 400 `validation`; C2-M3 not reachable: 502 `upstream-error`.
 
 ### 7.12 Documents
 
@@ -292,7 +293,7 @@ Every event also carries `eventId`, `eventType`, `occurredAt`.
 |---|---|---|
 | C3-M1 (`COMPANY_URL`) | `GET /api/c3-m1/internal/companies/{companyId}`: `status`, `companyRoles` | every company `ACTIVE` with both provider roles |
 | C2-M2 (`APP_ACCESS_URL`) | `GET /api/c2-m2/internal/app-roles?appId=`: roles of active apps | empty list |
-| C2-M3 | assignable technical roles; C2-M3 offers them only to people, a query for modules is missing (open-points) | fixed list from `stub-technical-roles.json` |
+| C2-M3 (`TECHNICAL_USER_URL`) | `GET /api/c2-m3/internal/technical-roles?lang=` (C2-M3 9.3, permission `query_c2_m3`): `name` of every technical user role | the roles of C2-M5 6.4 as a fixed list, among them `Dataspace Discovery` |
 | C10-M1 (`SUBSCRIPTION_URL`) | `GET /api/c10-m1/internal/subscriptions?customerCompanyId=&offerId=`: own subscription status in the offer view | none |
 
 No external systems.
@@ -325,12 +326,16 @@ Problem Details, `type` = `urn:c8-m1:problem:<name>`.
 7. Another company reads a draft: 404. `GET /marketplace/offers` shows only `ACTIVE` offers.
 8. Deactivate: `INACTIVE`, `OfferDeactivated`; the offer disappears from the marketplace.
 9. Upload a second `LEAD_IMAGE`: the first becomes `INACTIVE`.
+10. `PUT /offers/{offerId}/technical-user-profile` with the role `Dataspace Discovery`: 200. With a role that C2-M3 9.3 does not return: 400 `validation`.
 
 ## 14. Test data
 
 | Object | Value |
 |---|---|
-| Provider company (OSP A, roles `APP_PROVIDER`, `SERVICE_PROVIDER`) | `11111111-1111-4111-8111-111111111111` |
+| Provider company: company of OSP A (FRAMEWORK 7a). Besides its seed roles `ONBOARDING_SERVICE_PROVIDER` and `ACTIVE_PARTICIPANT` it needs `APP_PROVIDER` and `SERVICE_PROVIDER`, added through C3-M1 7.8 | `11111111-1111-4111-8111-111111111111` |
+| `Company Admin` of the provider company | Otto Normalverbraucher `5a1c0012-0000-4000-8000-000000000012`, after he has invited himself (C2-M2 7.20, FRAMEWORK 7a) |
+| OSP staff with `approve_offers` | portal role `OSP Admin`. Otto is bound to the provider company and gets 403 `own-offer` (case 3); the approval needs an `OSP Admin` without this binding (open-points, open question 5) |
+| Customer company | Beispiel Maschinenbau GmbH `c0000001-0000-4000-8000-000000000001`, `Company Admin` Erika Mustermann `5a1c0001-0000-4000-8000-000000000001` (FRAMEWORK 7a) |
 | Multi-instance app | `7c1d9e3a-2b4f-4a6c-8d0e-5f1a2b3c4d5e`, roles `Viewer`, `Editor`, profile `connector-sync` with role `Dataspace Discovery` (a technical role of C2-M5 6.4) |
 | Single-instance app | `8d2e0f4b-3c5a-4b7d-9e1f-6a2b3c4d5e6f`, URL `https://app.example.org` |
 | Service | `9e3f1a5c-4d6b-4c8e-8f2a-7b3c4d5e6f70`, `DATASPACE_SERVICE` |
@@ -348,3 +353,6 @@ Problem Details, `type` = `urn:c8-m1:problem:<name>`.
 - View `assigned` dropped; the apps of a person come from C2-M2.
 - Mapping of the legacy endpoints moved to [open-points.md](open-points.md).
 - Hackathon core path marked in section 7; test profile `connector-sync` uses the technical role `Dataspace Discovery`.
+- Permission `query_c8_m1` (renamed from `query_c8`) with the full module identifier as in FRAMEWORK 4.2 (30 Oct 2026).
+- The technical user profile is checked against C2-M3 `GET /internal/technical-roles` (C2-M3 9.3, new variable `TECHNICAL_USER_URL`); the built-in stand-in returns a fixed list instead of reading a separate file (section 11, case 10) (30 Oct 2026).
+- Test data with the common test IDs and test persons of FRAMEWORK 7a (30 Oct 2026).

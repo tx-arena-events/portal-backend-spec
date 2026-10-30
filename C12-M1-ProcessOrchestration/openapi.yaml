@@ -166,7 +166,7 @@ paths:
       operationId: findProcessesOfSubject
       summary: Processes of a subject
       description: README section 9. Newest first.
-      x-permission: query_c12
+      x-permission: query_c12_m1
       x-permission-scope: osp
       parameters:
         - { name: subjectType, in: query, required: true, schema: { $ref: '#/components/schemas/SubjectType' } }

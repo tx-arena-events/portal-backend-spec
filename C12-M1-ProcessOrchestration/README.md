@@ -1,6 +1,6 @@
 # C12-M1 Process Orchestration
 
-**Version:** 0.2, as of 2026-10-29 (OSP 2.0)
+**Version:** 0.2, as of 2026-10-30 (OSP 2.0)
 **Capability:** C12 Process Orchestration
 **Kind:** Provided
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [flows.yaml](flows.yaml) (flow definitions), [open-points.md](open-points.md)
@@ -202,7 +202,7 @@ Derived from the step runs and stored for queries:
 |---|---|---|
 | `view_processes` | `osp` | view processes, step runs and flows (portal role `OSP Admin`) |
 | `retrigger_process_steps` | `osp` | retrigger a failed step (portal role `OSP Admin`) |
-| `query_c12` | `osp` | query processes of a subject over HTTP (FRAMEWORK 4.2) |
+| `query_c12_m1` | `osp` | query processes of a subject over HTTP (FRAMEWORK 4.2) |
 
 The permissions and portal roles are defined in C2-M5 6.2 and 6.3.
 
@@ -326,8 +326,8 @@ All steps of the step catalogue (FRAMEWORK 7), as named in [flows.yaml](flows.ya
 | `subscription-requested` | `SubscriptionRequested` | – | C10-M1 notify-provider |
 | `subscription-setup` | `SubscriptionSetupStarted` | `SubscriptionActivated`; ends on `SubscriptionDeclined`, `SubscriptionDeactivated` | C2-M2 create-instance-client (apps, `offerType` of the event), C2-M3 create-for-subscription (if the offer has a technical user profile), C2-M2 enable-instance-client, C10-M1 send-activation-callback |
 | `single-instance-activation` | `SubscriptionActivated` (`instanceKind` `SINGLE`) | – | C2-M3 create-for-subscription (if the offer has a technical user profile), C10-M1 send-activation-callback |
-| `subscription-declined` | `SubscriptionDeclined` | – | C2-M2 disable-instance-client (if the setup created one), C6-M1 deactivate-subscription-connectors |
-| `subscription-ended` | `SubscriptionDeactivated` | – | C2-M2 disable-instance-client, C6-M1 deactivate-subscription-connectors |
+| `subscription-declined` | `SubscriptionDeclined` | – | C2-M2 disable-instance-client (if the setup created one), C2-M3 disable-subscription-technical-users, C6-M1 deactivate-subscription-connectors |
+| `subscription-ended` | `SubscriptionDeactivated` | – | C2-M2 disable-instance-client, C2-M3 disable-subscription-technical-users, C6-M1 deactivate-subscription-connectors |
 | `instance-url-changed` | `SubscriptionInstanceUrlChanged` | – | C2-M2 update-instance-url |
 | `technical-user-deleted` | `TechnicalUserDeleted` | – | C6-M1 unlink-technical-user |
 | `connector-registered`, `connector-endpoint-changed` | `ConnectorRegistered`, `ConnectorEndpointChanged` | – | C3-M2 register-connector (FRAMEWORK 5.9) |
@@ -408,19 +408,19 @@ Errors of the called steps are not passed on; they are stored in `last_error` of
 
 | Object | Value |
 |---|---|
-| Company (new) | `companyId` `5b0c7a52-3f7e-4b1e-9d0a-1c2d3e4f5a6b`, Beispiel Maschinenbau GmbH, `EBWOID-DE-0000000001` |
-| Application | `applicationId` `0f8e2d4c-6b1a-4c3e-8f7d-2a9b1c0d3e4f`, kind `ONBOARDING`, `existingCompany` `false`, `applicantSub` `ebw.test-erika` |
+| Company (new) | `companyId` `c0000001-0000-4000-8000-000000000001`, Beispiel Maschinenbau GmbH, `EBWOID-DE-0000000001` (FRAMEWORK 7a) |
+| Application | `applicationId` `0f8e2d4c-6b1a-4c3e-8f7d-2a9b1c0d3e4f`, kind `ONBOARDING`, `existingCompany` `false`, `applicantSub` `5a1c0001-0000-4000-8000-000000000001` (Erika Mustermann, FRAMEWORK 7a) |
 | Address (C3-M1) | Musterstraße 1, 70569 Stuttgart, region `BW`, `DE` (as C3-M1 14) |
 | BPN from the stand-in | `BPNLIUK2REMLK3F4` (from `EBWOID-DE-0000000001`, 11.3) |
-| App (multi-instance) | `offerId` `7c1d9e3a-2b4f-4a6c-8d0e-5f1a2b3c4d5e`, provider OSP A company `11111111-1111-4111-8111-111111111111` |
+| App (multi-instance) | `offerId` `7c1d9e3a-2b4f-4a6c-8d0e-5f1a2b3c4d5e`, provider: company of OSP A `11111111-1111-4111-8111-111111111111` (FRAMEWORK 7a) |
 
 Example event that starts the onboarding:
 
 ```json
 { "eventId": "b8e1f7a0-1c2d-4e3f-9a8b-7c6d5e4f3a2b", "eventType": "ApplicationSubmitted",
   "occurredAt": "2026-11-06T09:30:00Z", "applicationId": "0f8e2d4c-6b1a-4c3e-8f7d-2a9b1c0d3e4f",
-  "companyId": "5b0c7a52-3f7e-4b1e-9d0a-1c2d3e4f5a6b", "kind": "ONBOARDING",
-  "existingCompany": false, "applicantSub": "ebw.test-erika" }
+  "companyId": "c0000001-0000-4000-8000-000000000001", "kind": "ONBOARDING",
+  "existingCompany": false, "applicantSub": "5a1c0001-0000-4000-8000-000000000001" }
 ```
 
 ## Changes from version 0.1
@@ -439,3 +439,6 @@ Example event that starts the onboarding:
 - `endOn` applies only before the `waitFor` events of a flow have arrived; `IN_PROGRESS` and `AWAITING_EVENT` on end (6.3, 6.5).
 - Flows `single-instance-activation` and `subscription-declined`; `subscription-setup` also ends on `SubscriptionDeactivated`, decides on `offerType` of the event and passes `clientId` to the callback.
 - `errorType` values (10); `version` of the file is the version of every flow (6.1); `waitFor` has no time limit (6.3).
+- Flows `subscription-ended` and `subscription-declined` call C2-M3 `disable-subscription-technical-users` (C2-M3 8.6); open question 1 closed (30 Oct 2026).
+- Permission `query_c12_m1` (renamed from `query_c12`) with the full module identifier as in FRAMEWORK 4.2 (30 Oct 2026).
+- Test data with the common test IDs of FRAMEWORK 7a; `applicantSub` is the account ID (renamed from `ebw.test-erika`) (30 Oct 2026).
