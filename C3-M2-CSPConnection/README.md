@@ -214,7 +214,7 @@ Input always with `processId`, `stepRunId` and `companyId` (FRAMEWORK 4.4).
 
 ### 8.5 `POST /api/c3-m2/steps/register-membership` and `deregister-membership`
 
-- **Precondition:** status `REGISTERED`. Exception: `deregister-membership` with status `TRANSFERRED_AWAY` answers `DONE` without a call to the CSP and without an event. Only the home OSP may change the company at the CSP, and that is now the new OSP (FRAMEWORK 5.6 step 3).
+- **Precondition:** status `REGISTERED`. Exception: `deregister-membership` with status `TRANSFERRED_AWAY` answers `DONE` without a call to the CSP and without an event, and sets `membership` to `NONE`. Only the home OSP may change the company at the CSP, and that is now the new OSP (FRAMEWORK 5.6 step 3); its value is no longer known here. After a return, `register-membership` therefore calls the CSP again (6.4).
 - **Behaviour:** `PUT {CSP_URL}/companies/{bpn}/membership` with `{ "member": true }` or `false`; store the value.
 - **Result:** `DONE`. **Event:** `MembershipRegistered` or `MembershipDeregistered`.
 
@@ -309,7 +309,7 @@ Problem Details, `type` = `urn:c3-m2:problem:<name>`.
 11. `register-company` without EBWOID and EUID, with `identifiers` `[{ "type": "COMMERCIAL_REG_NUMBER", "value": "HRB 200002" }]` (Beispiel Logistik GmbH): `DONE` with a BPN derived from this identifier. Without any identifier: 400 `validation`. `find-companies?identifier=COMMERCIAL_REG_NUMBER:HRB 200002` afterwards: a match with `matchedBy` `IDENTIFIER`.
 12. `register-connector` before `REGISTERED`: `invalid-state`. Afterwards with `endpointUrl`: call at the CSP, row `REGISTERED`, `ConnectorRegisteredAtCsp`; the same call again: `DONE` without a call and without an event; a new `endpointUrl`: a new call and an event. `deregister-connector`: `DEREGISTERED`, `ConnectorDeregisteredAtCsp`; again: `DONE` without an event.
 13. Seed data: with `ospCompanyFile` set, the OSP company has a row `REGISTERED` with BPN `BPNL00000000OSPA` after the first start, without a call to the CSP and without events; a second start changes nothing. `register-connector` for the OSP company: call at the CSP, `ConnectorRegisteredAtCsp`.
-14. `deregister-membership` after `CompanyTransferredAway` (case 8): `DONE`, no call to the CSP, no event.
+14. `deregister-membership` after `CompanyTransferredAway` (case 8): `DONE`, no call to the CSP, no event, `membership` `NONE`. After the return (`transfer-company`, then `REGISTERED`), `register-membership` calls the CSP and gives `MembershipRegistered`.
 
 ## 14. Test data
 

@@ -354,7 +354,7 @@ Binding for all modules. An ID stands for exactly one object; a module defines f
 
 | Object | ID |
 |---|---|
-| Company of OSP A (in the installation of OSP A, `ospCompanyId`): "OSP A Beispiel GmbH", BPN `BPNL00000000OSPA`, company role `ONBOARDING_SERVICE_PROVIDER` | `11111111-1111-4111-8111-111111111111` |
+| Company of OSP A (in the installation of OSP A, `ospCompanyId`): "OSP A Beispiel GmbH", BPN `BPNL00000000OSPA`, company roles `ONBOARDING_SERVICE_PROVIDER`, `ACTIVE_PARTICIPANT`, `APP_PROVIDER` and `SERVICE_PROVIDER` (seed data, active without consents, C3-M1 4) | `11111111-1111-4111-8111-111111111111` |
 | OSP A (`ospId`) | `22222222-2222-4222-8222-222222222222` |
 | OSP B (`ospId`) | `99a5685c-7397-402c-88de-b1b3a939ecc9` |
 | CSP | `92cb10a9-0a9e-4c96-aa09-16d3990b7a51` |

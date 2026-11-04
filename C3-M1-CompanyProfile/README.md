@@ -313,7 +313,7 @@ The role names are the same as in the catalogue of C1-M2 (`CATALOG_FILE`).
 
 Rules:
 
-- A role is active only if the company has consented to all terms of the role (consent `ACTIVE`, to any version of the key).
+- A role is active only if the company has consented to all terms of the role (consent `ACTIVE`, to any version of the key). Exception: the roles of the seed data (4) are active without consents.
 - In 7.8 the module rejects consents to terms that do not belong to the role. At activation (8.3) it takes over only consents to terms of the requested roles. The consents to the terms of the OSP (`scope` `ALL`) given at submission stay with C1-M2.
 - A new version of terms (C1-M2 7.16) keeps its key. Existing roles and consents stay; re-consent is not part of version 0.2 (OP-11).
 - An active company keeps at least one active role with `assignableBy` `COMPANY`.
@@ -774,7 +774,7 @@ The module is done when these cases work with the built-in stand-ins for C1-M2 a
 22. Transfer to this OSP: `create-company` for A8 (kind `TRANSFER`, Andere Beispiel AG), `assign-identifier` with `BPNL00000000002B`, `activate-company`: U4 `ACTIVE` with this BPN.
 23. `GET /internal/companies?id=…` with U1, an unknown ID and U2: two `items` in the order of the request, one ID in `notFound`. With `id` and `bpn` together: 400.
 24. `identifier-matches` with the VAT ID of U1 in a different spelling (`de 123.456.789`): match U1 with `matchedOn` `VAT_ID`; with `excludeCompanyId` = U1: no match.
-25. Seed data: At first start the OSP company `11111111-1111-4111-8111-111111111111` is created, `ACTIVE` with `ONBOARDING_SERVICE_PROVIDER` and `BPNL00000000OSPA`, without events; a second start changes nothing. `ospCompanyFile` with a `companyId` other than `ospCompanyId`: the start aborts with an error message.
+25. Seed data: At first start the OSP company `11111111-1111-4111-8111-111111111111` is created, `ACTIVE` with the four roles of the file, all active without consents, and `BPNL00000000OSPA`, without events; a second start changes nothing. `ospCompanyFile` with a `companyId` other than `ospCompanyId`: the start aborts with an error message.
 26. Privacy: neither logs nor events nor `audit_log` contain a verification attestation, the content of a supporting document, a token or names of people.
 27. P1 adds `APP_PROVIDER` to U1 with `consents` `[{ "agreementKey": "terms-app-provider", "version": "1.0" }]`: 200, role `ACTIVE`, consent stored with version `1.0`, `CompanyRolesChanged`. Without consents: 400 `consent-missing` with `missing` `["terms-app-provider"]`; with version `0.9`: the same; with `security-regulations` in addition: 400 `validation`.
 28. `create-company` and `activate-company` read the stand-in file in the format of C1-M2 `ApplicationInternal` (`id`, `verification`, `companyData`, `companyRoles`, `attestation.attestationId`, `consents` with `agreementKey`); `consentedBy` is the `applicant.sub` of A1.
@@ -843,7 +843,7 @@ Test IDs as in FRAMEWORK 7a; test person and test company as in C5-M1 and C3-M2.
 **Further files:**
 
 - `company-roles.json`: initial values from 6.5, descriptions `de` and `en`. The terms come from the stand-in for C1-M2 (11.1).
-- `osp-company.json` (installation setting `ospCompanyFile`): `11111111-1111-4111-8111-111111111111`, "OSP A Beispiel GmbH", Am Prüfstand 1, 70569 Stuttgart, `DE`, BPN `BPNL00000000OSPA`, identifier `VAT_ID` `DE222222222`, roles `ONBOARDING_SERVICE_PROVIDER` and `ACTIVE_PARTICIPANT`.
+- `osp-company.json` (installation setting `ospCompanyFile`): `11111111-1111-4111-8111-111111111111`, "OSP A Beispiel GmbH", Am Prüfstand 1, 70569 Stuttgart, `DE`, BPN `BPNL00000000OSPA`, identifier `VAT_ID` `DE222222222`, roles `ONBOARDING_SERVICE_PROVIDER`, `ACTIVE_PARTICIPANT`, `APP_PROVIDER` and `SERVICE_PROVIDER` (as in FRAMEWORK 7a; the OSP company offers apps in the hackathon scenarios).
 - Supporting documents: a small valid PDF file `auszug.pdf`, a text file with the same name.
 
 ## 15. Changes from version 0.1
