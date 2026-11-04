@@ -88,6 +88,7 @@ Sections that do not fit a module are dropped with a one-sentence reason; the nu
 - JSON fields in camelCase, times in ISO 8601 UTC, IDs as UUID.
 - Lists with `page` (from 0) and `size` (1 to 100, default 20), response `{ "items", "page", "size", "total" }`.
 - Paths under `/steps/...` are steps for Process Orchestration, paths under `/internal/...` are queries for other modules. Both are called in the same process; the HTTP form applies when a module is split out. Callbacks from external systems have their own paths, which the module names (such as `/csp-notifications`, `/issuer-callbacks/...`).
+- Paths ending in `/events` are Server-Sent Events streams for the UI (`text/event-stream`, only from the server to the browser). The server part of the UI opens them with the person's token in the header `Authorization: Bearer`, never in the query string (C11-M1 7.6, C12-M1 7.6).
 - OpenAPI extensions: `x-permission` (required permission) and `x-permission-scope` (`company`, `osp` or `own`, see 4.3).
 - Tags: `Company` (calls by people of a company and by applicants in scope `own`), `OSP` (tasks of OSP staff), `Queries`, `Steps`; callbacks from external systems under one tag per system (such as `CSP`, `Issuer`, `Provider`).
 

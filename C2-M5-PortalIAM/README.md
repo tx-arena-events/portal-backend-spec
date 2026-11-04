@@ -364,13 +364,13 @@ Compared with today's installation (Portal 2.6.0), the following also applies: t
 
 ### 6.2 List of permissions
 
-**Status: aligned with all module specs (30 Oct 2026).** Every permission that an `x-permission` in an `openapi.yaml` requires is listed here.
+**Status: aligned with all module specs (4 Nov 2026).** Every permission that an `x-permission` in an `openapi.yaml` requires is listed here.
 
 **Permissions of people:**
 
 | Permission | Module | Scope | `description.de` | `description.en` |
 |---|---|---|---|---|
-| `register_company` | C1-M2 | `own` | Eigenen Antrag eines Unternehmens anlegen, ändern, einreichen und zurückziehen | Create, change, submit and withdraw an own company application |
+| `register_company` | C1-M2; also C12-M1 (stream of the own application, C12-M1 7.8) | `own` | Eigenen Antrag eines Unternehmens anlegen, ändern, einreichen und zurückziehen | Create, change, submit and withdraw an own company application |
 | `view_applications` | C1-M2 | `osp` | Alle Anträge und Belege lesen | Read all applications and documents |
 | `manage_agreements` | C1-M2 | `osp` | Fassungen der Bedingungen lesen und anlegen | Read and create versions of the terms |
 | `view_reviews` | C1-M3 | `osp` | Prüffälle lesen | Read review cases |
