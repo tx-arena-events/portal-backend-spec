@@ -743,7 +743,7 @@ IDs aligned with C2-M2 (test persons), C3-M1 (companies) and FRAMEWORK 7a. The v
 | Lieschen Müller | account | ID `5a1c0004-0000-4000-8000-000000000004`; linked (`lieschen`); without company; only `Applicant` |
 | Otto Normalverbraucher | account | ID `5a1c0012-0000-4000-8000-000000000012`; linked (`otto`); without company; `Applicant`, `OSP Admin` |
 | Rolf Prüfer | account | ID `bbede0f3-fbc4-433b-b7ca-1982e8724912` (R1 in C1-M3); linked (`rolf`); without company; `Applicant`, `OSP Reviewer` |
-| Rita Prüfer | account | ID `ed9d901d-cdc3-4a86-8ab4-0b477318506c` (R2 in C1-M3, second reviewer for the four-eyes principle); linked (`rita`); without company; `Applicant`, `OSP Reviewer` |
+| Renate Prüfer | account | ID `ed9d901d-cdc3-4a86-8ab4-0b477318506c` (R2 in C1-M3, second reviewer for the four-eyes principle); linked (`renate`); without company; `Applicant`, `OSP Reviewer` |
 | Nina Neu | no account | only in the stand-in (`nina`); for the first login (case 3) |
 | `sa-csp`, `sa-csp-issuer`, `sa-csp-wallet` | service accounts (5.9) | `private_key_jwt` with `http://iam-test-jwks:8000/csp.json` |
 | `sa-credential-issuer` | service account | `private_key_jwt` with `http://iam-test-jwks:8000/credential-issuer.json` |
@@ -763,7 +763,7 @@ Stand-in for the EBW-Connector, only in the test installation. It stands for an 
 
 | Object | Values |
 |---|---|
-| Users `erika`, `max`, `hans`, `lieschen`, `otto`, `rolf`, `rita`, `nina` | first and last name as in 14.2; fixed IDs (`sub`); test passwords from `.env.test` |
+| Users `erika`, `max`, `hans`, `lieschen`, `otto`, `rolf`, `renate`, `nina` | first and last name as in 14.2; fixed IDs (`sub`); test passwords from `.env.test` |
 | Client `portal-iam` | `client-jwt` with JWKS address `http://localhost:8080/auth/realms/CX-Central/protocol/openid-connect/certs`, signature algorithm `ES256`; PKCE `S256` required; redirect `http://localhost:8080/auth/realms/CX-Central/broker/ebw-connector/endpoint`; mappers `given_name`, `family_name` into the ID token |
 | Client `portal-iam-claims` | like `portal-iam`, plus mappers with fixed values for `company_id`, `bpn` and `email` (only case 7; the test variant can switch the identity provider to it) |
 
@@ -771,7 +771,7 @@ The stand-in signs its ID token with RS256, the reference implementation of the 
 
 ### 14.4 Values for the tests of other modules
 
-- Token of a person: `get-token.py erika` (Company Admin), `max` (IT Admin), `lieschen` (without company), `otto` (OSP Admin), `rolf` and `rita` (OSP Reviewer).
+- Token of a person: `get-token.py erika` (Company Admin), `max` (IT Admin), `lieschen` (without company), `otto` (OSP Admin), `rolf` and `renate` (OSP Reviewer).
 - Token without the permissions of a module (cases with 403): `get-token.py lieschen`; she only has `Applicant`.
 - Tokens for callbacks: `get-token.py sa-csp`, `sa-csp-issuer`, `sa-credential-issuer`, `sa-div-callback`.
 - Token for HTTP calls between modules: `get-token.py svc-test-internal`.

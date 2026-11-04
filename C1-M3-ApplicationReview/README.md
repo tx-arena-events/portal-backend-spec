@@ -439,7 +439,7 @@ Shared test IDs per FRAMEWORK 7a; the installation is the one of OSP A (`ospId` 
 | Account | `sub` | Permissions |
 |---|---|---|
 | R1, OSP Reviewer (Rolf Prüfer) | `bbede0f3-fbc4-433b-b7ca-1982e8724912` | `view_reviews`, `review_application` |
-| R2, OSP Reviewer (Rita Prüfer) | `ed9d901d-cdc3-4a86-8ab4-0b477318506c` | `view_reviews`, `review_application` |
+| R2, OSP Reviewer (Renate Prüfer) | `ed9d901d-cdc3-4a86-8ab4-0b477318506c` | `view_reviews`, `review_application` |
 | OSP Admin | `5a1c0012-0000-4000-8000-000000000012` | `view_reviews` |
 | Erika Mustermann (applicant) | `5a1c0001-0000-4000-8000-000000000001` | `register_company` (C1-M2 only) |
 | Service account | – | `execute_steps_c1_m3`, `query_c1_m3` |

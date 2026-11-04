@@ -371,9 +371,9 @@ Test persons. `sub` in the token is the ID of the account in the Portal IAM (a U
 | Lieschen Müller | `5a1c0004-0000-4000-8000-000000000004` | without a company, only `Applicant` |
 | Otto Normalverbraucher | `5a1c0012-0000-4000-8000-000000000012` | `OSP Admin`; invites himself as `Company Admin` of the company of OSP A if it offers apps (C2-M2 7.20) |
 | Rolf Prüfer | `bbede0f3-fbc4-433b-b7ca-1982e8724912` | `OSP Reviewer` |
-| Rita Prüfer | `ed9d901d-cdc3-4a86-8ab4-0b477318506c` | second `OSP Reviewer`, for the four-eyes principle (C1-M3 6.4) |
+| Renate Prüfer | `ed9d901d-cdc3-4a86-8ab4-0b477318506c` | second `OSP Reviewer`, for the four-eyes principle (C1-M3 6.4) |
 
-**Start state of a hackathon installation:** C3-M1 holds only the company of the OSP (seed data). Erika, Max, Hans and Lieschen have accounts without a company, Otto, Rolf and Rita are OSP staff without a company. The flows bind them (5.2, 5.3). A module test may start from another state (for example C2-M5 14.2, where Erika is already bound).
+**Start state of a hackathon installation:** C3-M1 holds only the company of the OSP (seed data). Erika, Max, Hans and Lieschen have accounts without a company, Otto, Rolf and Renate are OSP staff without a company. The flows bind them (5.2, 5.3). A module test may start from another state (for example C2-M5 14.2, where Erika is already bound).
 
 **Client of the UI at the EBW-Connector** (5.2 step 2): `osp-a-ui` and `osp-b-ui`, each registered in `CLIENTS_FILE` (C5-M1 6.8) and allowed in `ATTESTATION_CLIENT_IDS` (C1-M2). Test data of single modules may use `demo-osp` (C5-M1 14.2).
 
