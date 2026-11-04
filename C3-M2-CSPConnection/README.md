@@ -65,6 +65,7 @@ Callers:
 - Callbacks from the CSP: the CSP has a service account in the Portal IAM of the OSP with exactly the permission `report_csp_notification` (FRAMEWORK 4.2).
 - Timeout per call to the CSP 10 seconds; for steps, errors of the CSP give `retryable: true`, except for a business rejection (section 12).
 - No personal data: the module passes only data of the company to the CSP.
+- **Seed data:** If the installation setting `ospCompanyFile` (FRAMEWORK 4.8) is set and there is no row for its `companyId`, the module creates one at start: status `REGISTERED`, BPN from the file, membership `REGISTERED`, without a call to the CSP and without events. The CSP knows the OSP company from the admission of the OSP (FRAMEWORK 5.1). This way connectors, membership and DID of the OSP company work like those of any registered company.
 
 ### Configuration
 
@@ -74,7 +75,7 @@ Callers:
 | `CSP_URL` | address of the core services API; empty = built-in stand-in (11.3) | `https://core.example.org/api/v1` |
 | `CSP_TOKEN_URL` | token endpoint of the CSP | `https://core.example.org/oauth/token` |
 | `OSP_SIGNING_KEY_FILE` | private key of the OSP (JWK, ES256) for `private_key_jwt` | `osp-key.json` |
-| `SETTINGS_FILE` | installation settings (FRAMEWORK 4.8): `ospId`, `ospName` | `config/installation.json` |
+| `SETTINGS_FILE` | installation settings (FRAMEWORK 4.8): `ospId`, `ospName`, `ospCompanyFile` (seed data, 4) | `config/installation.json` |
 | `CSP_STUB_FILE` | stand-in only: pre-registered companies of other OSPs (test data) | `csp-stub.json` |
 
 ## 5. Data
@@ -213,7 +214,7 @@ Input always with `processId`, `stepRunId` and `companyId` (FRAMEWORK 4.4).
 
 ### 8.5 `POST /api/c3-m2/steps/register-membership` and `deregister-membership`
 
-- **Precondition:** status `REGISTERED`.
+- **Precondition:** status `REGISTERED`. Exception: `deregister-membership` with status `TRANSFERRED_AWAY` answers `DONE` without a call to the CSP and without an event. Only the home OSP may change the company at the CSP, and that is now the new OSP (FRAMEWORK 5.6 step 3).
 - **Behaviour:** `PUT {CSP_URL}/companies/{bpn}/membership` with `{ "member": true }` or `false`; store the value.
 - **Result:** `DONE`. **Event:** `MembershipRegistered` or `MembershipDeregistered`.
 
@@ -307,6 +308,8 @@ Problem Details, `type` = `urn:c3-m2:problem:<name>`.
 10. Authentication at the CSP: the client assertion is signed with the key of the OSP; `iss` and `sub` are the `ospId`.
 11. `register-company` without EBWOID and EUID, with `identifiers` `[{ "type": "COMMERCIAL_REG_NUMBER", "value": "HRB 200002" }]` (Beispiel Logistik GmbH): `DONE` with a BPN derived from this identifier. Without any identifier: 400 `validation`. `find-companies?identifier=COMMERCIAL_REG_NUMBER:HRB 200002` afterwards: a match with `matchedBy` `IDENTIFIER`.
 12. `register-connector` before `REGISTERED`: `invalid-state`. Afterwards with `endpointUrl`: call at the CSP, row `REGISTERED`, `ConnectorRegisteredAtCsp`; the same call again: `DONE` without a call and without an event; a new `endpointUrl`: a new call and an event. `deregister-connector`: `DEREGISTERED`, `ConnectorDeregisteredAtCsp`; again: `DONE` without an event.
+13. Seed data: with `ospCompanyFile` set, the OSP company has a row `REGISTERED` with BPN `BPNL00000000OSPA` after the first start, without a call to the CSP and without events; a second start changes nothing. `register-connector` for the OSP company: call at the CSP, `ConnectorRegisteredAtCsp`.
+14. `deregister-membership` after `CompanyTransferredAway` (case 8): `DONE`, no call to the CSP, no event.
 
 ## 14. Test data
 
@@ -317,6 +320,7 @@ Problem Details, `type` = `urn:c3-m2:problem:<name>`.
 | Test company | Beispiel Maschinenbau GmbH, `EBWOID-DE-0000000001`, EUID `DEXX001T.HRB100001`, DE |
 | Company without a Business Wallet | Beispiel Logistik GmbH, `COMMERCIAL_REG_NUMBER` `HRB 200002`, DE |
 | Connector of Beispiel Maschinenbau | `connectorId` `7c1e5a2b-4d3f-4e6a-9b8c-0d1e2f3a4b5c`, `endpointUrl` `https://edc.beispiel-maschinenbau.example/dsp` (as in C6-M1 14) |
+| OSP company (installation setting `ospCompanyFile`) | OSP A Beispiel GmbH, `11111111-1111-4111-8111-111111111111`, BPN `BPNL00000000OSPA` (FRAMEWORK 7a) |
 | Company at OSP B (`CSP_STUB_FILE`) | Andere Beispiel AG, `EBWOID-DE-0000000002`, BPN `BPNL00000000002B`, home OSP OSP B |
 
 `CSP_STUB_FILE`:

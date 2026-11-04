@@ -90,8 +90,8 @@ Callers:
 |---|---|---|
 | `DATABASE_URL` | own PostgreSQL database `c4_m2` | |
 | `SETTINGS_FILE` | installation settings (FRAMEWORK 4.8): `ospId` for the sign-in at the CSP | `config/installation.json` |
-| `ENABLED_PROVIDERS` | providers the installation offers, comma-separated; `BRING_YOUR_OWN` only later | `SAP_DIV,IDENTITY_HUB,CSP` |
-| `DEFAULT_PROVIDER` | provider when the step names none and there is no control proof (`SAP_DIV`, `IDENTITY_HUB` or `CSP`) | `CSP` |
+| `ENABLED_PROVIDERS` | providers the installation offers, comma-separated; `BRING_YOUR_OWN` only later; empty = `SAP_DIV,IDENTITY_HUB,CSP` | `SAP_DIV,IDENTITY_HUB,CSP` |
+| `DEFAULT_PROVIDER` | provider when the step names none and there is no control proof (`SAP_DIV`, `IDENTITY_HUB` or `CSP`); empty = `CSP`. The flows of Process Orchestration name no provider, so this value decides (6.1) | `CSP` |
 | `SECRETS_KEY`, `SECRETS_KEY_VERSION` | key (AES-256, hex) and its version for all secrets of the module; old versions stay readable through `SECRETS_KEY_<version>` | |
 | `SAP_DIV_URL` | base address of the SAP middleware; empty = built-in stand-in (11.1) | `https://div.example.org/api/dim` |
 | `SAP_DIV_TOKEN_URL`, `SAP_DIV_CLIENT_ID`, `SAP_DIV_CLIENT_SECRET` | access of the module to the middleware (client credentials) | |
@@ -749,6 +749,8 @@ People and service accounts in the test Portal IAM:
 | `sa-modules` | client with `query_c4_m2`, `execute_steps_c4_m2`, `read_wallet_holder_access` | calls over HTTP |
 
 Configuration in the test: `ENABLED_PROVIDERS` = `SAP_DIV,IDENTITY_HUB,CSP` (for the later cases also `BRING_YOUR_OWN`), `SAP_DIV_DID_DOCUMENT_BASE_URL` = `https://div.example.org/did`, `IDENTITYHUB_DID_BASE` = `ih.example.org`, `CONTROL_PROOF_AUDIENCE` = `https://portal.example.org/api/c4-m2`, `SAP_DIV_URL`, `IDENTITYHUB_URL`, `CSP_WALLET_URL`, `DID_RESOLVER_URL` empty.
+
+**Hackathon installations** (FRAMEWORK 7a): OSP A and OSP B both use `DEFAULT_PROVIDER` `CSP`. OSP A has an empty `CSP_WALLET_URL` and so the built-in stand-in (11.3); OSP B uses the shared CSP stand-in of the test tools. OSP B needs `CSP` because its C4-M1 runs with `ISSUER_MODE` `CSP` (C4-M1 6.3 rule 3).
 
 ### 14.2 Own wallet (later)
 

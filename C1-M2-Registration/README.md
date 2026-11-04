@@ -103,7 +103,7 @@ The module has no user interface. Callers:
 | `DOCUMENT_MAX_COUNT` | maximum number of supporting documents per application | `10` |
 | `COMPANY_URL` | C3-M1: empty = built-in stand-in, `in-process` = call in the same process, otherwise HTTP address (FRAMEWORK 4.7) | `in-process` |
 | `REVIEW_URL` | C1-M3: like `COMPANY_URL` | `in-process` |
-| `STUB_COMPANIES_FILE` | file for the stand-in of C3-M1 (14.5) | `stub-companies.json` |
+| `STUB_COMPANIES_FILE` | file for the stand-in of C3-M1: list of `CompanyInternal` (C3-M1 9.1), 14.5 | `stub-companies.json` |
 | `STUB_REVIEWS_FILE` | file for the stand-in of C1-M3 (14.5) | `stub-reviews.json` |
 
 ## 5. Data
@@ -631,8 +631,8 @@ Only for applications with a reference (6.2).
 
 | Call | Response | Built-in stand-in |
 |---|---|---|
-| in the same process `get_company(company_id)`; over HTTP `GET /api/c3-m1/internal/companies/{companyId}` | `companyId`, `name`, `countryCode`, `status`, `deactivationReason`, `bpn`, `identifiers` (each `type`, `value`), `companyRoles`; 404 if unknown | reads `STUB_COMPANIES_FILE`: list of such entries |
-| in the same process `find_companies_by_bpn([bpn])`; over HTTP `GET /api/c3-m1/internal/companies?bpn={bpn}` | `{ "items": [ … ], "notFound": [ … ] }` with the same fields | from the same file |
+| in the same process `query_company(companyId=…)`; over HTTP `GET /api/c3-m1/internal/companies/{companyId}` | `CompanyInternal` (C3-M1 9.1); C1-M2 reads `id`, `name`, `address.countryCode`, `status`, `deactivationReason`, `bpn`, `identifiers` (each `type`, `value`), `companyRoles`; 404 if unknown | reads `STUB_COMPANIES_FILE`: list of `CompanyInternal` (14.5) |
+| in the same process `query_companies(bpn=[bpn])`; over HTTP `GET /api/c3-m1/internal/companies?bpn={bpn}` | `{ "items": [CompanyInternal], "notFound": [ … ] }` (C3-M1 9.2) | from the same file |
 
 ### 11.3 C1-M3 Application Review (`REVIEW_URL`)
 
@@ -640,7 +640,7 @@ When withdrawing a submitted application (7.11) and for `reviewStatus` (7.4, 7.1
 
 | Call | Response | Built-in stand-in |
 |---|---|---|
-| in the same process `get_review_status(application_id)`; over HTTP `GET /api/c1-m3/internal/review-cases?applicationId={id}` | `{ "reviewCaseId", "applicationId", "status", "decidedAt" }`; 404 if there is no review case | reads `STUB_REVIEWS_FILE`: list of `{ "applicationId", "status" }` |
+| in the same process `get_review_status_by_application(applicationId=…)`; over HTTP `GET /api/c1-m3/internal/review-cases?applicationId={id}` | `{ "reviewCaseId", "applicationId", "status", "decidedAt" }`; 404 if there is no review case | reads `STUB_REVIEWS_FILE`: list of `{ "applicationId", "status" }` |
 
 The stand-in files are read on every call so that tests can change them. If a stand-in file contains the JSON string `"unavailable"` instead of a list, the stand-in reports "not reachable".
 
@@ -917,17 +917,17 @@ In the verification path `DOCUMENTS` additionally `"representationDeclared": tru
 
 ```json
 [
-  { "companyId": "cc080671-720e-42b6-95b2-0784c8314242", "name": "Beispiel Werkzeugbau GmbH",
-    "countryCode": "DE", "status": "INACTIVE", "deactivationReason": "OTHER", "bpn": "BPNL00000000003C",
+  { "id": "cc080671-720e-42b6-95b2-0784c8314242", "name": "Beispiel Werkzeugbau GmbH",
+    "address": { "countryCode": "DE" }, "status": "INACTIVE", "deactivationReason": "OTHER", "bpn": "BPNL00000000003C",
     "identifiers": [ { "type": "EBWOID", "value": "EBWOID-DE-0000000003" },
                      { "type": "EUID", "value": "DEXX001T.HRB100003" } ],
     "companyRoles": ["ACTIVE_PARTICIPANT"] },
-  { "companyId": "6c71d54b-e689-4eb6-a1fa-ae196d8a5209", "name": "Beispiel Gießerei GmbH",
-    "countryCode": "DE", "status": "INACTIVE", "deactivationReason": "TRANSFERRED", "bpn": "BPNL00000000004D",
+  { "id": "6c71d54b-e689-4eb6-a1fa-ae196d8a5209", "name": "Beispiel Gießerei GmbH",
+    "address": { "countryCode": "DE" }, "status": "INACTIVE", "deactivationReason": "TRANSFERRED", "bpn": "BPNL00000000004D",
     "identifiers": [ { "type": "EBWOID", "value": "EBWOID-DE-0000000004" } ],
     "companyRoles": ["ACTIVE_PARTICIPANT", "APP_PROVIDER"] },
-  { "companyId": "11111111-1111-4111-8111-111111111111", "name": "OSP A Beispiel GmbH",
-    "countryCode": "DE", "status": "ACTIVE", "bpn": "BPNL00000000OSPA",
+  { "id": "11111111-1111-4111-8111-111111111111", "name": "OSP A Beispiel GmbH",
+    "address": { "countryCode": "DE" }, "status": "ACTIVE", "bpn": "BPNL00000000OSPA",
     "identifiers": [ { "type": "EUID", "value": "DEXX001T.HRB100000" } ],
     "companyRoles": ["ONBOARDING_SERVICE_PROVIDER"] }
 ]

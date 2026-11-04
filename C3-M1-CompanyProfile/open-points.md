@@ -30,7 +30,7 @@ The [README](README.md) fixes every point so that the module can be built. The f
 | 20 | Permissions and portal roles | `view_company`, `edit_company`, `edit_company_roles` (scope `company`); `view_companies`, `manage_companies`, `review_company_changes` (scope `osp`); mapping to portal roles as in 6.8. `OSP Reviewer` decides change requests but does not deactivate. | C2-M5, OP-41 |
 | 21 | Scope for steps and queries | `x-permission-scope: osp` for `query_c3_m1` and `execute_steps_c3_m1`; only the permission is checked (6.8). | Framework, C2-M5 |
 | 22 | Paths for OSP staff | under `/osp/...` | Framework |
-| 23 | Seed data | `OSP_COMPANY_FILE` with the OSP company; `companyId` equal to `ospCompanyId`; BPN from the file; source `MANUAL` (4). | OP-36, CSP (BPN of the OSP company) |
+| 23 | Seed data | installation setting `ospCompanyFile` (FRAMEWORK 4.8) with the OSP company; `companyId` equal to `ospCompanyId`; BPN from the file; source `MANUAL` (4). | OP-36, CSP (BPN of the OSP company) |
 | 24 | Dataspace | Name from the installation settings in the response to people (`dataspaceName`); no membership in C3-M1 (OP-14). | C3-M2, C4-M1 |
 | 25 | Identifier types | from the shared file of the reference data (OP-13); EUID and EBWOID with loose validation (OP-12); `VIES` dropped (6.4). | C1-M2, other part |
 | 26 | Local duplicate search | stays alongside C3-M2 `find-companies`, for open applications that the CSP does not know yet (9.3). | C1-M3 |

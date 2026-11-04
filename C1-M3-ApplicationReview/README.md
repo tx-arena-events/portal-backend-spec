@@ -77,7 +77,7 @@ The module has no user interface. Callers:
 | `COMPANY_URL` | C3-M1: like `REGISTRATION_URL` | `in-process` |
 | `CSP_CONNECTION_URL` | C3-M2: like `REGISTRATION_URL` | `in-process` |
 | `STUB_APPLICATIONS_FILE` | file for the stand-in of C1-M2 (14.2) | `stub-applications.json` |
-| `STUB_COMPANIES_FILE` | file for the stand-in of C3-M1 (14.3) | `stub-companies.json` |
+| `STUB_COMPANIES_FILE` | file for the stand-in of C3-M1: list of `CompanyInternal` (C3-M1 9.1), 14.3 | `stub-companies.json` |
 | `STUB_CSP_FILE` | file for the stand-in of C3-M2 (14.4) | `stub-csp.json` |
 
 ## 5. Data
@@ -371,8 +371,8 @@ Every neighbour has a built-in stand-in (FRAMEWORK 4.7). The stand-in files are 
 
 | Call | Response | Built-in stand-in |
 |---|---|---|
-| `POST /api/c3-m1/internal/companies/identifier-matches` with `identifiers`, `excludeCompanyId`, `statuses` (C3-M1 README 9.3) | `matches`: per company `companyId`, `status`, `bpn`, `matchedOn` | reads `STUB_COMPANIES_FILE`; comparison per type in upper case without spaces, `.`, `-`, `/` |
-| `GET /api/c3-m1/internal/companies/{companyId}` (C3-M1 README 9.1), only for `REACTIVATION` and return | `companyId`, `status`, `bpn`; 404 if unknown | from the same file |
+| `POST /api/c3-m1/internal/companies/identifier-matches` with `identifiers`, `excludeCompanyId`, `statuses` (C3-M1 README 9.3); in the same process `find_identifier_matches(identifiers=…, excludeCompanyId=…, statuses=…)` | `matches`: per company `companyId`, `status`, `bpn`, `matchedOn` | reads `STUB_COMPANIES_FILE`; comparison per type in upper case without spaces, `.`, `-`, `/` |
+| `GET /api/c3-m1/internal/companies/{companyId}` (C3-M1 README 9.1); in the same process `query_company(companyId=…)`; only for `REACTIVATION` and return | `CompanyInternal`; C1-M3 reads `id`, `status`, `bpn`; 404 if unknown | from the same file |
 
 ### 11.3 C3-M2 CSP Connection (`CSP_CONNECTION_URL`)
 
@@ -438,8 +438,8 @@ Shared test IDs per FRAMEWORK 7a; the installation is the one of OSP A (`ospId` 
 
 | Account | `sub` | Permissions |
 |---|---|---|
-| R1, OSP Reviewer | `bbede0f3-fbc4-433b-b7ca-1982e8724912` | `view_reviews`, `review_application` |
-| R2, OSP Reviewer | `ed9d901d-cdc3-4a86-8ab4-0b477318506c` | `view_reviews`, `review_application` |
+| R1, OSP Reviewer (Rolf Prüfer) | `bbede0f3-fbc4-433b-b7ca-1982e8724912` | `view_reviews`, `review_application` |
+| R2, OSP Reviewer (Rita Prüfer) | `ed9d901d-cdc3-4a86-8ab4-0b477318506c` | `view_reviews`, `review_application` |
 | OSP Admin | `5a1c0012-0000-4000-8000-000000000012` | `view_reviews` |
 | Erika Mustermann (applicant) | `5a1c0001-0000-4000-8000-000000000001` | `register_company` (C1-M2 only) |
 | Service account | – | `execute_steps_c1_m3`, `query_c1_m3` |
@@ -557,13 +557,13 @@ The other applications are copies of A1 with their own `id`, `companyId`, `attes
 
 ```json
 [
-  { "companyId": "c0000001-0000-4000-8000-000000000001", "status": "REQUESTED", "bpn": null,
+  { "id": "c0000001-0000-4000-8000-000000000001", "status": "REQUESTED", "bpn": null,
     "identifiers": [ { "type": "EUID", "value": "DEXX001T.HRB100001" }, { "type": "EBWOID", "value": "EBWOID-DE-0000000001" } ] },
-  { "companyId": "e0fbbb38-f0a7-4407-bc07-9b1991703a3a", "status": "ACTIVE", "bpn": "BPNL00000000009Z",
+  { "id": "e0fbbb38-f0a7-4407-bc07-9b1991703a3a", "status": "ACTIVE", "bpn": "BPNL00000000009Z",
     "identifiers": [ { "type": "EUID", "value": "DEXX001T.HRB654321" } ] },
-  { "companyId": "91d4a2b8-9045-48a8-8982-88131f6c7fae", "status": "REJECTED", "bpn": null,
+  { "id": "91d4a2b8-9045-48a8-8982-88131f6c7fae", "status": "REJECTED", "bpn": null,
     "identifiers": [ { "type": "VAT_ID", "value": "DE123456789" } ] },
-  { "companyId": "cc080671-720e-42b6-95b2-0784c8314242", "status": "INACTIVE", "bpn": "BPNL00000000003C",
+  { "id": "cc080671-720e-42b6-95b2-0784c8314242", "status": "INACTIVE", "bpn": "BPNL00000000003C",
     "identifiers": [ { "type": "EBWOID", "value": "EBWOID-DE-0000000003" }, { "type": "EUID", "value": "DEXX001T.HRB100003" } ] }
 ]
 ```

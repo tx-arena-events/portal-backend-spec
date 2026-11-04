@@ -71,8 +71,8 @@ Callers:
 - The module checks verification attestations itself, with the JWKS of the EBW-Connector of its own installation (6.7, 11.2).
 - Supporting documents are stored in the module's own database. PDF, PNG and JPEG are allowed; the module checks the type from the first bytes of the file, not only from what the caller states.
 - The module holds no secrets. Personal data: only the pseudonymous identifier `sub` of the acting person in the audit log, in consents and in change requests. Supporting documents may contain names of people; only OSP staff read them, and they never appear in logs or events.
-- **Installation settings:** At start the module reads `SETTINGS_FILE` (FRAMEWORK 4.8): `ospCompanyId` for the seed data, `dataspace.name` and `dataspace.memberOf` for the responses to people (OP-14), `masterDataFile` for countries and identifier types (OP-13). The module does not keep the dataspace as company data; there is exactly one per installation.
-- **Seed data:** If `OSP_COMPANY_FILE` is set and the company named in it does not exist, the module creates it at start: status `ACTIVE`, BPN from the file, core data source `MANUAL`, roles from the file (source `SEED`), without consents and without events. The `companyId` in the file must equal `ospCompanyId`; otherwise the start aborts with an error message.
+- **Installation settings:** At start the module reads `SETTINGS_FILE` (FRAMEWORK 4.8): `ospCompanyId` and `ospCompanyFile` for the seed data, `dataspace.name` and `dataspace.memberOf` for the responses to people (OP-14), `masterDataFile` for countries and identifier types (OP-13). The module does not keep the dataspace as company data; there is exactly one per installation.
+- **Seed data:** If the installation setting `ospCompanyFile` is set and the company named in it does not exist, the module creates it at start: status `ACTIVE`, BPN from the file, core data source `MANUAL`, roles from the file (source `SEED`), without consents and without events. The `companyId` in the file must equal `ospCompanyId`; otherwise the start aborts with an error message.
 
 ### Configuration
 
@@ -82,17 +82,17 @@ Callers:
 | `SETTINGS_FILE` | installation settings (FRAMEWORK 4.8); empty = no seed data check, no dataspace name, reference data from 6.4 | `config/installation.json` |
 | `COMPANY_ROLES_FILE` | role catalogue (6.5) | `config/company-roles.json` |
 | `LANGUAGES` | languages for descriptions | `de,en` |
-| `OSP_COMPANY_FILE` | seed data of the OSP company; empty = no seed data | `config/osp-company.json` |
 | `QUERY_MAX_COMPANIES` | maximum number of companies in a bulk query (9.2) | `100` |
 | `REGISTRATION_URL` | C1-M2 (applications and terms): empty = built-in stand-in, `in-process` = in the same process, otherwise HTTP address | `in-process` |
 | `STUB_APPLICATIONS_FILE` | stand-in for C1-M2 only: applications in the format of C1-M2 `ApplicationInternal` (11.1) | `stub-applications.json` |
-| `EBW_CONNECTOR_URL` | EBW-Connector of the installation: expected `iss` of the verification attestations; JWKS at `{EBW_CONNECTOR_URL}/jwks`; empty = built-in stand-in (11.2) | `https://ebw.osp-a.example.org` |
-| `STUB_EBW_JWKS_FILE` | stand-in only: JWKS with the test keys | `stub-ebw-jwks.json` |
-| `EBW_CLIENT_ID` | expected `client_id` in the verification attestation (client of the portal at the EBW-Connector); empty = no check | `demo-osp` |
+| `ATTESTATION_ISSUER` | `iss` of the EBW-Connector of the installation (`PUBLIC_URL` in C5-M1); the only recognised issuer; the same value as in C1-M2 | `https://ebw.osp-a.example.org` |
+| `ATTESTATION_JWKS_URL` | JWKS of the issuer; empty = `{ATTESTATION_ISSUER}/jwks` | |
+| `ATTESTATION_JWKS_FILE` | tests only: JWKS as a file; set = no fetch (11.2) | `stub-ebw-jwks.json` |
+| `ATTESTATION_CLIENT_IDS` | allowed values of `client_id` in the verification attestation (client of the UI at the EBW-Connector), comma-separated; empty = no check | `osp-a-ui` |
 | `ATTESTATION_AUDIENCE` | expected `aud` of the verification attestation | `portal-registration` |
 | `ATTESTATION_MAX_AGE_HOURS` | maximum age of a verification attestation for a change, measured from `verified_at` | `24` |
-| `CLOCK_SKEW_SECONDS` | tolerance in time checks | `60` |
-| `JWKS_CACHE_SECONDS` | cache for the JWKS of the EBW-Connector | `300` |
+| `ATTESTATION_CLOCK_SKEW_SECONDS` | tolerance in time checks | `60` |
+| `ATTESTATION_JWKS_CACHE_SECONDS` | cache for the JWKS of the EBW-Connector | `300` |
 | `CHANGE_REQUESTS_ENABLED` | change requests with supporting documents allowed (path without Business Wallet; the OSP can switch it off, FRAMEWORK 5.2) | `true` |
 | `CHANGE_REQUEST_MAX_DOCUMENTS` | maximum number of supporting documents per change request | `3` |
 | `CHANGE_REQUEST_MAX_DOCUMENT_BYTES` | maximum size per supporting document | `10485760` |
@@ -347,11 +347,11 @@ In 7.3, in this order. The first error determines the reason `reason` in the res
 
 1. Compact JWS form, header readable; otherwise `format`.
 2. `typ` is `ebw-attestation+jwt`, `alg` is `ES256`; `none` is never allowed. Otherwise `algorithm`.
-3. `iss` equals `EBW_CONNECTOR_URL`, so the EBW-Connector of the own installation; otherwise `issuer`.
+3. `iss` equals `ATTESTATION_ISSUER`, so the EBW-Connector of the own installation; otherwise `issuer`.
 4. Key for `kid` from the JWKS of the EBW-Connector (11.2), signature valid. Otherwise `signature`. The module ignores header parameters such as `jku`, `x5u` or `jwk`. If the JWKS cannot be fetched: 502 `upstream-error`.
 5. `aud` contains `ATTESTATION_AUDIENCE`; otherwise `audience`.
-6. `exp` is after now minus `CLOCK_SKEW_SECONDS`, `iat` not after now plus `CLOCK_SKEW_SECONDS`; otherwise `expired` or `not-yet-valid`.
-7. Required claims present and in the right format: `jti`, `verified_at`, `purpose` equal to `onboarding`, `company.legal_name`, `company.ebwoid`, `company.country`, `representation.confirmed`; `client_id` equal to `EBW_CLIENT_ID`, if set. Otherwise `claims`.
+6. `exp` is after now minus `ATTESTATION_CLOCK_SKEW_SECONDS`, `iat` not after now plus `ATTESTATION_CLOCK_SKEW_SECONDS`; otherwise `expired` or `not-yet-valid`.
+7. Required claims present and in the right format: `jti`, `verified_at`, `purpose` equal to `onboarding`, `company.legal_name`, `company.ebwoid`, `company.country`, `representation.confirmed`; `client_id` one of `ATTESTATION_CLIENT_IDS`, if set. Otherwise `claims`.
 8. `verified_at` not older than `ATTESTATION_MAX_AGE_HOURS`; otherwise `too-old`.
 
 Then, each with 409:
@@ -646,7 +646,7 @@ In the same process without a token; over HTTP with the permission `query_c3_m1`
 
 One company (`CompanyInternal`): `id`, `name`, `shortName`, `address`, `identifiers` (with source), `coreDataSource`, `status`, `bpn`, `companyRoles` (active only), `deactivationReason`, `createdAt`, `activatedAt`, `deactivatedAt`. Unknown: 404 `not-found`.
 
-Used by: C2-M2, C2-M3, C4-M1, C4-M2 (status, BPN, name, roles); C1-M2 (master data in reactivation and return); Process Orchestration (data for C3-M2 `register-company`: `name` → `legalName`, identifiers `EBWOID` and `EUID`, `countryCode` → `country`, address with `street` and `houseNumber` joined into `streetAddress`).
+Used by: C2-M2, C2-M3, C4-M1, C4-M2 (status, BPN, name, roles); C1-M2 (master data in reactivation and return); Process Orchestration (data for C3-M2 `register-company`: `name` → `legalName`, identifiers `EBWOID` and `EUID`, `address.countryCode` → `country`, address with `street` and `houseNumber` joined into `streetAddress`).
 
 ### 9.2 `GET /api/c3-m1/internal/companies?id=…&id=…` or `?bpn=…&bpn=…`
 
@@ -693,18 +693,18 @@ Every neighbour has a built-in stand-in (FRAMEWORK 4.7): empty address = stand-i
 
 | Call | Response (fields used) | Built-in stand-in |
 |---|---|---|
-| `get_application(applicationId)`, over HTTP `GET /api/c1-m2/internal/applications/{applicationId}` (`ApplicationInternal`, C1-M2 9.1) | `id`, `companyId`, `kind` (`ONBOARDING`, `REACTIVATION`, `TRANSFER`), `existingCompany`, `status`, `verification` (`EBW` or `DOCUMENTS`), `applicant.sub`; `companyData` (`legalName`, `shortName`, `address` with `streetName`, `streetNumber`, `postalCode`, `city`, `region`, `countryCode`; `identifiers` with `type`, `value`, `source` `ATTESTATION` or `APPLICANT`); `companyRoles`; with `EBW` `attestation` (`attestationId` = `jti`, `verifiedAt`); `consents` (each with `agreementKey`, `version`, `language`, `givenAt`; empty before submission) | reads `STUB_APPLICATIONS_FILE` (same format); unknown ID: 404 |
-| `list_agreements()`, over HTTP `GET /api/c1-m2/internal/agreements` (`AgreementVersion`, C1-M2 9.3) | active versions: `agreementKey`, `version`, `scope`, `companyRoles`, `title`, `documentUrls` | the initial values of C1-M2 14.3 |
+| `get_application_internal(applicationId=…)`, over HTTP `GET /api/c1-m2/internal/applications/{applicationId}` (`ApplicationInternal`, C1-M2 9.1) | `id`, `companyId`, `kind` (`ONBOARDING`, `REACTIVATION`, `TRANSFER`), `existingCompany`, `status`, `verification` (`EBW` or `DOCUMENTS`), `applicant.sub`; `companyData` (`legalName`, `shortName`, `address` with `streetName`, `streetNumber`, `postalCode`, `city`, `region`, `countryCode`; `identifiers` with `type`, `value`, `source` `ATTESTATION` or `APPLICANT`); `companyRoles`; with `EBW` `attestation` (`attestationId` = `jti`, `verifiedAt`); `consents` (each with `agreementKey`, `version`, `language`, `givenAt`; empty before submission) | reads `STUB_APPLICATIONS_FILE` (same format); unknown ID: 404 |
+| `list_agreements_internal()`, over HTTP `GET /api/c1-m2/internal/agreements` (`AgreementVersion`, C1-M2 9.3) | active versions: `agreementKey`, `version`, `scope`, `companyRoles`, `title`, `documentUrls` | the initial values of C1-M2 14.3 |
 
 Mapping: `companyData.legalName` → `name`, `companyData.shortName` → `shortName`; `address.streetName` → `street`, `address.streetNumber` → `houseNumber`, the other address fields with the same name; identifier source `ATTESTATION` → `BUSINESS_WALLET`, `APPLICANT` → `DECLARED`; `verification` `EBW` → core data source `EBW`, `DOCUMENTS` → `MANUAL`; `companyRoles` are the requested roles; `applicant.sub` → `consented_by`; `givenAt` → `consented_at`.
 
-### 11.2 C5-M1 EBW-Connector of the installation (`EBW_CONNECTOR_URL`)
+### 11.2 C5-M1 EBW-Connector of the installation (`ATTESTATION_ISSUER`)
 
 | Call | Response | Built-in stand-in |
 |---|---|---|
-| `GET {EBW_CONNECTOR_URL}/jwks` | JWKS (RFC 7517) with the signing key of the verification attestations | keys from `STUB_EBW_JWKS_FILE`, no fetch; the expected `iss` is then `https://ebw-connector.example.org` |
+| `GET {ATTESTATION_JWKS_URL}` (default `{ATTESTATION_ISSUER}/jwks`) | JWKS (RFC 7517) with the signing key of the verification attestations | `ATTESTATION_JWKS_FILE`: keys from the file, no fetch |
 
-Timeout 5 seconds, cache `JWKS_CACHE_SECONDS`. An unknown `kid` triggers a reload, at most once per minute. Not reachable without a valid cache: 502 `upstream-error`.
+Timeout 5 seconds, cache `ATTESTATION_JWKS_CACHE_SECONDS`. An unknown `kid` triggers a reload, at most once per minute. Not reachable without a valid cache: 502 `upstream-error`.
 
 ### 11.3 C3-M2 CSP Connection and CSP
 
@@ -712,7 +712,7 @@ No calls. The BPN comes as input of `assign-identifier`; Process Orchestration r
 
 ### 11.4 Files of the installation
 
-The module reads `SETTINGS_FILE`, `masterDataFile`, `COMPANY_ROLES_FILE` and `OSP_COMPANY_FILE` at start. Without `SETTINGS_FILE` it starts without the seed data check, without a dataspace name and with the reference data from 6.4.
+The module reads `SETTINGS_FILE`, `masterDataFile`, `COMPANY_ROLES_FILE` and the file of `ospCompanyFile` at start. Without `SETTINGS_FILE` it starts without the seed data check, without a dataspace name and with the reference data from 6.4.
 
 ## 12. Errors
 
@@ -774,7 +774,7 @@ The module is done when these cases work with the built-in stand-ins for C1-M2 a
 22. Transfer to this OSP: `create-company` for A8 (kind `TRANSFER`, Andere Beispiel AG), `assign-identifier` with `BPNL00000000002B`, `activate-company`: U4 `ACTIVE` with this BPN.
 23. `GET /internal/companies?id=…` with U1, an unknown ID and U2: two `items` in the order of the request, one ID in `notFound`. With `id` and `bpn` together: 400.
 24. `identifier-matches` with the VAT ID of U1 in a different spelling (`de 123.456.789`): match U1 with `matchedOn` `VAT_ID`; with `excludeCompanyId` = U1: no match.
-25. Seed data: At first start the OSP company `11111111-1111-4111-8111-111111111111` is created, `ACTIVE` with `ONBOARDING_SERVICE_PROVIDER` and `BPNL00000000OSPA`, without events; a second start changes nothing. `OSP_COMPANY_FILE` with a `companyId` other than `ospCompanyId`: the start aborts with an error message.
+25. Seed data: At first start the OSP company `11111111-1111-4111-8111-111111111111` is created, `ACTIVE` with `ONBOARDING_SERVICE_PROVIDER` and `BPNL00000000OSPA`, without events; a second start changes nothing. `ospCompanyFile` with a `companyId` other than `ospCompanyId`: the start aborts with an error message.
 26. Privacy: neither logs nor events nor `audit_log` contain a verification attestation, the content of a supporting document, a token or names of people.
 27. P1 adds `APP_PROVIDER` to U1 with `consents` `[{ "agreementKey": "terms-app-provider", "version": "1.0" }]`: 200, role `ACTIVE`, consent stored with version `1.0`, `CompanyRolesChanged`. Without consents: 400 `consent-missing` with `missing` `["terms-app-provider"]`; with version `0.9`: the same; with `security-regulations` in addition: 400 `validation`.
 28. `create-company` and `activate-company` read the stand-in file in the format of C1-M2 `ApplicationInternal` (`id`, `verification`, `companyData`, `companyRoles`, `attestation.attestationId`, `consents` with `agreementKey`); `consentedBy` is the `applicant.sub` of A1.
@@ -829,7 +829,7 @@ Test IDs as in FRAMEWORK 7a; test person and test company as in C5-M1 and C3-M2.
 | A7 | `a0000007-0000-4000-8000-000000000007` | `TRANSFER` | `DOCUMENTS` | U2 | as A2 (return) |
 | A8 | `a0000008-0000-4000-8000-000000000008` | `TRANSFER` | `EBW` | U4 | Beispielweg 2, 80331 München, `BY`, `DE`; `EBWOID` `EBWOID-DE-0000000002`; role `ACTIVE_PARTICIPANT` with consents |
 
-**Verification attestations for 7.3**, created at test time and signed with the test key from `stub-ebw-jwks.json` (private part only in the test data). Content as the example in C5-M1 14.5 with `iss` `https://ebw-connector.example.org`, `aud` `portal-registration`, `client_id` `demo-osp`, `purpose` `onboarding`, own `jti`. Differences:
+**Verification attestations for 7.3**, created at test time and signed with the test key from `stub-ebw-jwks.json` (private part only in the test data). Content as the example in C5-M1 14.5 with `iss` `https://ebw-connector.example.org`, `aud` `portal-registration`, `client_id` `demo-osp`, `purpose` `onboarding`, own `jti`. Configuration for these tests: `ATTESTATION_ISSUER` `https://ebw-connector.example.org`, `ATTESTATION_JWKS_FILE` `stub-ebw-jwks.json`, `ATTESTATION_CLIENT_IDS` `demo-osp`. Differences:
 
 | Label | Difference |
 |---|---|
@@ -843,7 +843,7 @@ Test IDs as in FRAMEWORK 7a; test person and test company as in C5-M1 and C3-M2.
 **Further files:**
 
 - `company-roles.json`: initial values from 6.5, descriptions `de` and `en`. The terms come from the stand-in for C1-M2 (11.1).
-- `osp-company.json`: `11111111-1111-4111-8111-111111111111`, "OSP A Beispiel GmbH", Am Prüfstand 1, 70569 Stuttgart, `DE`, BPN `BPNL00000000OSPA`, identifier `VAT_ID` `DE222222222`, roles `ONBOARDING_SERVICE_PROVIDER` and `ACTIVE_PARTICIPANT`.
+- `osp-company.json` (installation setting `ospCompanyFile`): `11111111-1111-4111-8111-111111111111`, "OSP A Beispiel GmbH", Am Prüfstand 1, 70569 Stuttgart, `DE`, BPN `BPNL00000000OSPA`, identifier `VAT_ID` `DE222222222`, roles `ONBOARDING_SERVICE_PROVIDER` and `ACTIVE_PARTICIPANT`.
 - Supporting documents: a small valid PDF file `auszug.pdf`, a text file with the same name.
 
 ## 15. Changes from version 0.1
@@ -855,7 +855,7 @@ Test IDs as in FRAMEWORK 7a; test person and test company as in C5-M1 and C3-M2.
 - **Core data (OP-09, OP-10):** Source of the core data `EBW` or `MANUAL` with time of the last verification. Change with a new verification attestation of the EBW-Connector of the installation (7.3, same EBWOID, immediate) or by change request with supporting documents and approval by OSP staff (7.4 to 7.6, 7.14 to 7.18). The address is part of the core data; the Company Admin directly changes only the short name. Passing data to the master data service is dropped; changed core data is marked in the event (`coreDataChanged`).
 - **Status and flows:** new steps `deactivate-company` (reasons `MANUAL`, `TRANSFERRED`) and `reactivate-company` with event `CompanyReactivated`; `CompanyDeactivated` names the reason. `INACTIVE` is no longer final. The reason `NO_PSP` (OP-06) is dropped with OSP 2.0. `create-company` and `activate-company` also apply to a transfer to this OSP.
 - **Company roles:** `PORTAL_SERVICE_PROVIDER` and `OPERATOR` are dropped, as are `assignableBy` `FLOW` and the step `assign-company-role` (and the planned `remove-company-role`). New: `assignableBy` `COMPANY` (instead of `PSP`) and the seed role `ONBOARDING_SERVICE_PROVIDER` for the OSP company. The Company Admin declares consent personally; `consentedAt` as input is dropped.
-- **Seed data:** `OSP_COMPANY_FILE` with the OSP company instead of `OPERATOR_COMPANY_FILE`; the ID must be `ospCompanyId` from the settings.
+- **Seed data:** installation setting `ospCompanyFile` (FRAMEWORK 4.8) with the OSP company instead of `OPERATOR_COMPANY_FILE`; the ID must be `ospCompanyId` from the settings.
 - **Identifiers:** types and patterns from the shared file of the reference data (OP-13); EUID and EBWOID with loose validation (OP-12).
 - **New events:** `CompanyChangeRequestSubmitted`, `CompanyChangeRequestClosed`. `CompanyDataChanged` with `coreDataChanged` and `coreDataSource`; `CompanyCreated` with `coreDataSource` instead of `registeringPspId`.
 - **Queries:** `CompanyInternal` returns address, identifiers, source of the core data and reason of the deactivation; `registeringPspId` and `identifierStatus` are dropped. The duplicate search 9.3 complements the duplicate check at the CSP.

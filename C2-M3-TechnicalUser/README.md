@@ -74,11 +74,11 @@ It is the only module that writes these clients into the Portal IAM. It has no u
 | `DATABASE_URL` | own PostgreSQL database `c2_m3` | |
 | `IAM_URL` | base address of the OSP's Portal IAM | `https://iam.osp-a.example.org/auth` |
 | `IAM_REALM` | realm of the installation | `CX-Central` |
-| `IAM_ADMIN_CLIENT_ID`, `IAM_ADMIN_CLIENT_SECRET` | the module's own service account for the Admin API; needs the rights `manage-clients`, `view-clients`, `query-clients`, `manage-users`, `view-users`, `query-users` in the realm | |
+| `C2_M3_CLIENT_ID`, `C2_M3_CLIENT_SECRET` | the module's own service account for the Admin API (C2-M5 5.9; secret from the secret store, C2-M5 4); needs the rights `manage-clients`, `view-clients`, `query-clients`, `manage-users`, `view-users`, `query-users` in the realm | `svc-c2-m3` |
 | `TECHNICAL_ROLES_CLIENT` | client with the technical user roles | `technical_roles_management` |
-| `CLIENT_ID_PREFIX` | prefix of the client ID of technical users | `sa` |
+| `TECHNICAL_USER_CLIENT_ID_PREFIX` | prefix of the client ID of technical users | `sa` |
 | `COMPANY_ID_ATTRIBUTE`, `BPN_ATTRIBUTE` | names of the attributes on the service account user | `company_id`, `bpn` |
-| `DEFAULT_CLIENT_SCOPES` | default client scopes of the clients of technical users, comma-separated | `basic,roles,catena,technical-roles` |
+| `TECHNICAL_USER_CLIENT_DEFAULT_SCOPES` | default client scopes of the clients of technical users, comma-separated | `basic,roles,catena,technical-roles` |
 | `WALLET_ROLES` | wallet roles, comma-separated | `Identity Wallet Management` |
 | `PROVIDER_ONLY_ROLES` | provider-only roles | `BPDM Pool Consumer,BPDM Sharing Output Consumer,BPDM Sharing Input Manager` |
 | `ROLE_ASSIGNMENT_FILE` | JSON file: company role → assignable roles (6.5) | `role-assignment.json` |
@@ -99,7 +99,7 @@ It is the only module that writes these clients into the Portal IAM. It has no u
 | `offer_subscription_id` | uuid | required for `SUBSCRIPTION`, otherwise empty |
 | `subscription_party` | text | `CUSTOMER` or `PROVIDER`; required for `SUBSCRIPTION`, otherwise empty |
 | `co_viewer_company_id` | uuid | co-viewing company or empty |
-| `iam_client_id` | text | unique; `CLIENT_ID_PREFIX` + value of the sequence `client_number`, for example `sa123` |
+| `iam_client_id` | text | unique; `TECHNICAL_USER_CLIENT_ID_PREFIX` + value of the sequence `client_number`, for example `sa123` |
 | `iam_client_uuid` | text | internal ID of the client in Keycloak; empty as long as a step has not completed the creation |
 | `iam_service_account_user_id` | text | ID of the service account user in Keycloak |
 | `status` | text | `PENDING`, `ACTIVE`, `INACTIVE`, `PENDING_DELETION`, `DELETED` |
@@ -228,7 +228,7 @@ This check does not apply to subscription accounts. There, the roles from the pr
 
 | Setting | Value |
 |---|---|
-| `clientId` | `CLIENT_ID_PREFIX` + next value of the sequence `client_number`, for example `sa123` |
+| `clientId` | `TECHNICAL_USER_CLIENT_ID_PREFIX` + next value of the sequence `client_number`, for example `sa123` |
 | `name`, `description` | name and description of the account |
 | `enabled` | `true`; `false` as long as the account is disabled (6.2) |
 | `protocol` | `openid-connect` |
@@ -237,7 +237,7 @@ This check does not apply to subscription accounts. There, the roles from the pr
 | `serviceAccountsEnabled` | `true` |
 | `standardFlowEnabled`, `implicitFlowEnabled`, `directAccessGrantsEnabled` | `false` |
 | `fullScopeAllowed` | `false` |
-| `defaultClientScopes` | `DEFAULT_CLIENT_SCOPES`; no optional scopes |
+| `defaultClientScopes` | `TECHNICAL_USER_CLIENT_DEFAULT_SCOPES`; no optional scopes |
 | Service account user | attributes `{COMPANY_ID_ATTRIBUTE}: [companyId of the owner]`, `{BPN_ATTRIBUTE}: [BPN of the owner]` |
 | Roles | roles on the client `TECHNICAL_ROLES_CLIENT`, assigned to the service account; never wallet roles |
 
@@ -480,7 +480,7 @@ Notifications (other part) can show the events to the people of the affected com
 
 ### 11.1 Portal IAM (Keycloak Admin REST API)
 
-All calls with the token of the module's own service account (`IAM_ADMIN_CLIENT_ID`), realm `IAM_REALM`. Paths start at `/admin/realms/{realm}`.
+All calls with the token of the module's own service account (`C2_M3_CLIENT_ID`), realm `IAM_REALM`. Paths start at `/admin/realms/{realm}`.
 
 | Purpose | Call |
 |---|---|
@@ -588,7 +588,7 @@ The test Portal IAM needs:
 - the client `technical_roles_management` with the roles from 6.5, descriptions as attributes `description.de` and `description.en`, composed of roles on the test clients of the central services (at least `Dataspace Discovery` with roles on `Cl21-CX-DF` and `Cl22-CX-BPND`);
 - the client scopes `basic`, `roles`, `catena` (mapper of the attributes `company_id` and `bpn` to claims of the same name) and `technical-roles` (scope mapping of all roles of `technical_roles_management`);
 - a user profile that allows the attributes `company_id` and `bpn` on service account users;
-- a service account for the module with the rights listed for `IAM_ADMIN_CLIENT_ID`.
+- a service account for the module with the rights listed for `C2_M3_CLIENT_ID`.
 
 ### 14.2 Tokens of the test persons
 

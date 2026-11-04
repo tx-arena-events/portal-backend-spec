@@ -379,14 +379,14 @@ Every neighbour has a built-in stand-in (FRAMEWORK 4.7): address empty = stand-i
 
 | Call | Response | Built-in stand-in |
 |---|---|---|
-| `get_company(companyId)`, over HTTP `GET /api/c3-m1/internal/companies/{companyId}` | `id`, `status`, `bpn`, `name` (name only for the holder in the own IssuerService) | reads `stub-companies.json`; unknown ID: status `REQUESTED`, BPN `BPNL` + first 12 hex characters of the `companyId` in upper case |
+| `query_company(companyId=…)`, over HTTP `GET /api/c3-m1/internal/companies/{companyId}` | `id`, `status`, `bpn`, `name` (name only for the holder in the own IssuerService) | reads `stub-companies.json`; unknown ID: status `REQUESTED`, BPN `BPNL` + first 12 hex characters of the `companyId` in upper case |
 
 ### 11.2 C4-M2 Dataspace Wallet Interface (`WALLET_URL`)
 
 | Call | Response | Built-in stand-in |
 |---|---|---|
-| `get_wallet(companyId)`, over HTTP `GET /api/c4-m2/internal/wallets/{companyId}` | `companyId`, `status` (ready: `ACTIVE`), `provider`, `issuanceMode`, `did`, `didDocumentLocation`, `providerRef` | reads `stub-wallets.json`; unknown ID: `ACTIVE`, provider `STUB`, DID `did:web:wallet.example.org:{bpn}` |
-| `get_holder_access(companyId)`, over HTTP `GET /api/c4-m2/internal/wallets/{companyId}/holder-access`; not for `STUB` | with `ISSUER_WRITES`: `holder` (location of the DID document), `walletUrl`, `clientId`, `clientSecret`; with `HOLDER_REQUESTS`: `identityApiUrl`, `participantContextId`, `apiKey` | fixed test values from `stub-wallets.json` |
+| `get_wallet_info(companyId=…)`, over HTTP `GET /api/c4-m2/internal/wallets/{companyId}` | `companyId`, `status` (ready: `ACTIVE`), `provider`, `issuanceMode`, `did`, `didDocumentLocation`, `providerRef` | reads `stub-wallets.json`; unknown ID: `ACTIVE`, provider `STUB`, DID `did:web:wallet.example.org:{bpn}` |
+| `get_holder_access(companyId=…)`, over HTTP `GET /api/c4-m2/internal/wallets/{companyId}/holder-access`; not for `STUB` | with `ISSUER_WRITES`: `holder` (location of the DID document), `walletUrl`, `clientId`, `clientSecret`; with `HOLDER_REQUESTS`: `identityApiUrl`, `participantContextId`, `apiKey` | fixed test values from `stub-wallets.json` |
 
 The holder access stays only in memory and never appears in the log.
 

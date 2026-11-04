@@ -90,7 +90,7 @@ It is the only module that writes bindings, portal roles of people, app clients 
 | `DATABASE_URL` | own PostgreSQL database `c2_m2` | |
 | `IAM_URL` | base URL of the Portal IAM of the OSP | `https://iam.osp-a.example.org/auth` |
 | `IAM_REALM` | realm of the installation | `CX-Central` |
-| `IAM_ADMIN_CLIENT_ID`, `IAM_ADMIN_CLIENT_SECRET` | the module's own service account for the admin API; needs the realm permissions `manage-clients`, `view-clients`, `query-clients`, `manage-users`, `view-users`, `query-users` | |
+| `C2_M2_CLIENT_ID`, `C2_M2_CLIENT_SECRET` | the module's own service account for the admin API (C2-M5 5.9; secret from the secret store, C2-M5 4); needs the realm permissions `manage-clients`, `view-clients`, `query-clients`, `manage-users`, `view-users`, `query-users` | `svc-c2-m2` |
 | `PORTAL_CORE_CLIENT_ID` | client with permissions and portal roles | `portal-core` |
 | `COMPANY_PORTAL_ROLES` | company portal roles, comma-separated | `Company Admin,IT Admin,Member` |
 | `COMPANY_ADMIN_ROLE` | portal role of the Company Admin | `Company Admin` |
@@ -103,10 +103,10 @@ It is the only module that writes bindings, portal roles of people, app clients 
 | `INVITATION_NAME_CHECK` | check the names on acceptance (6.8) | `true` |
 | `BOOTSTRAP_ADMIN_FILE` | bootstrap of the first OSP Admin (6.9); empty = none | `config/bootstrap-admin.json` |
 | `SETTINGS_FILE` | installation settings (FRAMEWORK 4.8); the module reads `ospCompanyId` | `config/installation.json` |
-| `CLIENT_ID_PREFIX` | prefix of the client IDs of instance clients | `app` |
+| `INSTANCE_CLIENT_ID_PREFIX` | prefix of the client IDs of instance clients | `app` |
 | `TEMPLATE_CLIENT_ID_PREFIX` | prefix of the client IDs of templates | `app-template-` |
-| `DEFAULT_CLIENT_SCOPES` | default client scopes of instance clients, comma-separated | `basic,acr,roles,web-origins,catena` |
-| `OPTIONAL_CLIENT_SCOPES` | optional client scopes of instance clients | empty |
+| `INSTANCE_CLIENT_DEFAULT_SCOPES` | default client scopes of instance clients, comma-separated | `basic,acr,roles,web-origins,catena` |
+| `INSTANCE_CLIENT_OPTIONAL_SCOPES` | optional client scopes of instance clients | empty |
 | `LANGUAGES` | languages allowed for role descriptions | `de,en` |
 | `QUERY_MAX_APPS` | maximum number of apps in one roles query | `50` |
 | `SUBSCRIPTION_URL`, `COMPANY_URL` | connection to Subscriptions or C3-M1: empty = built-in stand-in (11.2), `in-process` = call in the same process, otherwise HTTP address | `in-process` |
@@ -133,7 +133,7 @@ It is the only module that writes bindings, portal roles of people, app clients 
 | `instance_kind` | text | `SINGLE` or `SUBSCRIPTION` |
 | `offer_subscription_id` | uuid | required and unique for `SUBSCRIPTION`, empty for `SINGLE` |
 | `customer_company_id` | uuid | required for `SUBSCRIPTION`, empty for `SINGLE` |
-| `iam_client_id` | text | unique; `CLIENT_ID_PREFIX` + value of the sequence `client_number`, e.g. `app123` |
+| `iam_client_id` | text | unique; `INSTANCE_CLIENT_ID_PREFIX` + value of the sequence `client_number`, e.g. `app123` |
 | `iam_client_uuid` | text | internal ID of the client in Keycloak; empty until the step has finished |
 | `instance_url` | text | absolute `http` or `https` URL without `#`, up to 255 characters |
 | `status` | text | `PENDING`, `ACTIVE`, `DISABLED` |
@@ -231,7 +231,7 @@ One entry per changing operation and per changing run of a step (FRAMEWORK 4.3).
 ### 6.1 Client IDs
 
 - Template: `TEMPLATE_CLIENT_ID_PREFIX` + app ID. It follows from the app ID; a repeated step finds the template again by it.
-- Instance client: `CLIENT_ID_PREFIX` + next value of the sequence `client_number`. The number is taken and stored in `app_instance_client` **before** the client is created in the Portal IAM. So a repeated step uses the same ID.
+- Instance client: `INSTANCE_CLIENT_ID_PREFIX` + next value of the sequence `client_number`. The number is taken and stored in `app_instance_client` **before** the client is created in the Portal IAM. So a repeated step uses the same ID.
 
 ### 6.2 App roles
 
@@ -255,7 +255,7 @@ One entry per changing operation and per changing run of a step (FRAMEWORK 4.3).
 | `implicitFlowEnabled`, `directAccessGrantsEnabled`, `serviceAccountsEnabled` | `false` | `false` |
 | `fullScopeAllowed` | `false` | `false` |
 | `consentRequired`, `frontchannelLogout` | `false` | `false` |
-| `defaultClientScopes`, `optionalClientScopes` | none | `DEFAULT_CLIENT_SCOPES`, `OPTIONAL_CLIENT_SCOPES` |
+| `defaultClientScopes`, `optionalClientScopes` | none | `INSTANCE_CLIENT_DEFAULT_SCOPES`, `INSTANCE_CLIENT_OPTIONAL_SCOPES` |
 | `rootUrl` | – | not set |
 | `baseUrl` | – | URL of the instance |
 | `redirectUris` | – | `{URL of the instance}/*`, without a double slash |
@@ -890,7 +890,7 @@ Every event also carries `eventId` (uuid), `eventType` (the name from the table)
 
 ### 11.1 Portal IAM (Keycloak Admin REST API)
 
-All calls with the token of the module's own service account (`IAM_ADMIN_CLIENT_ID`), realm `IAM_REALM`. Paths are relative to `/admin/realms/{realm}`. Role names in paths URL-encoded (`Company%20Admin`).
+All calls with the token of the module's own service account (`C2_M2_CLIENT_ID`), realm `IAM_REALM`. Paths are relative to `/admin/realms/{realm}`. Role names in paths URL-encoded (`Company%20Admin`).
 
 | Purpose | Call |
 |---|---|
@@ -962,7 +962,7 @@ The module is done when these cases work against the test Portal IAM (section 14
 App clients and app roles:
 
 1. `create-client-template` with two roles in `de` and `en`: the client `app-template-{appId}` exists, is disabled and has both roles with the attributes `description.de`, `description.en` and the English text in `description`.
-2. `create-instance-client` (`SUBSCRIPTION`): a disabled public client `app{n}` with `baseUrl`, redirect `{URL}/*`, audience mapper, both roles including attributes and the client scopes from `DEFAULT_CLIENT_SCOPES`, without `profile` and `email`. Status `PENDING`.
+2. `create-instance-client` (`SUBSCRIPTION`): a disabled public client `app{n}` with `baseUrl`, redirect `{URL}/*`, audience mapper, both roles including attributes and the client scopes from `INSTANCE_CLIENT_DEFAULT_SCOPES`, without `profile` and `email`. Status `PENDING`.
 3. `enable-instance-client`: the client is enabled, status `ACTIVE`.
 4. `add-app-roles` with one new and one existing role: the new role appears on the template and on every instance client, including disabled ones; the existing role is listed under `skippedRoles` and keeps its descriptions.
 5. `update-role-descriptions`: changed attributes on the template and on every instance client; an unknown role gives 404 and changes nothing.
@@ -1027,10 +1027,10 @@ General:
 
 The test Portal IAM needs:
 
-- the realm `IAM_REALM` with the client scopes from `DEFAULT_CLIENT_SCOPES`; in the client scope `catena` one mapper each from the attribute `company_id` and `bpn` to the claim of the same name;
+- the realm `IAM_REALM` with the client scopes from `INSTANCE_CLIENT_DEFAULT_SCOPES`; in the client scope `catena` one mapper each from the attribute `company_id` and `bpn` to the claim of the same name;
 - a user profile that allows the attributes `company_id` and `bpn` and lets only administrators change them;
 - the client `portal-core` with the portal roles `Applicant`, `Member`, `IT Admin`, `Company Admin`, `OSP Reviewer`, `OSP Admin` (they may be empty for the tests of this module); `Applicant` is assigned by the identity provider at the first login (C2-M5 5.5), not a default role of the realm;
-- a service account for the module with the permissions listed under `IAM_ADMIN_CLIENT_ID`;
+- a service account for the module with the permissions listed under `C2_M2_CLIENT_ID`;
 - a stand-in for the EBW-Connector: a second realm of the same Keycloak as identity provider (OIDC) with the test persons from 14.2; as a stand-in for an external system it may have test passwords; first broker login as in C2-M5 (create the account, link it);
 - the test persons from 14.2 as accounts with a fixed ID, with `firstName`, `lastName`, `Applicant` and the link to the stand-in, without credentials.
 
