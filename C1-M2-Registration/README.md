@@ -124,7 +124,7 @@ The module has no user interface. Callers:
 | `short_name` | text | up to 60 characters, empty allowed |
 | `street_name` | text | 1 to 150 characters |
 | `street_number` | text | up to 20 characters, empty allowed |
-| `postal_code` | text | up to 20 characters, empty allowed |
+| `postal_code` | text | up to 12 characters, empty allowed (as in C3-M1) |
 | `city` | text | 1 to 150 characters |
 | `region` | text | code of the region according to ISO 3166-2 without the country part, `^[A-Z0-9]{1,3}$`, empty allowed |
 | `country_code` | text | ISO 3166-1 alpha-2, from the reference data |

@@ -155,6 +155,8 @@ Relative paths in the settings count from the settings file.
 
 **Configuration variables** (section 4 of each module README) come from one shared configuration of the installation. A name therefore means the same in every module that uses it. Where two modules need different values, their variables have different names (for example `INSTANCE_CLIENT_ID_PREFIX` in C2-M2 and `TECHNICAL_USER_CLIENT_ID_PREFIX` in C2-M3).
 
+**Values that are not set:** Where the module README says what a missing or empty value means, that applies. Otherwise the value in the column "Example" is the default, so a module starts without any setting and the installation sets only what differs. Exceptions are addresses of other systems, secrets and keys: the installation must set them, and without them the module answers with an error that names the missing variable.
+
 ## 5. Flows across modules
 
 Process Orchestration defines these flows; the modules provide the named steps and report the named events. All flows run within one installation; only C3-M2 talks to the CSP.

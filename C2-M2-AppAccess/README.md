@@ -266,7 +266,7 @@ One entry per changing operation and per changing run of a step (FRAMEWORK 4.3).
 
 The description texts of the clients stay in English because they appear in the Keycloak UI.
 
-The client scopes `profile`, `email`, `address`, `phone` and `microprofile-jwt` are neither default nor optional scopes of an instance client. So apps get no name and no email address of a person, even though the account carries names from the PID (FRAMEWORK 4.6).
+The client scopes `profile`, `email`, `address`, `phone` and `microprofile-jwt` are neither default nor optional scopes of an instance client. So apps get no name and no email address of a person, even though the account carries names from the PID (FRAMEWORK 4.6). The module therefore always sends `defaultClientScopes` and `optionalClientScopes` when it creates or changes a client, also as empty lists: if they are missing, Keycloak adds the default client scopes of the realm, among them `profile` and `email`.
 
 #### 6.3.1 Audience mapper
 
@@ -1020,6 +1020,7 @@ OSP staff:
 General:
 
 38. No event, no step result and no audit log entry contains a name or an invitation code. Every changing operation has an entry in `audit_log` with `actor_sub`.
+39. Template and instance clients have exactly the client scopes of 6.3: the template none, the instance client `INSTANCE_CLIENT_DEFAULT_SCOPES` and `INSTANCE_CLIENT_OPTIONAL_SCOPES`. A token for the app requested with `scope=openid profile email` contains no name and no e-mail address.
 
 ## 14. Test data
 

@@ -819,7 +819,7 @@ components:
       properties:
         streetName: { type: string, minLength: 1, maxLength: 150 }
         streetNumber: { type: [string, 'null'], maxLength: 20 }
-        postalCode: { type: [string, 'null'], maxLength: 20 }
+        postalCode: { type: [string, 'null'], maxLength: 12 }
         city: { type: string, minLength: 1, maxLength: 150 }
         region:
           type: [string, 'null']

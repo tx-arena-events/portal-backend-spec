@@ -237,11 +237,11 @@ This check does not apply to subscription accounts. There, the roles from the pr
 | `serviceAccountsEnabled` | `true` |
 | `standardFlowEnabled`, `implicitFlowEnabled`, `directAccessGrantsEnabled` | `false` |
 | `fullScopeAllowed` | `false` |
-| `defaultClientScopes` | `TECHNICAL_USER_CLIENT_DEFAULT_SCOPES`; no optional scopes |
+| `defaultClientScopes`, `optionalClientScopes` | `TECHNICAL_USER_CLIENT_DEFAULT_SCOPES`; `optionalClientScopes` as an empty list |
 | Service account user | attributes `{COMPANY_ID_ATTRIBUTE}: [companyId of the owner]`, `{BPN_ATTRIBUTE}: [BPN of the owner]` |
 | Roles | roles on the client `TECHNICAL_ROLES_CLIENT`, assigned to the service account; never wallet roles |
 
-The client scope `catena` writes the claims `company_id` and `bpn` into the token, the client scope `technical-roles` the roles (both from C2-M5). A separate mapper per client is not needed.
+The client scope `catena` writes the claims `company_id` and `bpn` into the token, the client scope `technical-roles` the roles (both from C2-M5). A separate mapper per client is not needed. The module always sends both scope lists, also an empty one: if they are missing, Keycloak adds the default client scopes of the realm, among them `profile` and `email`.
 
 ### 6.7 Tokens for apps and central services
 
@@ -485,7 +485,7 @@ All calls with the token of the module's own service account (`C2_M3_CLIENT_ID`)
 | Purpose | Call |
 |---|---|
 | Search client | `GET …/clients?clientId={clientId}` |
-| Create client | `POST …/clients` with the settings from 6.6, including `defaultClientScopes`; the internal ID is in the `Location` header |
+| Create client | `POST …/clients` with the settings from 6.6, including `defaultClientScopes` and the empty `optionalClientScopes`; the internal ID is in the `Location` header |
 | Read / change client (name, description, enable, disable) | `GET` / `PUT …/clients/{uuid}`; for `PUT`, send the representation read before with the changed fields |
 | Service account user | `GET …/clients/{uuid}/service-account-user` |
 | Set attributes | `GET` / `PUT …/users/{userId}`; for `PUT`, the representation read before with `{COMPANY_ID_ATTRIBUTE}: [companyId]`, `{BPN_ATTRIBUTE}: [BPN]` |
@@ -578,6 +578,7 @@ End of a subscription and roles for offers:
 
 20. `disable-subscription-technical-users` for the subscription from case 11: both accounts `INACTIVE`, their clients disabled in the Portal IAM, client credentials no longer return a token. Retry: the same result. `enable-company-technical-users` for Beispiel Maschinenbau afterwards leaves the customer account disabled. Deleting an `INACTIVE` account works as in case 9; `PATCH` and rotate secret: 409 `invalid-state`.
 21. `GET /internal/technical-roles` returns all roles of `technical_roles_management`, also `BPDM Sharing Output Consumer` with `providerOnly` `true` and `Identity Wallet Management` with `grantsWalletAccess` `true`, independent of the company roles; without `query_c2_m3` over HTTP: 403.
+22. The client of a technical user has exactly the default client scopes `TECHNICAL_USER_CLIENT_DEFAULT_SCOPES` and no optional scopes; its token contains no claims of the scopes `profile` and `email`.
 
 ## 14. Test data
 
