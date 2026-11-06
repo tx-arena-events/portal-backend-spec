@@ -192,7 +192,7 @@ Permission `query_c6_m1`. Parameter `technicalUserId` (required). Response 200: 
 | `ConnectorDeactivated` | status `INACTIVE` (7.6, 8.1) | `connectorId`, `companyId` |
 | `ConnectorDeleted` | removed (7.6) | `connectorId`, `companyId` |
 
-Every event also carries `eventId`, `eventType`, `occurredAt`. They start the flows of FRAMEWORK 5.9: `ConnectorRegistered` and `ConnectorEndpointChanged` lead to C3-M2 `register-connector` (`endpoint` is passed as `endpointUrl`), `ConnectorDeactivated` and `ConnectorDeleted` to `deregister-connector` (open-points No. 1).
+Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c6-m1`; `type` is the name from the table and the content is in `data`. They start the flows of FRAMEWORK 5.9: `ConnectorRegistered` and `ConnectorEndpointChanged` lead to C3-M2 `register-connector` (`endpoint` is passed as `endpointUrl`), `ConnectorDeactivated` and `ConnectorDeleted` to `deregister-connector` (open-points No. 1). The field `type` of `ConnectorRegistered` (`COMPANY_CONNECTOR`, `CONNECTOR_AS_A_SERVICE`) is a field of `data`, not the `type` of the CloudEvent.
 
 ## 11. Calls to other modules and external systems
 
@@ -261,3 +261,4 @@ Problem Details, `type` = `urn:c6-m1:problem:<name>`.
 - Permissions with the full module identifier as in FRAMEWORK 4.2: `execute_steps_c6_m1` (renamed from `execute_steps_c6`), `query_c6_m1` (renamed from `query_c6`); tag `Queries` instead of `Internal` (FRAMEWORK 4.1) (30 Oct 2026).
 - Connector as a service: the check of the technical user passes `offerSubscriptionId` to C2-M3 9.1, so the customer account of the subscription is usable (6.2, 7.3, case 11) (30 Oct 2026).
 - Test data with the common test IDs of FRAMEWORK 7a (host company Beispiel Maschinenbau GmbH) (30 Oct 2026).
+- Events are CloudEvents (FRAMEWORK 6, OP-54): `id`, `source` `urn:c6-m1`, `type`, `time`, `datacontenttype` and the content in `data` replace `eventId`, `eventType` and `occurredAt` (6 Nov 2026).

@@ -1740,40 +1740,52 @@ components:
 
     EventBase:
       type: object
-      required: [eventId, eventType, occurredAt]
-      description: Common fields of every event. Events never contain secrets, invitation codes or names.
+      required: [specversion, id, source, type, time, datacontenttype, data]
+      description: |
+        CloudEvent (CloudEvents 1.0, JSON event format, FRAMEWORK 6). `type` is the event name,
+        the content is in `data`. Events never contain secrets, invitation codes or names.
       properties:
-        eventId: { type: string, format: uuid }
-        eventType: { type: string }
-        occurredAt: { type: string, format: date-time }
+        specversion: { const: '1.0' }
+        id: { type: string, format: uuid }
+        source: { const: 'urn:c2-m2' }
+        type: { type: string }
+        time: { type: string, format: date-time }
+        datacontenttype: { const: application/json }
+        data: { type: object }
 
     EventAppClientTemplateCreated:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [appId, iamClientId, roleNames]
           properties:
-            eventType: { const: AppClientTemplateCreated }
-            appId: { type: string, format: uuid }
-            iamClientId: { type: string }
-            roleNames:
-              type: array
-              items: { $ref: '#/components/schemas/RoleName' }
+            type: { const: AppClientTemplateCreated }
+            data:
+              type: object
+              required: [appId, iamClientId, roleNames]
+              properties:
+                appId: { type: string, format: uuid }
+                iamClientId: { type: string }
+                roleNames:
+                  type: array
+                  items: { $ref: '#/components/schemas/RoleName' }
 
     EventAppInstanceClientCreated:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [appInstanceClientId, appId, instanceKind, iamClientId, instanceUrl]
           properties:
-            eventType: { const: AppInstanceClientCreated }
-            appInstanceClientId: { type: string, format: uuid }
-            appId: { type: string, format: uuid }
-            instanceKind: { $ref: '#/components/schemas/InstanceKind' }
-            offerSubscriptionId: { type: [string, 'null'], format: uuid }
-            customerCompanyId: { type: [string, 'null'], format: uuid }
-            iamClientId: { type: string }
-            instanceUrl: { $ref: '#/components/schemas/InstanceUrl' }
+            type: { const: AppInstanceClientCreated }
+            data:
+              type: object
+              required: [appInstanceClientId, appId, instanceKind, iamClientId, instanceUrl]
+              properties:
+                appInstanceClientId: { type: string, format: uuid }
+                appId: { type: string, format: uuid }
+                instanceKind: { $ref: '#/components/schemas/InstanceKind' }
+                offerSubscriptionId: { type: [string, 'null'], format: uuid }
+                customerCompanyId: { type: [string, 'null'], format: uuid }
+                iamClientId: { type: string }
+                instanceUrl: { $ref: '#/components/schemas/InstanceUrl' }
 
     EventInstanceClientFields:
       type: object
@@ -1787,139 +1799,166 @@ components:
     EventAppInstanceClientEnabled:
       allOf:
         - $ref: '#/components/schemas/EventBase'
-        - $ref: '#/components/schemas/EventInstanceClientFields'
         - type: object
           properties:
-            eventType: { const: AppInstanceClientEnabled }
+            type: { const: AppInstanceClientEnabled }
+            data: { $ref: '#/components/schemas/EventInstanceClientFields' }
 
     EventAppInstanceClientDisabled:
       allOf:
         - $ref: '#/components/schemas/EventBase'
-        - $ref: '#/components/schemas/EventInstanceClientFields'
         - type: object
           properties:
-            eventType: { const: AppInstanceClientDisabled }
+            type: { const: AppInstanceClientDisabled }
+            data: { $ref: '#/components/schemas/EventInstanceClientFields' }
 
     EventAppInstanceUrlUpdated:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [appInstanceClientId, appId, instanceUrl]
           properties:
-            eventType: { const: AppInstanceUrlUpdated }
-            appInstanceClientId: { type: string, format: uuid }
-            appId: { type: string, format: uuid }
-            offerSubscriptionId: { type: [string, 'null'], format: uuid }
-            instanceUrl: { $ref: '#/components/schemas/InstanceUrl' }
+            type: { const: AppInstanceUrlUpdated }
+            data:
+              type: object
+              required: [appInstanceClientId, appId, instanceUrl]
+              properties:
+                appInstanceClientId: { type: string, format: uuid }
+                appId: { type: string, format: uuid }
+                offerSubscriptionId: { type: [string, 'null'], format: uuid }
+                instanceUrl: { $ref: '#/components/schemas/InstanceUrl' }
 
     EventAppRolesAdded:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [appId, roleNames]
           properties:
-            eventType: { const: AppRolesAdded }
-            appId: { type: string, format: uuid }
-            roleNames:
-              type: array
-              items: { $ref: '#/components/schemas/RoleName' }
+            type: { const: AppRolesAdded }
+            data:
+              type: object
+              required: [appId, roleNames]
+              properties:
+                appId: { type: string, format: uuid }
+                roleNames:
+                  type: array
+                  items: { $ref: '#/components/schemas/RoleName' }
 
     EventAppRoleDescriptionsUpdated:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [appId, roleNames]
           properties:
-            eventType: { const: AppRoleDescriptionsUpdated }
-            appId: { type: string, format: uuid }
-            roleNames:
-              type: array
-              items: { $ref: '#/components/schemas/RoleName' }
+            type: { const: AppRoleDescriptionsUpdated }
+            data:
+              type: object
+              required: [appId, roleNames]
+              properties:
+                appId: { type: string, format: uuid }
+                roleNames:
+                  type: array
+                  items: { $ref: '#/components/schemas/RoleName' }
 
     EventUserAssignedToCompany:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [userId, companyId, via, portalRoles]
           properties:
-            eventType: { const: UserAssignedToCompany }
-            userId: { type: string, format: uuid }
-            companyId: { type: string, format: uuid }
-            via: { $ref: '#/components/schemas/JoinedVia' }
-            portalRoles:
-              type: array
-              items: { $ref: '#/components/schemas/PortalRoleName' }
+            type: { const: UserAssignedToCompany }
+            data:
+              type: object
+              required: [userId, companyId, via, portalRoles]
+              properties:
+                userId: { type: string, format: uuid }
+                companyId: { type: string, format: uuid }
+                via: { $ref: '#/components/schemas/JoinedVia' }
+                portalRoles:
+                  type: array
+                  items: { $ref: '#/components/schemas/PortalRoleName' }
 
     EventUserRemovedFromCompany:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [userId, companyId, reason]
           properties:
-            eventType: { const: UserRemovedFromCompany }
-            userId: { type: string, format: uuid }
-            companyId: { type: string, format: uuid }
-            reason: { $ref: '#/components/schemas/RemovalReason' }
+            type: { const: UserRemovedFromCompany }
+            data:
+              type: object
+              required: [userId, companyId, reason]
+              properties:
+                userId: { type: string, format: uuid }
+                companyId: { type: string, format: uuid }
+                reason: { $ref: '#/components/schemas/RemovalReason' }
 
     EventUserRolesChanged:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [userId, companyId, addedRoles, removedRoles]
           properties:
-            eventType: { const: UserRolesChanged }
-            userId: { type: string, format: uuid }
-            companyId: { type: string, format: uuid }
-            appId:
-              type: [string, 'null']
-              format: uuid
-              description: Only for app roles; missing or null for company portal roles.
-            addedRoles:
-              type: array
-              items: { type: string }
-            removedRoles:
-              type: array
-              items: { type: string }
+            type: { const: UserRolesChanged }
+            data:
+              type: object
+              required: [userId, companyId, addedRoles, removedRoles]
+              properties:
+                userId: { type: string, format: uuid }
+                companyId: { type: string, format: uuid }
+                appId:
+                  type: [string, 'null']
+                  format: uuid
+                  description: Only for app roles; missing or null for company portal roles.
+                addedRoles:
+                  type: array
+                  items: { type: string }
+                removedRoles:
+                  type: array
+                  items: { type: string }
 
     EventCompanyUsersDisabled:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [companyId, userIds]
           properties:
-            eventType: { const: CompanyUsersDisabled }
-            companyId: { type: string, format: uuid }
-            userIds:
-              type: array
-              items: { type: string, format: uuid }
+            type: { const: CompanyUsersDisabled }
+            data:
+              type: object
+              required: [companyId, userIds]
+              properties:
+                companyId: { type: string, format: uuid }
+                userIds:
+                  type: array
+                  items: { type: string, format: uuid }
 
     EventCompanyUsersEnabled:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [companyId, userIds]
           properties:
-            eventType: { const: CompanyUsersEnabled }
-            companyId: { type: string, format: uuid }
-            userIds:
-              type: array
-              items: { type: string, format: uuid }
+            type: { const: CompanyUsersEnabled }
+            data:
+              type: object
+              required: [companyId, userIds]
+              properties:
+                companyId: { type: string, format: uuid }
+                userIds:
+                  type: array
+                  items: { type: string, format: uuid }
 
     EventOspStaffRolesChanged:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [userId, addedRoles, removedRoles]
           description: Addition to the framework (open-points.md).
           properties:
-            eventType: { const: OspStaffRolesChanged }
-            userId: { type: string, format: uuid }
-            addedRoles:
-              type: array
-              items: { $ref: '#/components/schemas/PortalRoleName' }
-            removedRoles:
-              type: array
-              items: { $ref: '#/components/schemas/PortalRoleName' }
+            type: { const: OspStaffRolesChanged }
+            data:
+              type: object
+              required: [userId, addedRoles, removedRoles]
+              properties:
+                userId: { type: string, format: uuid }
+                addedRoles:
+                  type: array
+                  items: { $ref: '#/components/schemas/PortalRoleName' }
+                removedRoles:
+                  type: array
+                  items: { $ref: '#/components/schemas/PortalRoleName' }
 
     Problem:
       type: object

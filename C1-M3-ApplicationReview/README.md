@@ -346,7 +346,7 @@ For C1-M2 (withdrawal only until the decision, `reviewStatus` for the person). R
 
 ## 10. Events
 
-Through the outbox, in the same transaction as the change. Every event also carries `eventId`, `eventType`, `occurredAt`. No secrets, no names of people. Schemas in [openapi.yaml](openapi.yaml) under `components/schemas` (names start with `Event`).
+Through the outbox, in the same transaction as the change. Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c1-m3`; `type` is the name from the table and the content is in `data`. No secrets, no names of people. Schemas in [openapi.yaml](openapi.yaml) under `components/schemas` (names start with `Event`).
 
 | Event | When | Content |
 |---|---|---|
@@ -598,3 +598,4 @@ As the test data of C3-M2 (README 14), extended by the deactivated company of th
 - The check `CONSENTS_COMPLETE` no longer requires a consent `psp-delegation`. `REPRESENTATION_CONFIRMED` shows the reasons of the EBW-Connector.
 - Events with `kind` and `existingCompany` instead of `pspId`. Errors of the steps with `retryable`.
 - Test IDs per FRAMEWORK 7a; test companies and verification attestation as in C5-M1.
+- Events are CloudEvents (FRAMEWORK 6, OP-54): `id`, `source` `urn:c1-m3`, `type`, `time`, `datacontenttype` and the content in `data` replace `eventId`, `eventType` and `occurredAt` (6 Nov 2026).

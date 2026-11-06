@@ -50,7 +50,7 @@ Callers:
 
 - Module of the modular monolith (Python, FastAPI), own database `c11_m1` in PostgreSQL.
 - People call with their token from the Portal IAM. The inbox of a person: personal notifications with their `sub`, plus staff notifications whose permission is in the token.
-- Events are received at least once; an `eventId` is processed once.
+- Events are CloudEvents (FRAMEWORK 6). They are received at least once; an event `id` is processed once.
 - A recipient query that fails (C2-M2 not reachable) is repeated with growing wait times (5 s, doubling, at most 10 minutes, at most 10 attempts); after that the event is logged as not delivered.
 
 ### Configuration
@@ -78,9 +78,9 @@ Callers:
 | `receiver_permission` | text | staff notification; empty for personal ones |
 | `company_id` | uuid | company the notification is about, if any |
 | `subject_type`, `subject_id` | text, uuid | object of the notification, e.g. `OFFER` and the `offerId` |
-| `content` | jsonb | IDs and business values from the event; never names, never secrets |
+| `content` | jsonb | IDs and business values from `data` of the event; never names, never secrets |
 | `done` | boolean | tasks only |
-| `dedup_key` | text | unique: rule, `eventId`, receiver |
+| `dedup_key` | text | unique: rule, event `id`, receiver |
 | `created_at`, `done_at` | timestamptz | |
 
 ### Table `notification_state`
@@ -93,7 +93,7 @@ Per person and notification: `notification_id`, `sub`, `read_at`, `hidden_at`. A
 
 ### Table `processed_event`
 
-`event_id` (primary key), `event_type`, `received_at`, `status` (`DONE`, `FAILED`).
+`event_id` (primary key, the event `id`), `event_type` (the event `type`), `received_at`, `status` (`DONE`, `FAILED`).
 
 **Not stored:** names, e-mail addresses, texts.
 
@@ -130,9 +130,11 @@ Per person and notification: `notification_id`, `sub`, `read_at`, `hidden_at`. A
 | R16 | `ConnectorRegistered` | `CONNECTOR_REGISTERED` | `INFO` | `IT Admin` of `companyId`; if the company has none, `Company Admin` | – |
 | R17 | `ProcessStepFailed` | `PROCESS_STEP_FAILED` | `ACTION` | staff with `retrigger_process_steps` | `ProcessStepRetriggered` (same `processId` and `stepKey`), `ProcessCompleted`, `ProcessEnded` (`processId`) |
 
-`content` of a notification: the fields of the event without `eventId`, `eventType` and `occurredAt`. R17 additionally `flowKey`, `subjectType`, `subjectId`, `errorType`.
+The column "Event" is the `type` of the event (CloudEvent, FRAMEWORK 6). Field names in 6.1 and 6.2 (e.g. `applicationId`, `providerCompanyId`, `appId`) are fields of its `data`.
 
-A closing event sets `done` on all open tasks of the rule for the same object. A closing event that arrives before its task (e.g. a quick approval) is remembered for 24 hours. A new task is created as `done` only if the event that creates it did not occur later than the remembered closing event (compare `occurredAt`). Example: after `ProcessStepRetriggered` the same step fails again; the new `ProcessStepFailed` is later than the retrigger, so the new task stays open (acceptance case 6).
+`content` of a notification: the fields of `data` of the event. R17 additionally `flowKey`, `subjectType`, `subjectId`, `errorType`.
+
+A closing event sets `done` on all open tasks of the rule for the same object. A closing event that arrives before its task (e.g. a quick approval) is remembered for 24 hours. A new task is created as `done` only if the event that creates it did not occur later than the remembered closing event (compare the CloudEvents attribute `time`). Example: after `ProcessStepRetriggered` the same step fails again; the new `ProcessStepFailed` is later than the retrigger, so the new task stays open (acceptance case 6).
 
 ### 6.3 Permissions
 
@@ -146,7 +148,7 @@ There are no other operations. Nobody can create notifications through the API.
 
 ### 6.4 Repeatability
 
-- An `eventId` is processed once (`processed_event`); `dedup_key` prevents double notifications if processing is repeated after a crash.
+- An event `id` is processed once (`processed_event`); `dedup_key` prevents double notifications if processing is repeated after a crash.
 - Mark as read, mark as unread, hide: idempotent.
 
 ## 7. Operations
@@ -203,13 +205,15 @@ None.
 
 ## 10. Events
 
-None. The module only consumes events (11.1). The stream messages of 7.6 go only to the UI; they are not published on the event bus.
+None. The module only consumes events (11.1). The stream messages of 7.6 go only to the UI; they are not published on the event bus and are not CloudEvents.
 
 ## 11. Calls to other modules and external systems
 
 ### 11.1 Consumed events
 
 All events named in 6.2: from C1-M2 (`ApplicationSubmitted`, `ApplicationCompleted`, `ApplicationWithdrawn`), C1-M3 (`ApplicationApproved`, `ApplicationDeclined`), C3-M1 (`CompanyChangeRequestSubmitted`, `CompanyChangeRequestClosed`), C2-M2 (`AppRolesAdded`), C4-M1 (`CredentialRevoked`), C4-M2 (`WalletAccountCreated`, `WalletAccountFailed`), C6-M1 (`ConnectorRegistered`), C8-M1 (`OfferSubmitted`, `OfferApproved`, `OfferDeclined`), C10-M1 (`SubscriptionRequested`, `SubscriptionActivated`, `SubscriptionDeclined`, `SubscriptionDeactivated`, `SubscriptionInstanceUrlChanged`), C12-M1 (`ProcessStepFailed`, `ProcessStepRetriggered`, `ProcessCompleted`, `ProcessEnded`).
+
+Every consumed event is a CloudEvent (FRAMEWORK 6). The module reads the name from `type` and the content from `data`, detects a repeated delivery by `id` (6.4) and compares events by `time` (6.2).
 
 ### 11.2 Queries
 
@@ -234,11 +238,11 @@ Problem Details, `type` = `urn:c11-m1:problem:<name>`.
 
 1. `ApplicationSubmitted`: the applicant has `APPLICATION_SUBMITTED`; a person with `review_application` sees `REVIEW_CASE_OPENED` as open task; a person without it does not.
 2. `ApplicationApproved` for the same `applicationId`: the task is `done` for everyone.
-3. The same event a second time (same `eventId`): no second notification.
+3. The same event a second time (same `id`): no second notification.
 4. `ApplicationDeclined`: the applicant has `APPLICATION_DECLINED` with `reason`; afterwards the row in `applicant` is deleted.
 5. `SubscriptionRequested`: every `Company Admin` of the provider company (stand-in: Otto) has an open task; `SubscriptionActivated` closes it and creates `SUBSCRIPTION_ACTIVATED` for the `Company Admin` of the customer.
 6. `ProcessStepFailed`: a person with `retrigger_process_steps` sees `PROCESS_STEP_FAILED`; `ProcessStepRetriggered` for the same step closes it; a new `ProcessStepFailed` creates a new task.
-7. A closing event arrives before the event of the task, and the task event has an earlier or equal `occurredAt`: the task is created as `done`. A task event with a later `occurredAt` (case 6 after a retrigger): the task is created open.
+7. A closing event arrives before the event of the task, and the task event has an earlier or equal `time`: the task is created as `done`. A task event with a later `time` (case 6 after a retrigger): the task is created open.
 8. Hide an open task: 409; after `done`: 204, it no longer appears in the list.
 9. One person marks a staff notification as read: for another staff member it stays unread (Rolf and Otto, both with `review_company_changes`, rule R5).
 10. Another person's notification: 404. Notification contents contain no names (check against the stand-in data).
@@ -272,9 +276,10 @@ IDs, persons and portal roles as in FRAMEWORK 7a and C2-M5 6.3.
 - Receiver is the `sub` of the person, no portal user ID.
 - Paths under `/api/c11-m1`; permission `view_notifications` with scope `own`. `retrigger_mail` dropped.
 - Deleting becomes hiding per person.
-- A remembered closing event closes a new task only if the task event is not later (`occurredAt`, 6.2).
+- A remembered closing event closes a new task only if the task event is not later (`time`, 6.2).
 - R14 and R16 go to `Company Admin` if the company has no `IT Admin` (e.g. right after onboarding).
 - Recipients from C2-M2 are read from `userId` (= `sub`); `appId` of `AppRolesAdded` is the `offerId` for the query at C10-M1.
 - Tag `Company` instead of `Inbox` (FRAMEWORK 4.1) (30 Oct 2026).
 - Live updates of the inbox as Server-Sent Events, no WebSockets (7.6, decided on 30 Oct 2026; open question 6 closed): events `notification-created`, `notification-done`, `resync`; `Last-Event-ID` with a buffer in memory; token in the header only. Configuration `SSE_HEARTBEAT_SECONDS`, `SSE_REPLAY_SIZE` (30 Oct 2026).
 - Test data with the common test IDs and test persons of FRAMEWORK 7a; `sub` values are account IDs, not user names (renamed from `ebw.test-erika`, `ebw.test-otto`, `ebw.test-lieschen`, `ebw.test-staff`) (30 Oct 2026).
+- Consumed events are CloudEvents (FRAMEWORK 6, OP-54): `id`, `type`, `time` and the content in `data` replace `eventId`, `eventType` and `occurredAt`. `content` holds the fields of `data`; the module detects a repeated delivery by `id` and compares closing events by `time` (6.2, 6.4, 11.1) (6 Nov 2026).

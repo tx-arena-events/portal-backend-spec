@@ -3,9 +3,9 @@
 # in its installation (configuration FLOWS_FILE); the module code does not change.
 #
 # Sources of an input value:
-#   name                   process variable (fields of the trigger event, of correlated
-#                          events and of `set`)
-#   steps.<step>.<field>   result of an earlier step (or the payload of the event that
+#   name                   process variable (fields of `data` of the trigger event, of
+#                          correlated events, and of `set`)
+#   steps.<step>.<field>   result of an earlier step (or `data` of the event that
 #                          completed it)
 #   lookup.<name>.<field>  result of a query declared under `lookups`
 #   =VALUE                 fixed value

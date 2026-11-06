@@ -67,7 +67,7 @@ None. FRAMEWORK 4.1 and 4.3 have covered the scope `osp` for steps, queries and 
 | C2-M3 Technical Users | reads status, BPN and roles through 9.1; replaces `PORTAL_SERVICE_PROVIDER` and `OPERATOR` in its table of assignable roles with `ONBOARDING_SERVICE_PROVIDER`. |
 | C2-M5 Portal IAM | creates the permissions from README 6.8 and bundles them into the portal roles as proposed there; the token of a person carries `company_id` if the account is bound. |
 | C4-M1, C4-M2 | read name, BPN and status through 9.1; `registeringPspId` is dropped. |
-| Process Orchestration | flows as in FRAMEWORK 5.2, 5.4 to 5.6 with the steps from README 8; return as in E3; passing on changed core data as in E4; inputs from the fields of the events. |
+| Process Orchestration | flows as in FRAMEWORK 5.2, 5.4 to 5.6 with the steps from README 8; return as in E3; passing on changed core data as in E4; inputs from the fields of `data` of the events (FRAMEWORK 6). |
 | Notifications | notice to OSP staff on `CompanyChangeRequestSubmitted`, to the Company Admin on `CompanyChangeRequestClosed` (OP-19). |
 | Base skeleton | outbox, token validation, Problem Details. |
 

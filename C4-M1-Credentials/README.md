@@ -359,7 +359,7 @@ Per credential type of the company `credentialType`, `status`, `requestedAt`, `i
 
 ## 10. Events
 
-In the outbox, in the same transaction as the change. Every event also carries `eventId`, `eventType`, `occurredAt`. None contains secrets.
+In the outbox, in the same transaction as the change. Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c4-m1`; `type` is the name from the table and the content is in `data`. None contains secrets.
 
 | Event | When | Content |
 |---|---|---|
@@ -532,3 +532,4 @@ Target for the demo at the Community Days: installation of OSP A with its own Is
 - **Errors** with `retryable` (OP-18); new error `issuer-rejected`.
 - **Data:** new field `issuer_did`; wallet provider `CSP`; route `CSP_ISSUER`.
 - **Test data** with the shared test IDs (FRAMEWORK 7a); new cases 14 to 18.
+- Events are CloudEvents (FRAMEWORK 6, OP-54): `id`, `source` `urn:c4-m1`, `type`, `time`, `datacontenttype` and the content in `data` replace `eventId`, `eventType` and `occurredAt` (6 Nov 2026).

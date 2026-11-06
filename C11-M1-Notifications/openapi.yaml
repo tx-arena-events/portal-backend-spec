@@ -245,7 +245,7 @@ components:
         subjectId: { type: [string, 'null'], format: uuid }
         content:
           type: object
-          description: Fields of the event (IDs and business values), no names.
+          description: 'Fields of `data` of the event (CloudEvent, FRAMEWORK 6): IDs and business values, no names.'
           additionalProperties: true
         forStaff:
           type: boolean

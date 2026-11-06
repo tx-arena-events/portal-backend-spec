@@ -1439,12 +1439,18 @@ components:
 
     EventBase:
       type: object
-      required: [eventId, eventType, occurredAt]
-      description: Common fields of every event. No secrets, no names of people.
+      required: [specversion, id, source, type, time, datacontenttype, data]
+      description: |
+        CloudEvent (CloudEvents 1.0, JSON event format, FRAMEWORK 6). `type` is the event name,
+        the content is in `data`. No secrets, no names of people.
       properties:
-        eventId: { type: string, format: uuid }
-        eventType: { type: string }
-        occurredAt: { type: string, format: date-time }
+        specversion: { const: '1.0' }
+        id: { type: string, format: uuid }
+        source: { const: 'urn:c1-m2' }
+        type: { type: string }
+        time: { type: string, format: date-time }
+        datacontenttype: { const: application/json }
+        data: { type: object }
 
     EventApplicationFields:
       type: object
@@ -1465,54 +1471,67 @@ components:
     EventApplicationCreated:
       allOf:
         - $ref: '#/components/schemas/EventBase'
-        - $ref: '#/components/schemas/EventApplicationFields'
-        - $ref: '#/components/schemas/EventExistingCompany'
         - type: object
           properties:
-            eventType: { const: ApplicationCreated }
+            type: { const: ApplicationCreated }
+            data:
+              allOf:
+                - $ref: '#/components/schemas/EventApplicationFields'
+                - $ref: '#/components/schemas/EventExistingCompany'
 
     EventApplicationSubmitted:
       allOf:
         - $ref: '#/components/schemas/EventBase'
-        - $ref: '#/components/schemas/EventApplicationFields'
-        - $ref: '#/components/schemas/EventExistingCompany'
         - type: object
-          required: [applicantSub]
           properties:
-            eventType: { const: ApplicationSubmitted }
-            applicantSub:
-              type: string
-              description: sub of the applicant; for C2-M2 assign-company-admin.
+            type: { const: ApplicationSubmitted }
+            data:
+              allOf:
+                - $ref: '#/components/schemas/EventApplicationFields'
+                - $ref: '#/components/schemas/EventExistingCompany'
+                - type: object
+                  required: [applicantSub]
+                  properties:
+                    applicantSub:
+                      type: string
+                      description: sub of the applicant; for C2-M2 assign-company-admin.
 
     EventApplicationWithdrawn:
       allOf:
         - $ref: '#/components/schemas/EventBase'
-        - $ref: '#/components/schemas/EventApplicationFields'
-        - $ref: '#/components/schemas/EventExistingCompany'
         - type: object
           properties:
-            eventType: { const: ApplicationWithdrawn }
+            type: { const: ApplicationWithdrawn }
+            data:
+              allOf:
+                - $ref: '#/components/schemas/EventApplicationFields'
+                - $ref: '#/components/schemas/EventExistingCompany'
 
     EventApplicationCompleted:
       allOf:
         - $ref: '#/components/schemas/EventBase'
-        - $ref: '#/components/schemas/EventApplicationFields'
         - type: object
           properties:
-            eventType: { const: ApplicationCompleted }
+            type: { const: ApplicationCompleted }
+            data:
+              allOf:
+                - $ref: '#/components/schemas/EventApplicationFields'
 
     EventAgreementVersionActivated:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [agreementKey, version, party, reconsentRequired]
           properties:
-            eventType: { const: AgreementVersionActivated }
-            agreementKey: { $ref: '#/components/schemas/AgreementKey' }
-            version: { type: string }
-            party: { $ref: '#/components/schemas/AgreementParty' }
-            reconsentRequired: { type: boolean }
-            reconsentDueAt: { type: [string, 'null'], format: date-time }
+            type: { const: AgreementVersionActivated }
+            data:
+              type: object
+              required: [agreementKey, version, party, reconsentRequired]
+              properties:
+                agreementKey: { $ref: '#/components/schemas/AgreementKey' }
+                version: { type: string }
+                party: { $ref: '#/components/schemas/AgreementParty' }
+                reconsentRequired: { type: boolean }
+                reconsentDueAt: { type: [string, 'null'], format: date-time }
 
     Problem:
       type: object

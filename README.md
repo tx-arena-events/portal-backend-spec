@@ -42,7 +42,7 @@ Today's portal is a monolith: the user interface owns orchestration and business
 ### Flows and data
 
 - Every step of a flow, such as onboarding, runs through Process Orchestration and is event-driven. Modules call each other directly only for queries.
-- Each module has its own database. No module reads or writes the database of another module; it uses that module's interface. Events go out through an outbox per module and never carry secrets.
+- Each module has its own database. No module reads or writes the database of another module; it uses that module's interface. Events go out through an outbox per module and never carry secrets. They are CloudEvents (FRAMEWORK 6).
 
 ## Framework and open points
 

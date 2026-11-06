@@ -14,6 +14,7 @@
 | 6 | Retention | read or done notifications are deleted after 180 days (OP-20) | OSP, data protection |
 | 7 | Recipients without `IT Admin` | R14 and R16 go to `Company Admin` if the company has no `IT Admin`; after onboarding a company has only its `Company Admin` (C2-M2 8.8). Alternative: onboarding also assigns `IT Admin` | C2-M2 |
 | 8 | Live updates of the inbox | Server-Sent Events, no WebSockets (decided on 30 Oct 2026), `GET /notifications/events` (README 7.6). Events carry only IDs, types and states, no `content`; without `Last-Event-ID` only new events, so the UI opens the stream before it reads the list; replay from a buffer in memory, otherwise `resync`. Token only in the header `Authorization`, through the server part of the UI; no `access_token` in the URL | user interface |
+| 9 | Reading events | events are CloudEvents (FRAMEWORK 6): `content` of a notification holds the fields of `data`; the module detects a repeated delivery by `id` (`processed_event`, `dedup_key`) and compares a remembered closing event with a task event by `time` (README 6.2, 6.4, 11.1) | project owner (OP-54) |
 
 ## Assumptions about other modules
 

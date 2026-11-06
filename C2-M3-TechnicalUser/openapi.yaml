@@ -914,67 +914,85 @@ components:
 
     EventBase:
       type: object
-      required: [eventId, eventType, occurredAt]
-      description: Common fields of every event. Events never contain secrets.
+      required: [specversion, id, source, type, time, datacontenttype, data]
+      description: |
+        CloudEvent (CloudEvents 1.0, JSON event format, FRAMEWORK 6). `type` is the event name,
+        the content is in `data`. Events never contain secrets.
       properties:
-        eventId: { type: string, format: uuid }
-        eventType: { type: string }
-        occurredAt: { type: string, format: date-time }
+        specversion: { const: '1.0' }
+        id: { type: string, format: uuid }
+        source: { const: 'urn:c2-m3' }
+        type: { type: string }
+        time: { type: string, format: date-time }
+        datacontenttype: { const: application/json }
+        data: { type: object }
 
     EventTechnicalUserCreated:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [technicalUserId, companyId, origin, iamClientId]
           properties:
-            eventType: { const: TechnicalUserCreated }
-            technicalUserId: { type: string, format: uuid }
-            companyId: { type: string, format: uuid }
-            origin: { $ref: '#/components/schemas/Origin' }
-            offerSubscriptionId: { type: [string, 'null'], format: uuid }
-            subscriptionParty:
-              oneOf:
-                - $ref: '#/components/schemas/SubscriptionParty'
-                - type: 'null'
-            coViewerCompanyId: { type: [string, 'null'], format: uuid }
-            iamClientId: { type: string }
+            type: { const: TechnicalUserCreated }
+            data:
+              type: object
+              required: [technicalUserId, companyId, origin, iamClientId]
+              properties:
+                technicalUserId: { type: string, format: uuid }
+                companyId: { type: string, format: uuid }
+                origin: { $ref: '#/components/schemas/Origin' }
+                offerSubscriptionId: { type: [string, 'null'], format: uuid }
+                subscriptionParty:
+                  oneOf:
+                    - $ref: '#/components/schemas/SubscriptionParty'
+                    - type: 'null'
+                coViewerCompanyId: { type: [string, 'null'], format: uuid }
+                iamClientId: { type: string }
 
     EventTechnicalUserDeleted:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [technicalUserId, companyId, iamClientId]
           properties:
-            eventType: { const: TechnicalUserDeleted }
-            technicalUserId: { type: string, format: uuid }
-            companyId: { type: string, format: uuid }
-            coViewerCompanyId: { type: [string, 'null'], format: uuid }
-            iamClientId: { type: string }
+            type: { const: TechnicalUserDeleted }
+            data:
+              type: object
+              required: [technicalUserId, companyId, iamClientId]
+              properties:
+                technicalUserId: { type: string, format: uuid }
+                companyId: { type: string, format: uuid }
+                coViewerCompanyId: { type: [string, 'null'], format: uuid }
+                iamClientId: { type: string }
 
     EventWalletAccessRequested:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [technicalUserId, companyId]
           properties:
-            eventType: { const: WalletAccessRequested }
-            technicalUserId: { type: string, format: uuid }
-            companyId: { type: string, format: uuid }
-            offerSubscriptionId:
-              type: [string, 'null']
-              format: uuid
-              description: For subscription accounts, the subscription, so that the subscription flow can match the event.
+            type: { const: WalletAccessRequested }
+            data:
+              type: object
+              required: [technicalUserId, companyId]
+              properties:
+                technicalUserId: { type: string, format: uuid }
+                companyId: { type: string, format: uuid }
+                offerSubscriptionId:
+                  type: [string, 'null']
+                  format: uuid
+                  description: For subscription accounts, the subscription, so that the subscription flow can match the event.
 
     EventWalletAccessRemovalRequested:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [technicalUserId, companyId, walletAccountRef]
           properties:
-            eventType: { const: WalletAccessRemovalRequested }
-            technicalUserId: { type: string, format: uuid }
-            companyId: { type: string, format: uuid }
-            walletAccountRef: { type: string }
+            type: { const: WalletAccessRemovalRequested }
+            data:
+              type: object
+              required: [technicalUserId, companyId, walletAccountRef]
+              properties:
+                technicalUserId: { type: string, format: uuid }
+                companyId: { type: string, format: uuid }
+                walletAccountRef: { type: string }
 
     Problem:
       type: object
