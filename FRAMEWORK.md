@@ -16,7 +16,7 @@ Overview graphic: [architecture-overview.png](architecture-overview.png).
 - **Modular monolith** in Python with FastAPI. Process Orchestration and other modules call a module in the same process through its public interface; the UI calls over HTTP. `openapi.yaml` describes both as the same contract.
 - **Process Orchestration** (other part of the spec): flows are data. Every step of a flow runs through Process Orchestration; modules call each other directly only for queries. Event-driven, no polling. Long-running steps answer "running" and end with an event of their own. Modules do not know Process Orchestration; they describe their steps with preconditions, without a fixed order.
 - **Own database per module** (PostgreSQL), own database user. No module reads or writes the database of another module. References to data of other modules only by ID.
-- **Events** go out through an outbox per module. They never contain secrets.
+- **Events** are CloudEvents (section 6). They go out through an outbox per module and never contain secrets.
 - **Roles only in the Portal IAM** of the OSP (Keycloak, configured only, no extension). Descriptions per language as role attributes `description.de`, `description.en`. Only modules of C2 write to Keycloak.
 
 ## 2. Modules
@@ -253,7 +253,38 @@ A company creates a connector, changes its address or deletes it (Connectors, ot
 
 ## 6. Event catalogue
 
-Names in English in PascalCase. Content only IDs and business values, never secrets. Every event also carries `eventId`, `eventType`, `occurredAt`.
+Names in English in PascalCase. Content only IDs and business values, never secrets.
+
+Every event is a CloudEvent (CloudEvents 1.0, JSON event format, structured; proposal, OP-54):
+
+| Attribute | Value |
+|---|---|
+| `specversion` | `1.0` |
+| `id` | UUID, new for every event (replaces `eventId`). Consumers detect a repeated delivery by `id`. |
+| `source` | the publishing module: `urn:<module>`, module identifier in lower case, e.g. `urn:c1-m2` (same identifier as the Problem Details `type`, 4.5) |
+| `type` | the event name from the catalogue, PascalCase, e.g. `ApplicationSubmitted` (replaces `eventType`; no reverse-DNS prefix: events stay in the installation) |
+| `time` | time of the change, ISO 8601 UTC (replaces `occurredAt`) |
+| `datacontenttype` | `application/json` |
+| `data` | the content of the event (column "Content (at least)" of the catalogue below, column "Content" of the table in section 10 of the module README): JSON object, only IDs and business values, never secrets |
+
+- No other attributes, no extensions; `subject` and `dataschema` are not used in this version.
+- The attribute names are those of CloudEvents (lower case). The fields in `data` follow 4.1 (camelCase).
+- In the installation the event bus delivers this JSON object; the outbox of a module stores it unchanged.
+- When an event leaves the process (split-out module, broker), a CloudEvents protocol binding in structured content mode applies; over HTTP with `Content-Type: application/cloudevents+json`. Which broker is used stays open (C12-M1 open question 4).
+- **Event inbox of the installation** (base skeleton, not a module; proposal, OP-54): an installation receives the events of a split-out module over HTTP at `POST /api/v1/events/inbox`, in structured content mode or in binary content mode (attributes in `ce-` headers, `data` as the body with `Content-Type: application/json`). The token is that of the service account of the publishing module (`svc-<module>`, 4.2); `source` must be `urn:<module>` of that account. The answer is 202: the event goes to the event bus unchanged (same `id` and `time`) and is delivered like an event published in the process. The same `source` and `id` a second time: 202, delivered once. Errors as Problem Details with `type` `urn:events:problem:<name>`: `validation` (400, an attribute is missing or wrong), `unauthorized` (401), `forbidden` (403, another service account or another `source`), `unsupported-media-type` (415, any other content type, also batched content mode).
+- Field names in flows (C12-M1 6.1: `trigger.when`, `subject.key`, `correlateBy`, process variables, the step result from `completesOn`) and in the rules of Notifications (C11-M1 6.2) refer to fields of `data`.
+- The Server-Sent Events stream messages for the UI (`process-changed`, `notification-created`, ...; 4.1) are not events of the bus and not CloudEvents.
+
+Example:
+
+```json
+{ "specversion": "1.0", "id": "b8e1f7a0-1c2d-4e3f-9a8b-7c6d5e4f3a2b", "source": "urn:c1-m2",
+  "type": "ApplicationSubmitted", "time": "2026-11-06T09:30:00Z", "datacontenttype": "application/json",
+  "data": { "applicationId": "0f8e2d4c-6b1a-4c3e-8f7d-2a9b1c0d3e4f", "companyId": "c0000001-0000-4000-8000-000000000001",
+            "kind": "ONBOARDING", "existingCompany": false, "applicantSub": "5a1c0001-0000-4000-8000-000000000001" } }
+```
+
+The column "Content (at least)" names the fields of `data`.
 
 | Module | Event | Content (at least) |
 |---|---|---|

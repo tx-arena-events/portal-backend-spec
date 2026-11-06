@@ -362,7 +362,7 @@ components:
           properties:
             result:
               type: [object, 'null']
-              description: Result of the step or payload of the completing event.
+              description: Result of the step or `data` of the completing event.
               additionalProperties: true
             attemptHistory:
               type: array

@@ -604,7 +604,7 @@ Terms with their versions (`AgreementVersion`), filter `status` (default `ACTIVE
 
 ## 10. Events
 
-Through the outbox, in the same transaction as the change. Every event also carries `eventId`, `eventType`, `occurredAt`. No names, no secrets; as identifier of a person only the pseudonymous `applicantSub`. Schemas in [openapi.yaml](openapi.yaml) under `components/schemas` (names start with `Event`).
+Through the outbox, in the same transaction as the change. Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c1-m2`; `type` is the name from the table and the content is in `data`. No names, no secrets; as identifier of a person only the pseudonymous `applicantSub`. Schemas in [openapi.yaml](openapi.yaml) under `components/schemas` (names start with `Event`).
 
 | Event | when | Content |
 |---|---|---|
@@ -955,3 +955,4 @@ In the verification path `DOCUMENTS` additionally `"representationDeclared": tru
 - Countries and identifier types from the shared file of the installation (`masterDataFile`, OP-13); company roles and terms from `CATALOG_FILE`. The role `PORTAL_SERVICE_PROVIDER` is dropped.
 - Identifier source `PSP` is now called `APPLICANT`. Errors of the steps with `retryable`.
 - Test IDs according to FRAMEWORK 7a; test companies and verification attestation as in C5-M1.
+- Events are CloudEvents (FRAMEWORK 6, OP-54): `id`, `source` `urn:c1-m2`, `type`, `time`, `datacontenttype` and the content in `data` replace `eventId`, `eventType` and `occurredAt` (6 Nov 2026).

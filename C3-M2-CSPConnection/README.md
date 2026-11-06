@@ -245,6 +245,8 @@ Response 200: list of `CspCompanyMatch`: `bpn`, `legalName`, `country`, `matched
 | `CompanyTransferredAway` | the company has moved to another OSP | `companyId`, `bpn` |
 | `ConnectorRegisteredAtCsp`, `ConnectorDeregisteredAtCsp` | connector entered in or removed from the discovery | `companyId`, `bpn`, `connectorId` |
 
+Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c3-m2`; `type` is the name from the table and the content is in `data`.
+
 ## 11. Calls to other modules and external systems
 
 ### 11.1 Core services API of the CSP (proposal)

@@ -668,7 +668,7 @@ Role catalogue: per role `companyRole`, `assignableBy`, description in `lang` an
 
 ## 10. Events
 
-In the outbox in the same transaction as the change. Every event also carries `eventId`, `eventType`, `occurredAt`. None contains secrets or personal data.
+In the outbox in the same transaction as the change. Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c3-m1`; `type` is the name from the table and the content is in `data`. None contains secrets or personal data.
 
 | Event | When | Content |
 |---|---|---|
@@ -860,3 +860,4 @@ Test IDs as in FRAMEWORK 7a; test person and test company as in C5-M1 and C3-M2.
 - **New events:** `CompanyChangeRequestSubmitted`, `CompanyChangeRequestClosed`. `CompanyDataChanged` with `coreDataChanged` and `coreDataSource`; `CompanyCreated` with `coreDataSource` instead of `registeringPspId`.
 - **Queries:** `CompanyInternal` returns address, identifiers, source of the core data and reason of the deactivation; `registeringPspId` and `identifierStatus` are dropped. The duplicate search 9.3 complements the duplicate check at the CSP.
 - **Terms and application (30 Oct 2026):** terms are those of C1-M2 (`agreementKey` with `version`) instead of an own `agreementId`; the role catalogue holds no terms, 7.8 takes `consents`. 11.1 reads the application with the field names of C1-M2 `ApplicationInternal` (`id`, `verification`, `companyData`, `companyRoles`, `attestation`, `consents`).
+- Events are CloudEvents (FRAMEWORK 6, OP-54): `id`, `source` `urn:c3-m1`, `type`, `time`, `datacontenttype` and the content in `data` replace `eventId`, `eventType` and `occurredAt` (6 Nov 2026).

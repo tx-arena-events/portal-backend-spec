@@ -24,7 +24,7 @@ Callers:
 
 | Who | What for |
 |---|---|
-| Event bus of the installation | delivers every published event (in the same process) |
+| Event bus of the installation | delivers every published event (in the same process); events of split-out modules arrive through the event inbox (FRAMEWORK 6) |
 | OSP staff (through the UI) | view processes and steps, retrigger a failed step, follow a process live (7.7) |
 | Applicants (through the UI) | follow the processes of their own application live (7.8) |
 | Other modules | query the processes of a subject (section 9), e.g. Subscriptions for the setup status |
@@ -38,8 +38,8 @@ Callers:
 | Process | one run of a flow for one subject, e.g. the onboarding of one application |
 | Subject | the object a process is about: `APPLICATION`, `COMPANY`, `TECHNICAL_USER`, `OFFER`, `SUBSCRIPTION`, `CONNECTOR`, with its ID |
 | Step run | one step of one process; its ID is the `stepRunId` that the module receives |
-| Correlation key | field of an event (e.g. `companyId`) that assigns the event to an open process |
-| Process variables | fields of the trigger event and of correlated events, plus values set by the flow; never secrets |
+| Correlation key | field of `data` of an event (e.g. `companyId`) that assigns the event to an open process |
+| Process variables | fields of `data` of the trigger event and of correlated events, plus values set by the flow; never secrets |
 | Lookup | query to another module that a flow declares, e.g. the core data of a company for the CSP |
 
 ## 3. Not part of this module
@@ -57,7 +57,7 @@ Callers:
 
 - Module of the modular monolith (Python, FastAPI), own database `c12_m1` in PostgreSQL.
 - **Calling steps:** in the same process through the public interface of the module; if a module is split out, over HTTP at `{module address}/steps/{step}` with a token of the service account of Process Orchestration (permission `execute_steps_<module>`, FRAMEWORK 4.2). Lookups the same way under `/internal/...` (permission `query_<module>`).
-- **Receiving events:** the module subscribes to all event types that its flows name. Delivery is at least once; the module ignores an `eventId` it has already processed.
+- **Receiving events:** the module subscribes to all event types that its flows name (`type` of the CloudEvent, FRAMEWORK 6). Delivery is at least once; the module ignores an event whose `id` it has already processed.
 - **Worker:** picks due step runs, locks them (`SELECT … FOR UPDATE SKIP LOCKED`), calls the step, stores the result. Several workers may run; a step run is never called twice at the same time.
 - **Flow definitions** are read from `FLOWS_FILE` at start-up and checked (section 6.2). Each process keeps the version of the flow it started with.
 - Timeout per step call 30 seconds.
@@ -90,7 +90,7 @@ Callers:
 | `status` | text | 6.4 |
 | `variables` | jsonb | process variables; only IDs and business values, never secrets |
 | `lookups` | jsonb | results of the lookups, kept for the whole process |
-| `trigger_event_id` | uuid | `eventId` of the trigger event |
+| `trigger_event_id` | uuid | `id` of the trigger event |
 | `end_reason` | text | with `ENDED`: the event that ended the process |
 | `created_at`, `updated_at`, `finished_at` | timestamptz | |
 
@@ -107,7 +107,7 @@ At most one process with status `RUNNING`, `WAITING` or `FAILED` per flow and co
 | `attempts`, `max_attempts` | int | |
 | `next_attempt_at` | timestamptz | due time of the next attempt |
 | `await_until` | timestamptz | end of the wait for a completing event |
-| `result` | jsonb | `result` of the step, or the payload of the completing event |
+| `result` | jsonb | `result` of the step, or `data` of the completing event |
 | `last_error` | jsonb | `type`, `status`, `title`, `retryable` of the last Problem Details |
 | `started_at`, `finished_at` | timestamptz | |
 
@@ -119,7 +119,7 @@ One row per call: `step_run_id`, `number`, `trigger` (`WORKER`, `RETRIGGER`), `t
 
 ### Table `processed_event`
 
-`event_id` (primary key), `event_type`, `received_at`. Detects repeated delivery.
+`event_id` (primary key, the `id` of the event), `event_type` (its `type`), `received_at`. Detects repeated delivery.
 
 ### Table `audit_entry`
 
@@ -134,9 +134,9 @@ Retriggers by OSP staff: time, `sub`, `process_id`, `step_key`, comment (FRAMEWO
 | Field | Meaning |
 |---|---|
 | `key` | unique name of the flow |
-| `trigger.event`, `trigger.when` | event that starts a process; `when`: fields of the event with the required value (all must match) |
-| `subject.type`, `subject.key` | subject of the process and the field of the trigger event that holds its ID |
-| `correlateBy` | field that assigns later events to this process |
+| `trigger.event`, `trigger.when` | event (its `type`) that starts a process; `when`: fields of `data` of the event with the required value (all must match) |
+| `subject.type`, `subject.key` | subject of the process and the field of `data` of the trigger event that holds its ID |
+| `correlateBy` | field of `data` that assigns later events to this process |
 | `endOn` | events that end the process early (status `ENDED`); open steps become `SKIPPED`. Only as long as a `waitFor` event of the flow has not arrived (6.5) |
 | `steps[]` | in order; a step starts when the previous step is `DONE` or `SKIPPED` |
 | `steps[].call` | `<module>.<step>`, e.g. `c3-m2.register-company` |
@@ -144,7 +144,7 @@ Retriggers by OSP staff: time, `sub`, `process_id`, `step_key`, comment (FRAMEWO
 | `steps[].when` | condition: source (process variable or `lookup.<name>.<field>`) → required value; all must match; not met: `SKIPPED` |
 | `steps[].lookup` | lookup to run before the step and before its `when` (once per process; the result is kept; 6.8) |
 | `steps[].input` | input of the step: field → source (see below); `processId` and `stepRunId` are always added |
-| `steps[].completesOn` | events that complete the step after `RUNNING`; optional `set` adds process variables |
+| `steps[].completesOn` | events that complete the step after `RUNNING`; `data` of the event becomes the result of the step (6.5); optional `set` adds process variables |
 | `steps[].failsOn` | events that make the step `FAILED` (not retryable) |
 | `maxAttempts`, `awaitTimeout` | per step, otherwise from `defaults` |
 
@@ -194,8 +194,8 @@ Derived from the step runs and stored for queries:
 
 ### 6.5 Events and processes
 
-1. An event whose type is a `trigger.event` and whose fields meet `trigger.when` starts a process, unless a process of this flow with the same correlation value is open (`RUNNING`, `WAITING`, `FAILED`); then the event is only recorded.
-2. An event that a step of an open process names in `waitFor`, `completesOn`, `failsOn` or the flow in `endOn` is assigned through `correlateBy`. Its fields are added to the process variables; with `completesOn` the payload becomes the result of the step.
+1. An event whose `type` is a `trigger.event` and whose fields of `data` meet `trigger.when` starts a process, unless a process of this flow with the same correlation value is open (`RUNNING`, `WAITING`, `FAILED`); then the event is only recorded.
+2. An event that a step of an open process names in `waitFor`, `completesOn`, `failsOn` or the flow in `endOn` is assigned through `correlateBy`. The fields of its `data` are added to the process variables; with `completesOn`, `data` becomes the result of the step.
 3. An event that arrives while its step is still `WAITING` or `IN_PROGRESS` is kept and applied as soon as the step can use it (the module may publish the event before it answers `RUNNING`).
 4. Events that no flow names are not stored.
 5. An `endOn` event ends the process only as long as at least one `waitFor` event of the flow has not arrived. Afterwards the decision is taken; the event is only recorded and the process continues. Example: `ApplicationWithdrawn` after `ApplicationApproved` (C1-M2 6.10) does not end the onboarding; the flow `application-withdrawn` then fails at `close-review`, and OSP staff are informed through `ProcessStepFailed` (FRAMEWORK 5.2 step 5).
@@ -216,7 +216,7 @@ Companies do not see processes; they see the status at the owning module (propos
 ### 6.7 Repeatability
 
 - A step run keeps its `stepRunId` across all attempts and retriggers. Modules find their object by a business key (FRAMEWORK 4.4); a repeated call returns the same result.
-- An `eventId` is processed once.
+- An event `id` is processed once.
 - Retrigger of a step that is not `FAILED`: 409, nothing changes.
 
 ### 6.8 Lookups
@@ -329,7 +329,9 @@ Parameters `subjectType`, `subjectId` (both required). Response 200: list of `Pr
 | `ProcessStepRetriggered` | OSP staff retriggered a step | `processId`, `stepKey`, `retriggeredBy` (`sub`) |
 | `ProcessCompleted`, `ProcessEnded` | status `COMPLETED` or `ENDED` | `processId`, `flowKey`, `subjectType`, `subjectId` |
 
-`errorType` in `ProcessStepFailed`: the `type` of the Problem Details of the last error (also of a failed lookup, 6.8); `event:<EventType>` for an event from `failsOn`; `await-timeout` when `await_until` has passed.
+Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c12-m1`; `type` is the name from the table and the content is in `data`.
+
+`errorType` in `ProcessStepFailed`: the `type` of the Problem Details of the last error (also of a failed lookup, 6.8); `event:` followed by the `type` of an event from `failsOn`; `await-timeout` when `await_until` has passed.
 
 Notifications reacts to `ProcessStepFailed` (notice to OSP staff with `OSP Admin`) and closes the notice on `ProcessStepRetriggered`, `ProcessCompleted` or `ProcessEnded` (OP-18, OP-19).
 
@@ -420,10 +422,10 @@ Errors of the called steps are not passed on; they are stored in `last_error` of
 1. Start-up with [flows.yaml](flows.yaml) (25 flows): the check (6.2) passes. A flow with an unknown step stops the start with a message naming flow and step.
 2. `ApplicationSubmitted` (`ONBOARDING`, `existingCompany` `false`) with all stand-ins: `create-company` and `open-review` are `DONE`, process `WAITING` on `ApplicationApproved`.
 3. `ApplicationApproved` for the same `companyId`: the steps from `register-company` to `complete-application` run in order; process `COMPLETED`; `ProcessCompleted` once.
-4. The same `ApplicationSubmitted` (same `eventId`) a second time: no second process. A new event with another `eventId` for the same company while the process is open: no second process.
+4. The same `ApplicationSubmitted` (same `id`) a second time: no second process. A new event with another `id` for the same company while the process is open: no second process.
 5. `ApplicationDeclined` while the onboarding process waits: process `ENDED`, open steps `SKIPPED`; flow `application-declined` runs `close-application` and `reject-company`.
 6. `ApplicationSubmitted` with `existingCompany` `true` (`REACTIVATION`): flow `reactivation`, no `create-company`.
-7. A step answers `RUNNING`: step `AWAITING_EVENT`; the event from `completesOn` completes it, its payload is the step result (e.g. `did` for `register-did`). An event from `failsOn`: step `FAILED`, `ProcessStepFailed`.
+7. A step answers `RUNNING`: step `AWAITING_EVENT`; the event from `completesOn` completes it, its `data` is the step result (e.g. `did` for `register-did`). An event from `failsOn`: step `FAILED`, `ProcessStepFailed`.
 8. The completing event arrives before the step answer `RUNNING`: the step still becomes `DONE` (6.5 point 3).
 9. A step fails with `retryable: true` three times, then succeeds: 4 attempts, wait times 5 s, 10 s, 20 s; process continues.
 10. A step fails with `retryable: false`: `FAILED` after one attempt, `ProcessStepFailed` with `stepKey` and `errorType`.
@@ -451,13 +453,13 @@ Errors of the called steps are not passed on; they are stored in `last_error` of
 | BPN from the stand-in | `BPNLIUK2REMLK3F4` (from `EBWOID-DE-0000000001`, 11.3) |
 | App (multi-instance) | `offerId` `7c1d9e3a-2b4f-4a6c-8d0e-5f1a2b3c4d5e`, provider: company of OSP A `11111111-1111-4111-8111-111111111111` (FRAMEWORK 7a) |
 
-Example event that starts the onboarding:
+Example event that starts the onboarding (a CloudEvent, FRAMEWORK 6):
 
 ```json
-{ "eventId": "b8e1f7a0-1c2d-4e3f-9a8b-7c6d5e4f3a2b", "eventType": "ApplicationSubmitted",
-  "occurredAt": "2026-11-06T09:30:00Z", "applicationId": "0f8e2d4c-6b1a-4c3e-8f7d-2a9b1c0d3e4f",
-  "companyId": "c0000001-0000-4000-8000-000000000001", "kind": "ONBOARDING",
-  "existingCompany": false, "applicantSub": "5a1c0001-0000-4000-8000-000000000001" }
+{ "specversion": "1.0", "id": "b8e1f7a0-1c2d-4e3f-9a8b-7c6d5e4f3a2b", "source": "urn:c1-m2",
+  "type": "ApplicationSubmitted", "time": "2026-11-06T09:30:00Z", "datacontenttype": "application/json",
+  "data": { "applicationId": "0f8e2d4c-6b1a-4c3e-8f7d-2a9b1c0d3e4f", "companyId": "c0000001-0000-4000-8000-000000000001",
+            "kind": "ONBOARDING", "existingCompany": false, "applicantSub": "5a1c0001-0000-4000-8000-000000000001" } }
 ```
 
 ## Changes from version 0.1
@@ -480,3 +482,4 @@ Example event that starts the onboarding:
 - Permission `query_c12_m1` (renamed from `query_c12`) with the full module identifier as in FRAMEWORK 4.2 (30 Oct 2026).
 - Test data with the common test IDs of FRAMEWORK 7a; `applicantSub` is the account ID (renamed from `ebw.test-erika`) (30 Oct 2026).
 - Live updates for the UI as Server-Sent Events, no WebSockets (decided on 30 Oct 2026; open question 6 closed): 7.6 to 7.8, event `process-changed` with the full state of the process, `Last-Event-ID` with a buffer in memory, heartbeat, token in the header only. Applicants follow the processes of their own application with `register_company` (7.8, 6.6). Configuration `SSE_HEARTBEAT_SECONDS`, `SSE_REPLAY_SIZE` (30 Oct 2026).
+- Events are CloudEvents (FRAMEWORK 6, OP-54): `id`, `source` `urn:c12-m1`, `type`, `time`, `datacontenttype` and the content in `data` replace `eventId`, `eventType` and `occurredAt` (6 Nov 2026).

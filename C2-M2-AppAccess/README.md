@@ -884,7 +884,7 @@ Written to the outbox in the same transaction as the change in the module's tabl
 | `CompanyUsersEnabled` | 8.10 finished | `companyId`, `userIds` |
 | `OspStaffRolesChanged` | staff roles have changed (7.10, 7.16) | `userId`, `addedRoles`, `removedRoles` |
 
-Every event also carries `eventId` (uuid), `eventType` (the name from the table) and `occurredAt`. The schemas are in [openapi.yaml](openapi.yaml) under `components/schemas` (names start with `Event`).
+Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c2-m2`; `type` is the name from the table and the content is in `data`. The schemas are in [openapi.yaml](openapi.yaml) under `components/schemas` (names start with `Event`).
 
 ## 11. Calls to other modules and external systems
 
@@ -1079,3 +1079,4 @@ Files:
 - **Instance clients without `profile` and `email`:** apps get no names (FRAMEWORK 4.6), even though accounts now carry names from the PID. Optional client scopes are empty. Sign-in to apps no longer needs `kc_idp_hint`.
 - **Audit log:** `actor_sub` from the token instead of PSP and `X-Acting-Person`; steps also write to the `audit_log`.
 - Errors carry `retryable` for steps.
+- Events are CloudEvents (FRAMEWORK 6, OP-54): `id`, `source` `urn:c2-m2`, `type`, `time`, `datacontenttype` and the content in `data` replace `eventId`, `eventType` and `occurredAt` (6 Nov 2026).

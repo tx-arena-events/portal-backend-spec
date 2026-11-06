@@ -285,7 +285,7 @@ Used by the flows `app-approval`, `subscription-setup` and `single-instance-acti
 | `OfferRolesAdded` | roles added to an active app (7.10) | `offerId`, `roles` |
 | `OfferRoleDescriptionsChanged` | descriptions changed (7.10) | `offerId`, `roles` |
 
-Every event also carries `eventId`, `eventType`, `occurredAt`.
+Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c8-m1`; `type` is the name from the table and the content is in `data`.
 
 ## 11. Calls to other modules and external systems
 
@@ -356,3 +356,4 @@ Problem Details, `type` = `urn:c8-m1:problem:<name>`.
 - Permission `query_c8_m1` (renamed from `query_c8`) with the full module identifier as in FRAMEWORK 4.2 (30 Oct 2026).
 - The technical user profile is checked against C2-M3 `GET /internal/technical-roles` (C2-M3 9.3, new variable `TECHNICAL_USER_URL`); the built-in stand-in returns a fixed list instead of reading a separate file (section 11, case 10) (30 Oct 2026).
 - Test data with the common test IDs and test persons of FRAMEWORK 7a (30 Oct 2026).
+- Events are CloudEvents (FRAMEWORK 6, OP-54): `id`, `source` `urn:c8-m1`, `type`, `time`, `datacontenttype` and the content in `data` replace `eventId`, `eventType` and `occurredAt` (6 Nov 2026).

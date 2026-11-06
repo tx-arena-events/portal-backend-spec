@@ -801,39 +801,51 @@ components:
 
     EventBase:
       type: object
-      required: [eventId, eventType, occurredAt]
-      description: Common fields of all events. Events never contain secrets.
+      required: [specversion, id, source, type, time, datacontenttype, data]
+      description: |
+        CloudEvent (CloudEvents 1.0, JSON event format, FRAMEWORK 6). `type` is the event name,
+        the content is in `data`. Events never contain secrets.
       properties:
-        eventId: { type: string, format: uuid }
-        eventType: { type: string }
-        occurredAt: { type: string, format: date-time }
+        specversion: { const: '1.0' }
+        id: { type: string, format: uuid }
+        source: { const: 'urn:c4-m2' }
+        type: { type: string }
+        time: { type: string, format: date-time }
+        datacontenttype: { const: application/json }
+        data: { type: object }
 
     EventDataspaceWalletCreated:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [companyId, did, walletId, provider, didDocumentLocation, bpn]
           description: Afterwards C3-M2 register-did enters the DID in the directory BPN → DID.
           properties:
-            eventType: { const: DataspaceWalletCreated }
-            companyId: { type: string, format: uuid }
-            did: { $ref: '#/components/schemas/Did' }
-            walletId: { type: string, format: uuid }
-            provider: { $ref: '#/components/schemas/Provider' }
-            didDocumentLocation: { type: string, format: uri }
-            bpn: { $ref: '#/components/schemas/Bpn' }
+            type: { const: DataspaceWalletCreated }
+            data:
+              type: object
+              required: [companyId, did, walletId, provider, didDocumentLocation, bpn]
+              properties:
+                companyId: { type: string, format: uuid }
+                did: { $ref: '#/components/schemas/Did' }
+                walletId: { type: string, format: uuid }
+                provider: { $ref: '#/components/schemas/Provider' }
+                didDocumentLocation: { type: string, format: uri }
+                bpn: { $ref: '#/components/schemas/Bpn' }
 
     EventDataspaceWalletFailed:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [companyId, walletId, provider, reason]
           properties:
-            eventType: { const: DataspaceWalletFailed }
-            companyId: { type: string, format: uuid }
-            walletId: { type: string, format: uuid }
-            provider: { $ref: '#/components/schemas/Provider' }
-            reason: { $ref: '#/components/schemas/WalletFailureReason' }
+            type: { const: DataspaceWalletFailed }
+            data:
+              type: object
+              required: [companyId, walletId, provider, reason]
+              properties:
+                companyId: { type: string, format: uuid }
+                walletId: { type: string, format: uuid }
+                provider: { $ref: '#/components/schemas/Provider' }
+                reason: { $ref: '#/components/schemas/WalletFailureReason' }
 
     EventWalletAccountFields:
       type: object
@@ -846,40 +858,52 @@ components:
     EventWalletAccountCreated:
       allOf:
         - $ref: '#/components/schemas/EventBase'
-        - $ref: '#/components/schemas/EventWalletAccountFields'
         - type: object
-          required: [provider]
           properties:
-            eventType: { const: WalletAccountCreated }
-            provider: { $ref: '#/components/schemas/Provider' }
+            type: { const: WalletAccountCreated }
+            data:
+              allOf:
+                - $ref: '#/components/schemas/EventWalletAccountFields'
+                - type: object
+                  required: [provider]
+                  properties:
+                    provider: { $ref: '#/components/schemas/Provider' }
 
     EventWalletAccountFailed:
       allOf:
         - $ref: '#/components/schemas/EventBase'
-        - $ref: '#/components/schemas/EventWalletAccountFields'
         - type: object
-          required: [reason]
           properties:
-            eventType: { const: WalletAccountFailed }
-            reason: { $ref: '#/components/schemas/WalletAccountFailureReason' }
+            type: { const: WalletAccountFailed }
+            data:
+              allOf:
+                - $ref: '#/components/schemas/EventWalletAccountFields'
+                - type: object
+                  required: [reason]
+                  properties:
+                    reason: { $ref: '#/components/schemas/WalletAccountFailureReason' }
 
     EventWalletAccountDeleted:
       allOf:
         - $ref: '#/components/schemas/EventBase'
-        - $ref: '#/components/schemas/EventWalletAccountFields'
         - type: object
           properties:
-            eventType: { const: WalletAccountDeleted }
+            type: { const: WalletAccountDeleted }
+            data: { $ref: '#/components/schemas/EventWalletAccountFields' }
 
     EventWalletAccountDeletionFailed:
       allOf:
         - $ref: '#/components/schemas/EventBase'
-        - $ref: '#/components/schemas/EventWalletAccountFields'
         - type: object
-          required: [reason]
           properties:
-            eventType: { const: WalletAccountDeletionFailed }
-            reason: { type: string, enum: [PROVIDER_TIMEOUT] }
+            type: { const: WalletAccountDeletionFailed }
+            data:
+              allOf:
+                - $ref: '#/components/schemas/EventWalletAccountFields'
+                - type: object
+                  required: [reason]
+                  properties:
+                    reason: { type: string, enum: [PROVIDER_TIMEOUT] }
 
     Problem:
       type: object

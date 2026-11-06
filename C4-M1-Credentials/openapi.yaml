@@ -527,48 +527,75 @@ components:
 
     EventBase:
       type: object
-      required: [eventId, eventType, occurredAt, companyId]
-      description: Common fields of every event. Events never contain secrets.
+      required: [specversion, id, source, type, time, datacontenttype, data]
+      description: |
+        CloudEvent (CloudEvents 1.0, JSON event format, FRAMEWORK 6). `type` is the event name,
+        the content is in `data`. Events never contain secrets.
       properties:
-        eventId: { type: string, format: uuid }
-        eventType: { type: string }
-        occurredAt: { type: string, format: date-time }
+        specversion: { const: '1.0' }
+        id: { type: string, format: uuid }
+        source: { const: 'urn:c4-m1' }
+        type: { type: string }
+        time: { type: string, format: date-time }
+        datacontenttype: { const: application/json }
+        data: { type: object }
+
+    EventCompanyFields:
+      type: object
+      required: [companyId]
+      description: Common content in `data` of every event of this module.
+      properties:
         companyId: { type: string, format: uuid }
 
     EventCredentialsIssued:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [credentialTypes]
           properties:
-            eventType: { const: CredentialsIssued }
-            credentialTypes:
-              type: array
-              description: All credential types of the round.
-              items: { $ref: '#/components/schemas/CredentialType' }
+            type: { const: CredentialsIssued }
+            data:
+              allOf:
+                - $ref: '#/components/schemas/EventCompanyFields'
+                - type: object
+                  required: [credentialTypes]
+                  properties:
+                    credentialTypes:
+                      type: array
+                      description: All credential types of the round.
+                      items: { $ref: '#/components/schemas/CredentialType' }
 
     EventCredentialIssuanceFailed:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [credentialType]
           properties:
-            eventType: { const: CredentialIssuanceFailed }
-            credentialType: { $ref: '#/components/schemas/CredentialType' }
-            reason:
-              type: [string, 'null']
-              maxLength: 200
-              description: Message of the issuer, truncated.
+            type: { const: CredentialIssuanceFailed }
+            data:
+              allOf:
+                - $ref: '#/components/schemas/EventCompanyFields'
+                - type: object
+                  required: [credentialType]
+                  properties:
+                    credentialType: { $ref: '#/components/schemas/CredentialType' }
+                    reason:
+                      type: [string, 'null']
+                      maxLength: 200
+                      description: Message of the issuer, truncated.
 
     EventCredentialRevoked:
       allOf:
         - $ref: '#/components/schemas/EventBase'
         - type: object
-          required: [credentialType, revocationReason]
           properties:
-            eventType: { const: CredentialRevoked }
-            credentialType: { $ref: '#/components/schemas/CredentialType' }
-            revocationReason: { $ref: '#/components/schemas/RevocationReason' }
+            type: { const: CredentialRevoked }
+            data:
+              allOf:
+                - $ref: '#/components/schemas/EventCompanyFields'
+                - type: object
+                  required: [credentialType, revocationReason]
+                  properties:
+                    credentialType: { $ref: '#/components/schemas/CredentialType' }
+                    revocationReason: { $ref: '#/components/schemas/RevocationReason' }
 
     Problem:
       type: object

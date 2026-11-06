@@ -231,7 +231,7 @@ Response 200 `SubscriptionInternal`: as 9.1 plus `offerType`, `instanceKind`, `p
 | `SubscriptionDeactivated` | ended (7.4) | `offerSubscriptionId`, `offerId`, `customerCompanyId`, `providerCompanyId` |
 | `SubscriptionInstanceUrlChanged` | instance URL changed (7.8) | `offerSubscriptionId`, `offerId`, `instanceUrl` |
 
-Every event also carries `eventId`, `eventType`, `occurredAt`. No secrets, no names.
+Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c10-m1`; `type` is the name from the table and the content is in `data`. No secrets, no names.
 
 ## 11. Calls to other modules and external systems
 
@@ -321,3 +321,4 @@ Problem Details, `type` = `urn:c10-m1:problem:<name>`.
 - Permissions with the full module identifier as in FRAMEWORK 4.2: `execute_steps_c10_m1`, `query_c10_m1` (renamed from `execute_steps_c10`, `query_c10`); calls with `query_c8_m1` and `query_c12_m1` (30 Oct 2026).
 - Technical users of an ended or declined subscription are deactivated by C2-M3 `disable-subscription-technical-users` in the flows `subscription-ended` and `subscription-declined` (section 3; open question 2 closed) (30 Oct 2026).
 - Test data with the common test IDs of FRAMEWORK 7a (customer company Beispiel Maschinenbau GmbH) (30 Oct 2026).
+- Events are CloudEvents (FRAMEWORK 6, OP-54): `id`, `source` `urn:c10-m1`, `type`, `time`, `datacontenttype` and the content in `data` replace `eventId`, `eventType` and `occurredAt` (6 Nov 2026).

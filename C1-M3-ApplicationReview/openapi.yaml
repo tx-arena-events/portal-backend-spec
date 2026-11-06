@@ -646,12 +646,18 @@ components:
 
     EventBase:
       type: object
-      required: [eventId, eventType, occurredAt]
-      description: Common fields of every event. No secrets, no names of people.
+      required: [specversion, id, source, type, time, datacontenttype, data]
+      description: |
+        CloudEvent (CloudEvents 1.0, JSON event format, FRAMEWORK 6). `type` is the event name,
+        the content is in `data`. No secrets, no names of people.
       properties:
-        eventId: { type: string, format: uuid }
-        eventType: { type: string }
-        occurredAt: { type: string, format: date-time }
+        specversion: { const: '1.0' }
+        id: { type: string, format: uuid }
+        source: { const: 'urn:c1-m3' }
+        type: { type: string }
+        time: { type: string, format: date-time }
+        datacontenttype: { const: application/json }
+        data: { type: object }
 
     EventApplicationFields:
       type: object
@@ -667,27 +673,35 @@ components:
     EventApplicationApproved:
       allOf:
         - $ref: '#/components/schemas/EventBase'
-        - $ref: '#/components/schemas/EventApplicationFields'
         - type: object
           properties:
-            eventType: { const: ApplicationApproved }
-            bpn:
-              type: string
-              pattern: '^BPNL[A-Z0-9]{12}$'
-              description: Only for TRANSFER and REACTIVATION; BPN of the expected CSP match.
+            type: { const: ApplicationApproved }
+            data:
+              allOf:
+                - $ref: '#/components/schemas/EventApplicationFields'
+                - type: object
+                  properties:
+                    bpn:
+                      type: string
+                      pattern: '^BPNL[A-Z0-9]{12}$'
+                      description: Only for TRANSFER and REACTIVATION; BPN of the expected CSP match.
 
     EventApplicationDeclined:
       allOf:
         - $ref: '#/components/schemas/EventBase'
-        - $ref: '#/components/schemas/EventApplicationFields'
         - type: object
-          required: [reason]
           properties:
-            eventType: { const: ApplicationDeclined }
-            reason:
-              type: string
-              minLength: 1
-              maxLength: 1000
+            type: { const: ApplicationDeclined }
+            data:
+              allOf:
+                - $ref: '#/components/schemas/EventApplicationFields'
+                - type: object
+                  required: [reason]
+                  properties:
+                    reason:
+                      type: string
+                      minLength: 1
+                      maxLength: 1000
 
     Problem:
       type: object

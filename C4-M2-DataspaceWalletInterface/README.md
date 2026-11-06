@@ -572,7 +572,7 @@ Every call writes an audit log entry (without a secret). The response is not log
 
 ## 10. Events
 
-Written to the outbox in the same transaction as the change. Every event additionally carries `eventId`, `eventType`, `occurredAt`. None contains a secret.
+Written to the outbox in the same transaction as the change. Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c4-m2`; `type` is the name from the table and the content is in `data`. None contains a secret.
 
 | Event | When | Content |
 |---|---|---|
@@ -825,3 +825,4 @@ Content: `{ "iss": "did:web:wallet.beispiel.example", "sub": "did:web:wallet.bei
 - **Errors** with `retryable` (OP-18).
 - **Terms** per FRAMEWORK 8: EUDI Wallet, Business Wallet and dataspace wallet are separate; "directory BPN → DID" instead of only BDRS.
 - **Test data** with the shared test IDs (FRAMEWORK 7a); new cases 8, 17, 20 and 24, the BDRS case is dropped.
+- Events are CloudEvents (FRAMEWORK 6, OP-54): `id`, `source` `urn:c4-m2`, `type`, `time`, `datacontenttype` and the content in `data` replace `eventId`, `eventType` and `occurredAt` (6 Nov 2026).

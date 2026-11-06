@@ -472,7 +472,7 @@ Written to the outbox, in the same transaction as the change in the module's tab
 | `WalletAccessRequested` | account with wallet role created (7.2, 8.1) | `technicalUserId`, `companyId`, `offerSubscriptionId` |
 | `WalletAccessRemovalRequested` | account with wallet `ACTIVE` is to be deleted (7.5) | `technicalUserId`, `companyId`, `walletAccountRef` |
 
-Every event also carries `eventId` (uuid), `eventType` (name from the table) and `occurredAt`. The schemas are in [openapi.yaml](openapi.yaml) under `components/schemas` (names start with `Event`).
+Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c2-m3`; `type` is the name from the table and the content is in `data`. The schemas are in [openapi.yaml](openapi.yaml) under `components/schemas` (names start with `Event`).
 
 Notifications (other part) can show the events to the people of the affected company, for subscription accounts also to the co-viewing provider. The events `WalletAccountCreated` and `WalletAccountFailed` of C4-M2 report that a wallet access is ready or has failed.
 
@@ -629,3 +629,4 @@ For the subscription accounts from case 11: subscription `0b5d7e2a-3c4f-4a1b-9e8
 - Errors carry `retryable` for steps. Section 8 renumbered.
 - **End of a subscription** (30 Oct 2026, asked for by Subscriptions and Process Orchestration): step `disable-subscription-technical-users` (8.6) and status `INACTIVE`.
 - **Queries** (30 Oct 2026): `offerSubscriptionId` in 9.1 for connectors as a service; new 9.3 `GET /internal/technical-roles` for the technical user profiles of Offers. Calls to Connectors and Subscriptions with the paths of C6-M1 and C10-M1.
+- Events are CloudEvents (FRAMEWORK 6, OP-54): `id`, `source` `urn:c2-m3`, `type`, `time`, `datacontenttype` and the content in `data` replace `eventId`, `eventType` and `occurredAt` (6 Nov 2026).

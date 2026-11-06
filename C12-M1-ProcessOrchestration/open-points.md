@@ -22,6 +22,7 @@
 | 14 | Live updates for the UI | Server-Sent Events, no WebSockets (decided on 30 Oct 2026): data flows only to the browser, commands use the REST operations. One event name `process-changed` with the full state of the process (IDs, keys, states), so that a missed event leaves no gap; replay after `Last-Event-ID` from a buffer in memory (`SSE_REPLAY_SIZE`), otherwise the current state; heartbeat every 15 s (README 7.6) | user interface |
 | 15 | Token of an event stream | only in the header `Authorization`, as for every other operation. The server part of the UI holds the session cookie, opens the stream with the token and passes the events on; no `access_token` in the URL, no cookie in the module. The stream ends when the token expires; the UI reconnects with `Last-Event-ID` (README 7.6) | user interface, C2-M5 |
 | 16 | Permission of applicants for 7.8 | `register_company` (scope `own`), the permission of C1-M2 that every applicant has; the check is `applicantSub` of the process. C2-M5 6.2 names C1-M2 as the only module of this permission | C2-M5, C1-M2 |
+| 17 | Format of events | events are CloudEvents (FRAMEWORK 6, OP-54). Process variables, `trigger.when`, `subject.key` and `correlateBy` read fields of `data`; with `completesOn`, `data` is the result of the step; a repeated delivery is detected by `id` (README 4, 6.1, 6.5) | project owner, other part |
 
 ## Assumptions about other modules
 
@@ -45,7 +46,7 @@
 1. **Technical users at the end of a subscription:** closed. The flows `subscription-ended` and `subscription-declined` call C2-M3 `disable-subscription-technical-users` (C2-M3 8.6, FRAMEWORK 7).
 2. **URL of a single-instance app:** C2-M2 `update-instance-url` exists, but Offers has no event for it yet (C2-M2 open points).
 3. **Order of `register-did` and `issue-credentials`:** closed. C4-M1 8.1 issues in onboarding after `CompanyDidRegistered`; the flow keeps `register-did` before `issue-credentials`.
-4. **Several workers and the event bus:** with an in-process bus, every instance of the monolith receives every event. The unique index on open processes (README 5) prevents double processes; whether one instance should be the only consumer is open (decision on the event transport of 22 Oct 2026).
+4. **Several workers and the event bus:** with an in-process bus, every instance of the monolith receives every event. The unique index on open processes (README 5) prevents double processes; whether one instance should be the only consumer is open (decision on the event transport of 22 Oct 2026). Between split-out modules, events use a CloudEvents protocol binding in structured content mode (OP-54); the broker is still open.
 5. **Retention:** how long finished processes and attempts are kept (OP-20).
 6. **Live status for the UI:** closed. Server-Sent Events (README 7.6 to 7.8, decided on 30 Oct 2026); polling `GET /processes/{id}` still works.
 7. **BPN as company identifier** (raised at the workshop of 27 Oct 2026: a dataspace profile without BPDM and BPN should be possible). The flows pass `bpn` as a value only and do not depend on its format; the steps that require it belong to C3-M1, C3-M2 and C2-M2.
