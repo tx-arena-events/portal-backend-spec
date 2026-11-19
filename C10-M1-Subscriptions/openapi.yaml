@@ -11,7 +11,7 @@ info:
     - Process Orchestration and other modules call the paths under `/steps` and `/internal`.
     - Errors as Problem Details (RFC 9457), identifiers in README section 12.
 servers:
-  - url: /api/c10-m1
+  - url: /api/subscriptions
 security:
   - portalIam: []
 tags:

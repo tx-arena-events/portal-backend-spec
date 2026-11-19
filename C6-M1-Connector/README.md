@@ -51,7 +51,8 @@ Callers:
 
 ## 4. Technical frame
 
-- Module of the modular monolith (Python, FastAPI), own database `c6_m1` in PostgreSQL.
+- **Feature `connector`** (FRAMEWORK 4.9): served under `/api/connector`. Problem types, event sources, permissions and service accounts keep the module identifier `c6-m1`.
+- Feature of the modular monolith (Python, FastAPI), own database `connector` in the PostgreSQL instance of the installation, with its own database role `connector` (FRAMEWORK 4.9).
 - People call with their token from the Portal IAM; scope `company` against provider or host company. A token without `company_id` gets 403 `forbidden` for these operations.
 - Events through the outbox of the module.
 
@@ -59,7 +60,7 @@ Callers:
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | own database `c6_m1` | |
+| `CONNECTOR_DATABASE_URL` | own database `connector` (FRAMEWORK 4.9); a runtime that serves only this feature also accepts `DATABASE_URL` | |
 | `COMPANY_URL` | C3-M1: empty = built-in stand-in, `in-process`, or HTTP address (FRAMEWORK 4.7) | `in-process` |
 | `TECHNICAL_USER_URL` | C2-M3 | `in-process` |
 | `SUBSCRIPTION_URL` | C10-M1 | `in-process` |
@@ -132,27 +133,27 @@ Both steps find their objects by `offerSubscriptionId` or `technicalUserId` and 
 
 Lists as in FRAMEWORK 4.1. Tag `Company`.
 
-### 7.1 `GET /api/c6-m1/connectors`
+### 7.1 `GET /api/connector/connectors`
 
 Permission `view_connectors`. Parameter `role` (`provider`: connectors the own company runs, including its company connectors; `host`: connectors as a service that a provider runs for the own company; default both). Filters `type`, `status` (default without `INACTIVE`). Response 200 `ConnectorPage`.
 
-### 7.2 `POST /api/c6-m1/connectors`
+### 7.2 `POST /api/connector/connectors`
 
 Permission `manage_connectors`. Input `name`, `endpoint`, `location`, optional `technicalUserId`. Company connector of the own company; checks 6.2. Response 201 `Connector`, event `ConnectorRegistered`.
 
-### 7.3 `POST /api/c6-m1/connectors/as-a-service`
+### 7.3 `POST /api/connector/connectors/as-a-service`
 
 Permission `manage_connectors`. Input as 7.2 plus `offerSubscriptionId`; the technical user must belong to the customer (host). C6-M1 passes `offerSubscriptionId` to C2-M3 (6.2), so the customer account that C2-M3 created for this subscription can be used. Provider = own company, host = customer of the subscription. Response 201, event `ConnectorRegistered`.
 
-### 7.4 `GET /api/c6-m1/connectors/{connectorId}`
+### 7.4 `GET /api/connector/connectors/{connectorId}`
 
 Permission `view_connectors`, provider or host company. Response 200 `Connector`.
 
-### 7.5 `PATCH /api/c6-m1/connectors/{connectorId}`
+### 7.5 `PATCH /api/connector/connectors/{connectorId}`
 
 Permission `manage_connectors`, provider company. Input `endpoint`. Same value: 200 without change. Event `ConnectorEndpointChanged`.
 
-### 7.6 `DELETE /api/c6-m1/connectors/{connectorId}`
+### 7.6 `DELETE /api/connector/connectors/{connectorId}`
 
 Permission `manage_connectors`, provider or host company. Checks 6.2. With a linked subscription that is not active: link stays, status `INACTIVE`, event `ConnectorDeactivated`. Otherwise the row is removed, event `ConnectorDeleted`. The technical user stays; the company deletes it in C2-M3 if needed. Response 204.
 
@@ -160,7 +161,7 @@ Permission `manage_connectors`, provider or host company. Checks 6.2. With a lin
 
 Input always with `processId` and `stepRunId` (FRAMEWORK 4.4).
 
-### 8.1 `POST /api/c6-m1/steps/deactivate-subscription-connectors`
+### 8.1 `POST /api/connector/steps/deactivate-subscription-connectors`
 
 - **Flow:** `subscription-ended`, after `SubscriptionDeactivated`; `subscription-declined`, after `SubscriptionDeclined` (a connector as a service may exist for a `PENDING` subscription).
 - **Input:** in addition `offerSubscriptionId`.
@@ -168,7 +169,7 @@ Input always with `processId` and `stepRunId` (FRAMEWORK 4.4).
 - **Behaviour:** the connector of the subscription becomes `INACTIVE`, the link to the technical user is removed.
 - **Result:** `DONE` with `connectorIds`. **Event:** `ConnectorDeactivated` per changed connector.
 
-### 8.2 `POST /api/c6-m1/steps/unlink-technical-user`
+### 8.2 `POST /api/connector/steps/unlink-technical-user`
 
 - **Flow:** `technical-user-deleted`, after `TechnicalUserDeleted` (C2-M3).
 - **Input:** in addition `technicalUserId`.
@@ -179,7 +180,7 @@ Input always with `processId` and `stepRunId` (FRAMEWORK 4.4).
 
 Connectors of a company are read by people through 7.1; discovery is at the CSP.
 
-### 9.1 `GET /api/c6-m1/internal/connectors`
+### 9.1 `GET /api/connector/internal/connectors`
 
 Permission `query_c6_m1`. Parameter `technicalUserId` (required). Response 200: list of `{ "connectorId", "status" }` of the connectors that use this technical user and are `ACTIVE`; empty list if none. Used by C2-M3 before it deletes a technical user (C2-M3 7.5: a connector uses the account → 409 `in-use`). `INACTIVE` connectors do not count; step 8.2 removes their link after the account is deleted.
 
@@ -198,9 +199,9 @@ Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c6-m1`; `type` is t
 
 | Neighbour (variable) | Call | Built-in stand-in |
 |---|---|---|
-| C3-M1 (`COMPANY_URL`) | `GET /api/c3-m1/internal/companies/{companyId}`: `status` | every company `ACTIVE`, unless `stub-companies.json` gives it another status (for acceptance case 3) |
-| C2-M3 (`TECHNICAL_USER_URL`) | `GET /api/c2-m3/internal/technical-users/{id}?companyId=&offerSubscriptionId=` (`offerSubscriptionId` only for a connector as a service): `exists`, `usableForConnector` | every account usable |
-| C10-M1 (`SUBSCRIPTION_URL`) | `GET /api/c10-m1/internal/subscriptions/{id}`: `status`, `providerCompanyId`, `customerCompanyId` | reads `stub-subscriptions.json` |
+| C3-M1 (`COMPANY_URL`) | `GET /api/company-profile/internal/companies/{companyId}`: `status` | every company `ACTIVE`, unless `stub-companies.json` gives it another status (for acceptance case 3) |
+| C2-M3 (`TECHNICAL_USER_URL`) | `GET /api/technical-user/internal/technical-users/{id}?companyId=&offerSubscriptionId=` (`offerSubscriptionId` only for a connector as a service): `exists`, `usableForConnector` | every account usable |
+| C10-M1 (`SUBSCRIPTION_URL`) | `GET /api/subscriptions/internal/subscriptions/{id}`: `status`, `providerCompanyId`, `customerCompanyId` | reads `stub-subscriptions.json` |
 
 No external systems.
 

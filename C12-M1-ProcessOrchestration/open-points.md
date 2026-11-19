@@ -53,7 +53,7 @@
 8. **Several instances and event streams:** the buffer for `Last-Event-ID` is per instance in memory, and the event `id` names the instance. After a reconnect to another instance, the client gets the current state (no gap, because every event carries the full state). A shared buffer (e.g. a table, or the outbox) is needed only if that is not enough.
 9. **Limits for event streams:** number of open streams per person and per instance, and the longest duration of a stream, are not defined yet (operations of the installation).
 10. **Event streams in FRAMEWORK 4.1:** FRAMEWORK does not yet say that paths ending in `/events` are Server-Sent Events streams with the token in the header (7.6, also C11-M1 7.6). Proposal: one sentence in FRAMEWORK 4.1.
-11. **Paths in the UI specification:** the UI specification assumes `GET /api/processes/{id}`, `/events` and fields in `snake_case`; this spec has `/api/c12-m1/processes/{processId}/events` (staff) and `/api/c12-m1/applications/{applicationId}/events` (applicant), fields in `camelCase` (FRAMEWORK 4.1). The process starts only after submission; the steps before (wallet connection, company data) belong to C1-M2 and C5-M1, not to a process.
+11. **Paths in the UI specification:** the UI specification assumes `GET /api/processes/{id}`, `/events` and fields in `snake_case`; this spec has `/api/process-orchestration/processes/{processId}/events` (staff) and `/api/process-orchestration/applications/{applicationId}/events` (applicant), fields in `camelCase` (FRAMEWORK 4.1). The process starts only after submission; the steps before (wallet connection, company data) belong to C1-M2 and C5-M1, not to a process.
 
 ## Out of scope
 

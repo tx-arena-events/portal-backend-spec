@@ -19,7 +19,7 @@ info:
     - Events of the module under `components/schemas` (names start with
       `Event`), see README section 10.
 servers:
-  - url: /api/c1-m3
+  - url: /api/application-review
 security:
   - portalIam: []
 tags:

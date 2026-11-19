@@ -74,7 +74,8 @@ Callers:
 
 ## 4. Technical frame
 
-- Python with FastAPI, part of the modular monolith. Process Orchestration and other modules call the module in the same process through its public interface. [openapi.yaml](openapi.yaml) describes the same contract as HTTP paths.
+- **Feature `dataspace_wallet_interface`** (FRAMEWORK 4.9): served under `/api/dataspace-wallet-interface`. Problem types, event sources, permissions and service accounts keep the module identifier `c4-m2`.
+- Python with FastAPI, a feature of the modular monolith. Process Orchestration and other modules call the module in the same process through its public interface. [openapi.yaml](openapi.yaml) describes the same contract as HTTP paths.
 - Own database `c4_m2` in PostgreSQL with its own database user. The module reads and writes only there.
 - HTTP calls carry a token of the Portal IAM of the OSP; the shared library validates it and provides the claims (`sub`, `company_id`, permissions, `azp`). Scope `company`: `company_id` in the token equals the company of the object, otherwise 404 (FRAMEWORK 4.3).
 - **Sign-in at the wallet API of the CSP:** OAuth 2.0 client credentials with `private_key_jwt` (RFC 7523) at the token endpoint of the CSP, as in C3-M2. `client_id` is the `ospId`; the OSP signs with its key, whose public part is in the trust list. No secret. The access token of the CSP is reused until shortly before it expires. Timeout per call 10 seconds.
@@ -88,7 +89,7 @@ Callers:
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | own PostgreSQL database `c4_m2` | |
+| `DATASPACE_WALLET_INTERFACE_DATABASE_URL` | own database `dataspace_wallet_interface` (FRAMEWORK 4.9); a runtime that serves only this feature also accepts `DATABASE_URL` | |
 | `SETTINGS_FILE` | installation settings (FRAMEWORK 4.8): `ospId` for the sign-in at the CSP | `config/installation.json` |
 | `ENABLED_PROVIDERS` | providers the installation offers, comma-separated; `BRING_YOUR_OWN` only later; empty = `SAP_DIV,IDENTITY_HUB,CSP` | `SAP_DIV,IDENTITY_HUB,CSP` |
 | `DEFAULT_PROVIDER` | provider when the step names none and there is no control proof (`SAP_DIV`, `IDENTITY_HUB` or `CSP`); empty = `CSP`. The flows of Process Orchestration name no provider, so this value decides (6.1) | `CSP` |
@@ -106,7 +107,7 @@ Callers:
 | `CSP_WALLET_URL` | base address of the wallet API of the CSP; empty = built-in stand-in (11.3) | `https://wallet.csp.example.org/api/v1` |
 | `CSP_TOKEN_URL` | token endpoint of the CSP | `https://core.example.org/oauth/token` |
 | `OSP_SIGNING_KEY_FILE` | private key of the OSP (JWK, ES256) for `private_key_jwt`; the same as in C3-M2 | `osp-key.json` |
-| `CONTROL_PROOF_AUDIENCE` | later: expected audience (`aud`) in the control proof | `https://portal.osp-a.example.org/api/c4-m2` |
+| `CONTROL_PROOF_AUDIENCE` | later: expected audience (`aud`) in the control proof | `https://portal.osp-a.example.org/api/dataspace-wallet-interface` |
 | `CONTROL_CHALLENGE_TTL_MINUTES` | later: validity of a control proof challenge | `15` |
 | `CONTROL_PROOF_MAX_AGE_DAYS` | later: how long a verified control proof is valid for `create-wallet` | `30` |
 | `DID_RESOLVER_URL` | Universal Resolver; empty = built-in `did:web` resolution (11.4) | `https://resolver.example.org` |
@@ -634,7 +635,7 @@ The wallet API of the CSP is a proposal, like the core services API in C3-M2. If
 - `apiKey` is valid only for the participant context of the company. With it, C4-M1 addresses the Identity API of the dataspace wallet of the CSP (`identityApiUrl`, the same interface as with the IdentityHub) to request credentials (9.3).
 - If `POST /wallets` responds with 409 (wallet from an aborted attempt, the secrets are missing), the adapter deletes the wallet at the CSP and creates it again. This is safe because the wallet was not yet `ACTIVE` in this installation.
 - Response 403: 409 `provider-rejected` (`retryable: false`). Response 401 at the token endpoint or at the API, responses 5xx and timeout: 502 `upstream-error` (`retryable: true`).
-- The dataspace wallet of the CSP does not call this module back. It reports arrived credentials to C4-M1 at `{address of the installation}/api/c4-m1/issuer-callbacks/{credentialKind}`, with its own service account (C4-M1 6.5). The address of the installation is in the trust list entry of the OSP.
+- The dataspace wallet of the CSP does not call this module back. It reports arrived credentials to C4-M1 at `{address of the installation}/api/credentials/issuer-callbacks/{credentialKind}`, with its own service account (C4-M1 6.5). The address of the installation is in the trust list entry of the OSP.
 
 **Built-in stand-in** (`CSP_WALLET_URL` empty): keeps wallets and wallet accounts in memory. DID `did:web:csp-wallet.example.org:{BPN}`, DID document with a new P-256 key and service `CredentialService` (`https://csp-wallet.example.org/api/credentials/v1/participants/{BPN}`), a made-up API key, made-up separate credentials per wallet account with `tokenUrl` `https://csp-wallet.example.org/api/sts/token`. The stand-in supplies the DID documents to the built-in resolution. `STUB_FAILURES` with `CSP_REJECTED` makes it respond with 403.
 
@@ -647,11 +648,11 @@ For the hackathon, the test tools provide a shared CSP stand-in for several inst
 
 ### 11.5 C3-M1 Company Profile (`COMPANY_URL`)
 
-`GET /api/c3-m1/internal/companies/{companyId}` (or in the same process) returns `name`, `bpn`, `status`. Needed in `create-wallet` (BPN, name for SAP DIV) and `create-wallet-account` (status `ACTIVE`). **Stand-in:** reads `stub-companies.json` (`[{ "id", "name", "bpn", "status" }]`).
+`GET /api/company-profile/internal/companies/{companyId}` (or in the same process) returns `name`, `bpn`, `status`. Needed in `create-wallet` (BPN, name for SAP DIV) and `create-wallet-account` (status `ACTIVE`). **Stand-in:** reads `stub-companies.json` (`[{ "id", "name", "bpn", "status" }]`).
 
 ### 11.6 C1-M2 Registration (`APPLICATION_URL`, own wallet only, later)
 
-`GET /api/c1-m2/internal/applications/{applicationId}` (or in the same process) returns `companyId` and `applicantSub` (`sub` of the applicant). **Stand-in:** reads `stub-applications.json` (`[{ "applicationId", "companyId", "applicantSub" }]`).
+`GET /api/registration/internal/applications/{applicationId}` (or in the same process) returns `companyId` and `applicantSub` (`sub` of the applicant). **Stand-in:** reads `stub-applications.json` (`[{ "applicationId", "companyId", "applicantSub" }]`).
 
 ### 11.7 Portal IAM
 
@@ -748,7 +749,7 @@ People and service accounts in the test Portal IAM:
 | `sa-other-callback` | service account with `submit_wallet_callback`, other client | case 6 |
 | `sa-modules` | client with `query_c4_m2`, `execute_steps_c4_m2`, `read_wallet_holder_access` | calls over HTTP |
 
-Configuration in the test: `ENABLED_PROVIDERS` = `SAP_DIV,IDENTITY_HUB,CSP` (for the later cases also `BRING_YOUR_OWN`), `SAP_DIV_DID_DOCUMENT_BASE_URL` = `https://div.example.org/did`, `IDENTITYHUB_DID_BASE` = `ih.example.org`, `CONTROL_PROOF_AUDIENCE` = `https://portal.example.org/api/c4-m2`, `SAP_DIV_URL`, `IDENTITYHUB_URL`, `CSP_WALLET_URL`, `DID_RESOLVER_URL` empty.
+Configuration in the test: `ENABLED_PROVIDERS` = `SAP_DIV,IDENTITY_HUB,CSP` (for the later cases also `BRING_YOUR_OWN`), `SAP_DIV_DID_DOCUMENT_BASE_URL` = `https://div.example.org/did`, `IDENTITYHUB_DID_BASE` = `ih.example.org`, `CONTROL_PROOF_AUDIENCE` = `https://portal.example.org/api/dataspace-wallet-interface`, `SAP_DIV_URL`, `IDENTITYHUB_URL`, `CSP_WALLET_URL`, `DID_RESOLVER_URL` empty.
 
 **Hackathon installations** (FRAMEWORK 7a): OSP A and OSP B both use `DEFAULT_PROVIDER` `CSP`. OSP A has an empty `CSP_WALLET_URL` and so the built-in stand-in (11.3); OSP B uses the shared CSP stand-in of the test tools. OSP B needs `CSP` because its C4-M1 runs with `ISSUER_MODE` `CSP` (C4-M1 6.3 rule 3).
 
@@ -796,7 +797,7 @@ Example of a control proof (nonce `q8Vb2xLr0YkE5mTt3WcZ1g`, `iat` 26 Oct 2026 10
 eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImRpZDp3ZWI6d2FsbGV0LmJlaXNwaWVsLmV4YW1wbGUja2V5LTEifQ.eyJpc3MiOiJkaWQ6d2ViOndhbGxldC5iZWlzcGllbC5leGFtcGxlIiwic3ViIjoiZGlkOndlYjp3YWxsZXQuYmVpc3BpZWwuZXhhbXBsZSIsImF1ZCI6Imh0dHBzOi8vcG9ydGFsLmV4YW1wbGUub3JnL2FwaS9jNC1tMiIsIm5vbmNlIjoicThWYjJ4THIwWWtFNW1UdDNXY1oxZyIsImNvbXBhbnlfaWQiOiI1YjBjOWQxZS0yZjNhLTRiNWMtOGQ2ZS03ZjgwOTFhMmIzYzQiLCJpYXQiOjE3OTMwMDkxMDAsImV4cCI6MTc5MzAwOTQwMH0.I-AorSbS_6ead58MrpniDIgYHW2wS-8L8E5QqvsrgHaq0kfomve3-bLIj6q9bWLkEUNxKTnk5QQzBY7dVwLR1w
 ```
 
-Content: `{ "iss": "did:web:wallet.beispiel.example", "sub": "did:web:wallet.beispiel.example", "aud": "https://portal.example.org/api/c4-m2", "nonce": "q8Vb2xLr0YkE5mTt3WcZ1g", "company_id": "5b0c9d1e-2f3a-4b5c-8d6e-7f8091a2b3c4", "iat": 1793009100, "exp": 1793009400 }`
+Content: `{ "iss": "did:web:wallet.beispiel.example", "sub": "did:web:wallet.beispiel.example", "aud": "https://portal.example.org/api/dataspace-wallet-interface", "nonce": "q8Vb2xLr0YkE5mTt3WcZ1g", "company_id": "5b0c9d1e-2f3a-4b5c-8d6e-7f8091a2b3c4", "iat": 1793009100, "exp": 1793009400 }`
 
 ### 14.3 Failures of the stand-in providers (`STUB_FAILURES`)
 

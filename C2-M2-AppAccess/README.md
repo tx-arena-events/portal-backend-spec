@@ -74,6 +74,7 @@ It is the only module that writes bindings, portal roles of people, app clients 
 
 ## 4. Technical frame
 
+- **Feature `app_access`** (FRAMEWORK 4.9): served under `/api/app-access`. Problem types, event sources, permissions and service accounts keep the module identifier `c2-m2`.
 - Python with FastAPI.
 - Own database `c2_m2` in PostgreSQL with its own database user. The module reads and writes only there. Other modules read through the interface.
 - People call through the UI of the OSP via HTTP, with their token from the Portal IAM. The shared token validation library checks signature, expiry and audience (`aud` contains `portal-core`) and returns the claims: `sub`, `company_id` and `bpn` (only for a bound account), `given_name`, `family_name`, the permissions (FRAMEWORK 4.2).
@@ -87,7 +88,7 @@ It is the only module that writes bindings, portal roles of people, app clients 
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | own PostgreSQL database `c2_m2` | |
+| `APP_ACCESS_DATABASE_URL` | own database `app_access` (FRAMEWORK 4.9); a runtime that serves only this feature also accepts `DATABASE_URL` | |
 | `IAM_URL` | base URL of the Portal IAM of the OSP | `https://iam.osp-a.example.org/auth` |
 | `IAM_REALM` | realm of the installation | `CX-Central` |
 | `C2_M2_CLIENT_ID`, `C2_M2_CLIENT_SECRET` | the module's own service account for the admin API (C2-M5 5.9; secret from the secret store, C2-M5 4); needs the realm permissions `manage-clients`, `view-clients`, `query-clients`, `manage-users`, `view-users`, `query-users` | `svc-c2-m2` |
@@ -917,7 +918,7 @@ In the shared process, the module calls the public interface of the neighbour; t
 | Neighbour (variable) | Call | Response | Built-in stand-in |
 |---|---|---|---|
 | Subscriptions (`SUBSCRIPTION_URL`) | active subscriptions of a company to an app: `GET /internal/subscriptions?customerCompanyId=&offerId=&status=ACTIVE` (base as in the spec of Subscriptions) | list of `{ "offerSubscriptionId", "offerId", "customerCompanyId", "status" }` | reads `stub-subscriptions.json` |
-| C3-M1 Company Profile (`COMPANY_URL`) | only for a company without a row in `company` (6.6): `GET /api/c3-m1/internal/companies/{companyId}` | `{ "id", "status", "bpn", … }` with status `REQUESTED`, `ACTIVE`, `REJECTED` or `INACTIVE`; 404 if unknown | reads `stub-companies.json` |
+| C3-M1 Company Profile (`COMPANY_URL`) | only for a company without a row in `company` (6.6): `GET /api/company-profile/internal/companies/{companyId}` | `{ "id", "status", "bpn", … }` with status `REQUESTED`, `ACTIVE`, `REJECTED` or `INACTIVE`; 404 if unknown | reads `stub-companies.json` |
 
 Apart from these, the module calls no modules. The BPN of a company usually comes with the step `assign-company-admin`; the steps 8.9 and 8.10 report the status of the company.
 

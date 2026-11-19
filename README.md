@@ -42,7 +42,16 @@ Today's portal is a monolith: the user interface owns orchestration and business
 ### Flows and data
 
 - Every step of a flow, such as onboarding, runs through Process Orchestration and is event-driven. Modules call each other directly only for queries.
-- Each module has its own database. No module reads or writes the database of another module; it uses that module's interface. Events go out through an outbox per module and never carry secrets. They are CloudEvents (FRAMEWORK 6).
+- Each module has its own database: one database per feature in one PostgreSQL instance of the installation, with its own database role. No module reads or writes the database of another module; it uses that module's interface. Events go out through an outbox per module and never carry secrets. They are CloudEvents (FRAMEWORK 6).
+
+### Features (decided on 17 Nov 2026)
+
+- **Every module with an interface is one feature** of the modular monolith, named after the readable part of its folder: `C3-M1-CompanyProfile` is the feature `company_profile`.
+- **Readable base paths:** a feature is served under `/api/<feature>` (`/api/company-profile`) instead of `/api/<module>` (`/api/c3-m1`). Problem types, event sources, permissions and service accounts keep the module identifier.
+- **Runtimes:** the installation decides which features run together in one pod and which run alone; the contract does not change.
+- **One database per feature** (`company_profile`), read from `<FEATURE>_DATABASE_URL`.
+
+Details in [FRAMEWORK 4.9](FRAMEWORK.md#49-features-runtimes-and-databases) and OP-55; the reference implementation is [dataspace-mgm-services](https://github.com/eclipse-tractusx/dataspace-mgm-services) (ADR-0003).
 
 ## Framework and open points
 
@@ -53,26 +62,26 @@ Today's portal is a monolith: the user interface owns orchestration and business
 
 All modules are at version 0.2 for OSP 2.0, as of 28 Oct 2026. Every decision that is not yet agreed is marked as provisional in the module's `open-points.md`.
 
-| Module | Kind | Status |
-|---|---|---|
-| [C1-M1 PSP Admission](C1-M1-PSPAdmission/) | – | dropped with OSP 2.0: OSPs are admitted through the trust list of the CSP |
-| [C1-M2 Registration](C1-M2-Registration/) | Hackathon | draft 0.2 |
-| [C1-M3 Application Review](C1-M3-ApplicationReview/) | Hackathon | draft 0.2 |
-| [C2-M1 Sign-in Services](C2-M1-SignInService/) | – | dropped with OSP 2.0: the only identity provider (EBW-Connector) is configuration in C2-M5 |
-| [C2-M2 Users and App Access](C2-M2-AppAccess/) | Hackathon | draft 0.2 |
-| [C2-M3 Technical Users](C2-M3-TechnicalUser/) | Hackathon | draft 0.2 |
-| [C2-M4 Delegation](C2-M4-Delegation/) | – | dropped with OSP 2.0 |
-| [C2-M5 Portal IAM](C2-M5-PortalIAM/) | Configuration | draft 0.2 |
-| [C3-M1 Company Profile](C3-M1-CompanyProfile/) | Hackathon | draft 0.2 |
-| [C3-M2 CSP Connection](C3-M2-CSPConnection/) | Hackathon | draft 0.1 (new with OSP 2.0) |
-| [C4-M1 Credentials](C4-M1-Credentials/) | Hackathon | draft 0.2 |
-| [C4-M2 Dataspace Wallet Interface](C4-M2-DataspaceWalletInterface/) | Hackathon | draft 0.2 |
-| [C5-M1 EBW-Connector](C5-M1-EBWConnector/) | Provided | draft 0.2 (two wallets, OSP 2.0; lenient for the hackathon, OP-43) |
-| [C6-M1 Connectors](C6-M1-Connector/) | Hackathon | draft 0.2 (other part of the spec) |
-| [C8-M1 Offers](C8-M1-Offers/) | Hackathon | draft 0.2 (other part of the spec) |
-| [C10-M1 Subscriptions](C10-M1-Subscriptions/) | Hackathon | draft 0.2 (other part of the spec) |
-| [C11-M1 Notifications](C11-M1-Notifications/) | Hackathon | draft 0.2 (other part of the spec; inbox in the portal only) |
-| [C12-M1 Process Orchestration](C12-M1-ProcessOrchestration/) | Provided | draft 0.2 (other part of the spec; the flows of FRAMEWORK 5 in `flows.yaml`) |
+| Module | Feature (base path) | Kind | Status |
+|---|---|---|---|
+| [C1-M1 PSP Admission](C1-M1-PSPAdmission/) | – | – | dropped with OSP 2.0: OSPs are admitted through the trust list of the CSP |
+| [C1-M2 Registration](C1-M2-Registration/) | `registration` (`/api/registration`) | Hackathon | draft 0.2 |
+| [C1-M3 Application Review](C1-M3-ApplicationReview/) | `application_review` (`/api/application-review`) | Hackathon | draft 0.2 |
+| [C2-M1 Sign-in Services](C2-M1-SignInService/) | – | – | dropped with OSP 2.0: the only identity provider (EBW-Connector) is configuration in C2-M5 |
+| [C2-M2 Users and App Access](C2-M2-AppAccess/) | `app_access` (`/api/app-access`) | Hackathon | draft 0.2 |
+| [C2-M3 Technical Users](C2-M3-TechnicalUser/) | `technical_user` (`/api/technical-user`) | Hackathon | draft 0.2 |
+| [C2-M4 Delegation](C2-M4-Delegation/) | – | – | dropped with OSP 2.0 |
+| [C2-M5 Portal IAM](C2-M5-PortalIAM/) | – | Configuration | draft 0.2 |
+| [C3-M1 Company Profile](C3-M1-CompanyProfile/) | `company_profile` (`/api/company-profile`) | Hackathon | draft 0.2 |
+| [C3-M2 CSP Connection](C3-M2-CSPConnection/) | `csp_connection` (`/api/csp-connection`) | Hackathon | draft 0.1 (new with OSP 2.0) |
+| [C4-M1 Credentials](C4-M1-Credentials/) | `credentials` (`/api/credentials`) | Hackathon | draft 0.2 |
+| [C4-M2 Dataspace Wallet Interface](C4-M2-DataspaceWalletInterface/) | `dataspace_wallet_interface` (`/api/dataspace-wallet-interface`) | Hackathon | draft 0.2 |
+| [C5-M1 EBW-Connector](C5-M1-EBWConnector/) | – | Provided | draft 0.2 (two wallets, OSP 2.0; lenient for the hackathon, OP-43) |
+| [C6-M1 Connectors](C6-M1-Connector/) | `connector` (`/api/connector`) | Hackathon | draft 0.2 (other part of the spec) |
+| [C8-M1 Offers](C8-M1-Offers/) | `offers` (`/api/offers`) | Hackathon | draft 0.2 (other part of the spec) |
+| [C10-M1 Subscriptions](C10-M1-Subscriptions/) | `subscriptions` (`/api/subscriptions`) | Hackathon | draft 0.2 (other part of the spec) |
+| [C11-M1 Notifications](C11-M1-Notifications/) | `notifications` (`/api/notifications`) | Hackathon | draft 0.2 (other part of the spec; inbox in the portal only) |
+| [C12-M1 Process Orchestration](C12-M1-ProcessOrchestration/) | `process_orchestration` (`/api/process-orchestration`) | Provided | draft 0.2 (other part of the spec; the flows of FRAMEWORK 5 in `flows.yaml`) |
 
 C6 to C12 are the other part of the spec. The framework refers to them by name (Connectors, Offers, Subscriptions, Notifications, Process Orchestration). The MCP server is not specified yet.
 
@@ -86,7 +95,7 @@ Each module has its own folder, named after its identifier, with three files:
 - `openapi.yaml` – the interface (OpenAPI 3.1)
 - `open-points.md` – provisional decisions, deviations from the framework, assumptions about other modules and open questions
 
-A team should be able to implement a module from these files and [FRAMEWORK.md](FRAMEWORK.md). A dropped module keeps its folder with a short README.
+A team should be able to implement a module from these files and [FRAMEWORK.md](FRAMEWORK.md), as one feature in the shape of FRAMEWORK 4.9. A dropped module keeps its folder with a short README.
 
 Modules are grouped into capabilities: `C2-M3` is module 3 of capability C2.
 

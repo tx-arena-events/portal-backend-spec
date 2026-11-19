@@ -60,7 +60,8 @@ Callers:
 
 ## 4. Technical frame
 
-- Module of the modular monolith (Python, FastAPI), own database `c3_m2` in PostgreSQL.
+- **Feature `csp_connection`** (FRAMEWORK 4.9): served under `/api/csp-connection`. Problem types, event sources, permissions and service accounts keep the module identifier `c3-m2`.
+- Feature of the modular monolith (Python, FastAPI), own database `csp_connection` in the PostgreSQL instance of the installation, with its own database role `csp_connection` (FRAMEWORK 4.9).
 - Authentication at the CSP: OAuth 2.0 client credentials with `private_key_jwt` (RFC 7523). `client_id` is the `ospId`; the OSP signs with its key, whose public part is in the trust list. No secret. The access token of the CSP is reused until shortly before it expires.
 - Callbacks from the CSP: the CSP has a service account in the Portal IAM of the OSP with exactly the permission `report_csp_notification` (FRAMEWORK 4.2).
 - Timeout per call to the CSP 10 seconds; for steps, errors of the CSP give `retryable: true`, except for a business rejection (section 12).
@@ -71,7 +72,7 @@ Callers:
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | own database `c3_m2` | |
+| `CSP_CONNECTION_DATABASE_URL` | own database `csp_connection` (FRAMEWORK 4.9); a runtime that serves only this feature also accepts `DATABASE_URL` | |
 | `CSP_URL` | address of the core services API; empty = built-in stand-in (11.3) | `https://core.example.org/api/v1` |
 | `CSP_TOKEN_URL` | token endpoint of the CSP | `https://core.example.org/oauth/token` |
 | `OSP_SIGNING_KEY_FILE` | private key of the OSP (JWK, ES256) for `private_key_jwt` | `osp-key.json` |
@@ -164,11 +165,11 @@ Without a Business Wallet (OP-35) a company has no EBWOID. Therefore `register-c
 
 ## 7. Operations
 
-### 7.1 `GET /api/c3-m2/companies/{companyId}`
+### 7.1 `GET /api/csp-connection/companies/{companyId}`
 
 Permission `view_csp_registration`. Response 200 `CspRegistration`: `companyId`, `bpn`, `status`, `failureReason`, `did`, `membership`, `registeredAt`, `updatedAt`. Unknown: 404.
 
-### 7.2 `POST /api/c3-m2/csp-notifications`
+### 7.2 `POST /api/csp-connection/csp-notifications`
 
 Callback from the CSP, permission `report_csp_notification`. Input `CspNotification`: `notificationId`, `type`, `bpn`, with `OperationCompleted` also `operationId`, `outcome` (`SUCCEEDED`, `FAILED`), `reason`.
 
@@ -183,7 +184,7 @@ Callback from the CSP, permission `report_csp_notification`. Input `CspNotificat
 
 Input always with `processId`, `stepRunId` and `companyId` (FRAMEWORK 4.4).
 
-### 8.1 `POST /api/c3-m2/steps/register-company`
+### 8.1 `POST /api/csp-connection/steps/register-company`
 
 - **Input:** in addition `legalName`, `country`, `ebwoid` (optional), `euid` (optional), `identifiers` (optional; list of `type` and `value`), `address` (optional) from the application or from C3-M1. At least `ebwoid`, `euid` or an identifier in `identifiers` (6.5); otherwise 400 `validation`.
 - **Precondition:** application approved (`ApplicationApproved`); no row in `REGISTERED` for another company with the same EBWOID or EUID.
@@ -191,34 +192,34 @@ Input always with `processId`, `stepRunId` and `companyId` (FRAMEWORK 4.4).
 - **Result:** `DONE` with `bpn`, or `RUNNING`.
 - **Event:** `CompanyRegisteredAtCsp` or `CompanyRegistrationAtCspFailed`; with `RUNNING`, later through the callback (7.2).
 
-### 8.2 `POST /api/c3-m2/steps/transfer-company`
+### 8.2 `POST /api/csp-connection/steps/transfer-company`
 
 - **Input:** in addition `bpn` (from `find-companies`); `ebwoid`, `euid` and `identifiers` optional, for the check at the CSP.
 - **Precondition:** application of kind `TRANSFER` approved.
 - **Behaviour:** `POST {CSP_URL}/companies/{bpn}/transfer`; responses as in 8.1. The CSP notifies the previous home OSP itself.
 - **Result, event:** as in 8.1.
 
-### 8.3 `POST /api/c3-m2/steps/register-did`
+### 8.3 `POST /api/csp-connection/steps/register-did`
 
 - **Input:** in addition `did`.
 - **Precondition:** status `REGISTERED`; dataspace wallet created (`DataspaceWalletCreated`).
 - **Behaviour:** `PUT {CSP_URL}/companies/{bpn}/did` with `did`; store the DID.
 - **Result:** `DONE` with `bpn`, `did`. **Event:** `CompanyDidRegistered`.
 
-### 8.4 `POST /api/c3-m2/steps/update-company`
+### 8.4 `POST /api/csp-connection/steps/update-company`
 
 - **Input:** in addition `legalName`, `euid` (optional), `address` (optional) from C3-M1 (`CompanyDataChanged` with `coreDataChanged`).
 - **Precondition:** status `REGISTERED`.
 - **Behaviour:** `PATCH {CSP_URL}/companies/{bpn}` with the changed core data. Country and EBWOID do not change (C3-M1).
 - **Result:** `DONE`. **Event:** `CompanyUpdatedAtCsp`.
 
-### 8.5 `POST /api/c3-m2/steps/register-membership` and `deregister-membership`
+### 8.5 `POST /api/csp-connection/steps/register-membership` and `deregister-membership`
 
 - **Precondition:** status `REGISTERED`. Exception: `deregister-membership` with status `TRANSFERRED_AWAY` answers `DONE` without a call to the CSP and without an event, and sets `membership` to `NONE`. Only the home OSP may change the company at the CSP, and that is now the new OSP (FRAMEWORK 5.6 step 3); its value is no longer known here. After a return, `register-membership` therefore calls the CSP again (6.4).
 - **Behaviour:** `PUT {CSP_URL}/companies/{bpn}/membership` with `{ "member": true }` or `false`; store the value.
 - **Result:** `DONE`. **Event:** `MembershipRegistered` or `MembershipDeregistered`.
 
-### 8.6 `POST /api/c3-m2/steps/register-connector` and `deregister-connector`
+### 8.6 `POST /api/csp-connection/steps/register-connector` and `deregister-connector`
 
 - **Input:** in addition `connectorId`; for `register-connector` also `endpointUrl` (address of the connector, HTTPS).
 - **Precondition:** status `REGISTERED` (otherwise 409 `invalid-state`); connector registered, changed, deactivated or deleted in C6-M1 (FRAMEWORK 5.9). `companyId` is the host company of the connector.
@@ -227,7 +228,7 @@ Input always with `processId`, `stepRunId` and `companyId` (FRAMEWORK 4.4).
 
 ## 9. Queries for other modules
 
-### `GET /api/c3-m2/internal/find-companies`
+### `GET /api/csp-connection/internal/find-companies`
 
 Parameters: `ebwoid`, `euid`, `identifier` (form `<type>:<value>`, repeatable), `legalName`, `country` (at least `ebwoid`, `euid`, `identifier`, or `legalName` with `country`). Calls `GET {CSP_URL}/companies` with the same parameters.
 
@@ -264,7 +265,7 @@ All calls with the access token of the CSP (4). Responses in JSON; errors as Pro
 | `PUT /companies/{bpn}/connectors/{connectorId}` with `endpointUrl` | enter a connector in the discovery | 204 |
 | `DELETE /companies/{bpn}/connectors/{connectorId}` | remove a connector | 204, also if it is unknown |
 
-On every changing call, the CSP checks that the calling OSP is the home OSP (except for `transfer`), and calls back: `POST {address of the installation}/api/c3-m2/csp-notifications` (7.2). The address of the installation is in the trust list, in the entry of the OSP.
+On every changing call, the CSP checks that the calling OSP is the home OSP (except for `transfer`), and calls back: `POST {address of the installation}/api/csp-connection/csp-notifications` (7.2). The address of the installation is in the trust list, in the entry of the OSP.
 
 ### 11.2 C3-M1 Company Profile
 

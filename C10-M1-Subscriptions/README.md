@@ -51,7 +51,8 @@ Callers:
 
 ## 4. Technical frame
 
-- Module of the modular monolith (Python, FastAPI), own database `c10_m1` in PostgreSQL.
+- **Feature `subscriptions`** (FRAMEWORK 4.9): served under `/api/subscriptions`. Problem types, event sources, permissions and service accounts keep the module identifier `c10-m1`.
+- Feature of the modular monolith (Python, FastAPI), own database `subscriptions` in the PostgreSQL instance of the installation, with its own database role `subscriptions` (FRAMEWORK 4.9).
 - People call with their token from the Portal IAM (FRAMEWORK 4.2). The provider side is checked with the scope `company` against the provider company of the offer.
 - Calls to the systems of the provider: HTTPS, OAuth 2.0 client credentials with the data of the provider configuration; timeout 10 seconds.
 - Secrets of the provider configuration are stored encrypted (`ENCRYPTION_KEY`), never returned and never written to logs or events.
@@ -61,7 +62,7 @@ Callers:
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | own database `c10_m1` | |
+| `SUBSCRIPTIONS_DATABASE_URL` | own database `subscriptions` (FRAMEWORK 4.9); a runtime that serves only this feature also accepts `DATABASE_URL` | |
 | `ENCRYPTION_KEY` | key for the client secrets of the provider configurations | |
 | `OFFER_URL` | C8-M1 Offers: empty = built-in stand-in, `in-process`, or HTTP address (FRAMEWORK 4.7) | `in-process` |
 | `COMPANY_URL` | C3-M1 Company Profile | `in-process` |
@@ -151,11 +152,11 @@ The permissions are listed in C2-M5 6.2. `view_subscriptions` is in the portal r
 
 Lists as in FRAMEWORK 4.1. Tags: `Company` (customer side), `Provider` (provider side).
 
-### 7.1 `GET /api/c10-m1/subscriptions`
+### 7.1 `GET /api/subscriptions/subscriptions`
 
 Permission `view_subscriptions`. Parameter `view` (`customer` or `provider`, default `customer`), filters `status`, `offerType`, `offerId`. `customer`: subscriptions of the own company; `provider`: subscriptions to offers of the own company. Response 200 `SubscriptionPage`.
 
-### 7.2 `POST /api/c10-m1/subscriptions`
+### 7.2 `POST /api/subscriptions/subscriptions`
 
 Permission `manage_subscriptions`. Input: `offerId`, `agreementConsents` (`agreementId`, `consent`).
 
@@ -163,31 +164,31 @@ Permission `manage_subscriptions`. Input: `offerId`, `agreementConsents` (`agree
 2. Store the subscription with `PENDING` and the consents.
 3. Event `SubscriptionRequested`. Response 201 `Subscription`.
 
-### 7.3 `GET /api/c10-m1/subscriptions/{offerSubscriptionId}`
+### 7.3 `GET /api/subscriptions/subscriptions/{offerSubscriptionId}`
 
 Permission `view_subscriptions`. Visible to the customer company and to the provider company. Both see `setupStatus` (status of the newest process of the flows `subscription-setup` or `single-instance-activation` at C12-M1, `null` without a process). The provider additionally sees `requestedBy` and the consents. Response 200 `Subscription`.
 
-### 7.4 `POST /api/c10-m1/subscriptions/{offerSubscriptionId}/end`
+### 7.4 `POST /api/subscriptions/subscriptions/{offerSubscriptionId}/end`
 
 Permission `manage_subscriptions`, customer company only. Status `PENDING` or `ACTIVE`, otherwise 409 `invalid-state`. Status `INACTIVE`, event `SubscriptionDeactivated`. Response 200.
 
-### 7.5 `POST /api/c10-m1/subscriptions/{offerSubscriptionId}/start-setup`
+### 7.5 `POST /api/subscriptions/subscriptions/{offerSubscriptionId}/start-setup`
 
 Permission `manage_offers`, provider company only. Input: `instanceUrl` (apps). Checks as in 6.3. Set `setup_started` and the URL; event `SubscriptionSetupStarted`. Response 202.
 
-### 7.6 `POST /api/c10-m1/subscriptions/{offerSubscriptionId}/activate`
+### 7.6 `POST /api/subscriptions/subscriptions/{offerSubscriptionId}/activate`
 
 Permission `manage_offers`, provider company only. Checks as in 6.3, including the setup status. Status `ACTIVE`, `activated_at`; event `SubscriptionActivated`. Response 200. The client of the instance is enabled afterwards by the flow `subscription-setup`; for a single-instance app the flow `single-instance-activation` creates the technical user, if the offer has a profile, and sends the callback.
 
-### 7.7 `POST /api/c10-m1/subscriptions/{offerSubscriptionId}/decline`
+### 7.7 `POST /api/subscriptions/subscriptions/{offerSubscriptionId}/decline`
 
 Permission `manage_offers`, provider company only. Input optional `reason` (up to 1000 characters). Status `PENDING`, otherwise 409. Status `DECLINED`; event `SubscriptionDeclined`. Response 200.
 
-### 7.8 `PUT /api/c10-m1/subscriptions/{offerSubscriptionId}/instance-url`
+### 7.8 `PUT /api/subscriptions/subscriptions/{offerSubscriptionId}/instance-url`
 
 Permission `manage_offers`, provider company only. Input `instanceUrl`. Checks as in 6.3. Event `SubscriptionInstanceUrlChanged`. Response 200.
 
-### 7.9 `GET`, `PUT`, `DELETE /api/c10-m1/provider-configuration`
+### 7.9 `GET`, `PUT`, `DELETE /api/subscriptions/provider-configuration`
 
 Permission `manage_offers`, for the own company. `PUT` input: `setupUrl`, `callbackUrl`, `tokenUrl`, `clientId`, `clientSecret` (write-only; left out = keep the stored one). `GET` returns everything except the secret, plus `clientSecretSet`. Without a configuration: `GET` 404.
 
@@ -195,14 +196,14 @@ Permission `manage_offers`, for the own company. `PUT` input: `setupUrl`, `callb
 
 Input always with `processId`, `stepRunId` and `offerSubscriptionId` (FRAMEWORK 4.4).
 
-### 8.1 `POST /api/c10-m1/steps/notify-provider`
+### 8.1 `POST /api/subscriptions/steps/notify-provider`
 
 - **Flow:** `subscription-requested`, after `SubscriptionRequested`.
 - **Precondition:** none. If the subscription is no longer `PENDING` (the provider activated or declined it, or the customer ended it before the step ran): `DONE` with `notified` `false`, no call.
 - **Behaviour:** if the provider company has a configuration with `setupUrl`: `POST {setupUrl}` with `offerSubscriptionId`, `offerId`, `customerCompanyId`, customer name and country (query at C3-M1), and for multi-instance apps a hint that the setup is expected. Without a configuration: nothing to do.
 - **Result:** `DONE` with `notified` (`true` or `false`). Provider not reachable or 5xx: 502 `upstream-error`, `retryable: true`; 4xx: `provider-rejected`, `retryable: false`.
 
-### 8.2 `POST /api/c10-m1/steps/send-activation-callback`
+### 8.2 `POST /api/subscriptions/steps/send-activation-callback`
 
 - **Flow:** `subscription-setup`, after the client of the instance is enabled; `single-instance-activation`, after `SubscriptionActivated` of a single-instance app.
 - **Input:** in addition optional `technicalUsers` (result `accounts` of C2-M3 `create-for-subscription`), `appInstanceClientId` and `clientId` (`iamClientId` of the instance client, result of C2-M2 `create-instance-client`).
@@ -212,11 +213,11 @@ Input always with `processId`, `stepRunId` and `offerSubscriptionId` (FRAMEWORK 
 
 ## 9. Queries for other modules
 
-### 9.1 `GET /api/c10-m1/internal/subscriptions`
+### 9.1 `GET /api/subscriptions/internal/subscriptions`
 
 Parameters `customerCompanyId`, `offerId`, `status` (each optional, at least one). Response 200: list of `{ "offerSubscriptionId", "offerId", "customerCompanyId", "status" }`. Used by C2-M2 for app roles (C2-M2 11).
 
-### 9.2 `GET /api/c10-m1/internal/subscriptions/{offerSubscriptionId}`
+### 9.2 `GET /api/subscriptions/internal/subscriptions/{offerSubscriptionId}`
 
 Response 200 `SubscriptionInternal`: as 9.1 plus `offerType`, `instanceKind`, `providerCompanyId`, `instanceUrl`. Used by C6-M1 (linked connectors) and C11-M1 (recipients).
 
@@ -239,10 +240,10 @@ Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c10-m1`; `type` is 
 
 | Neighbour (variable) | Call | Permission of the service account | Built-in stand-in |
 |---|---|---|---|
-| C8-M1 Offers (`OFFER_URL`) | `GET /api/c8-m1/internal/offers/{offerId}`: `status`, `offerType`, `instanceKind`, `instanceUrl`, `providerCompanyId`, `agreements` (with `mandatory`) | `query_c8_m1` | reads `stub-offers.json` |
-| C3-M1 Company Profile (`COMPANY_URL`) | `GET /api/c3-m1/internal/companies/{companyId}`: `status`, `name`, `address.countryCode` | `query_c3_m1` | every company `ACTIVE` |
-| C2-M3 Technical Users (`TECHNICAL_USER_URL`) | `POST /api/c2-m3/internal/technical-users/{id}/credentials/rotate` with `offerSubscriptionId` | `rotate_subscription_credentials` | fixed test credentials |
-| C12-M1 Process Orchestration (`PROCESS_URL`) | `GET /api/c12-m1/internal/processes?subjectType=SUBSCRIPTION&subjectId=`: `flowKey`, `status` | `query_c12_m1` | empty list (no setup status, activation allowed) |
+| C8-M1 Offers (`OFFER_URL`) | `GET /api/offers/internal/offers/{offerId}`: `status`, `offerType`, `instanceKind`, `instanceUrl`, `providerCompanyId`, `agreements` (with `mandatory`) | `query_c8_m1` | reads `stub-offers.json` |
+| C3-M1 Company Profile (`COMPANY_URL`) | `GET /api/company-profile/internal/companies/{companyId}`: `status`, `name`, `address.countryCode` | `query_c3_m1` | every company `ACTIVE` |
+| C2-M3 Technical Users (`TECHNICAL_USER_URL`) | `POST /api/technical-user/internal/technical-users/{id}/credentials/rotate` with `offerSubscriptionId` | `rotate_subscription_credentials` | fixed test credentials |
+| C12-M1 Process Orchestration (`PROCESS_URL`) | `GET /api/process-orchestration/internal/processes?subjectType=SUBSCRIPTION&subjectId=`: `flowKey`, `status` | `query_c12_m1` | empty list (no setup status, activation allowed) |
 
 ### 11.2 Systems of the provider
 

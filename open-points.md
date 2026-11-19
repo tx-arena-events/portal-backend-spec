@@ -1,6 +1,6 @@
 # Cross-module open points
 
-**As of:** 2026-10-30, after the switch to OSP 2.0
+**As of:** 2026-11-19, after the switch to OSP 2.0 and to the feature-first architecture (OP-55)
 
 This file lists the open questions that concern several modules or need a fundamental decision. Questions that concern only one module stay in that module's `open-points.md`. There, cross-module questions are referred to only by their number (OP-xx).
 
@@ -35,6 +35,7 @@ Important for the hackathon on 6 Nov 2026: **OP-36**, **OP-37**, **OP-40**, **OP
 | OP-52 | **Notice on deactivation:** After `disable-company-users` the people no longer belong to the company, so a notice "company deactivated" finds nobody. Notify before, or not at all (C11-M1 open question 4)? | C2-M2, C3-M1, C11-M1 | other part | open |
 | OP-53 | **Real issuer:** At the hackathon on 6 Nov 2026 no real credentials are issued: OSP A and OSP B run on the stand-in `STUB` of C4-M1 (11.6). The aim for the demo at the Community Days is a real issuer: own IssuerService with IdentityHub and callback adapter (C4-M1 11.4, open questions 2 and 3). Still to do for this: check the paths against the version in use, settle the callback adapter, enter the DID of the issuer in the trust list. | C4-M1, C4-M2 | both parts of the spec | decided 30 Oct 2026 for the hackathon; real issuer is the aim for the Community Days |
 | OP-54 | **Format of events:** Events are CloudEvents 1.0 in the JSON format (FRAMEWORK 6): `specversion` `1.0`, `id` (UUID), `source` `urn:<module>`, `type` (the name of the event), `time`, `datacontenttype` `application/json`, the content in `data`. They replace `eventId`, `eventType` and `occurredAt`. Between processes, structured content mode, over HTTP `application/cloudevents+json`. An installation receives the events of split-out modules in its event inbox `POST /api/v1/events/inbox`, with the token of the service account of the publishing module, whose `source` must match. Open: a `type` with a reverse-DNS prefix and a `source` that names the installation, once events leave the installation; the broker between split-out modules (C12-M1 open question 4). | all modules with events, C11-M1, C12-M1 | project owner, other part | proposal |
+| OP-55 | **Feature-first architecture and path convention:** Every module with an interface is one feature, named after the readable part of its folder (`company_profile` for C3-M1), served under `/api/<feature>` (`/api/company-profile`) instead of the provisional `/api/<module>`; the old base answers 404. Problem types, event `source`, permissions, service accounts and the module keys in flows keep the module identifier. Features run together or alone as runtimes chosen by the installation. One database per feature (named after it, own role) in one PostgreSQL instance per installation, address `<FEATURE>_DATABASE_URL` (FRAMEWORK 1, 4.1, 4.9; ADR-0003 of dataspace-mgm-services). Open: whether the identifiers also move to the feature name. | all modules with an interface, UI | project owner, backend teams, UI team | decided 17 Nov 2026 |
 
 ## A. Portal Service Provider (PSP)
 

@@ -63,7 +63,8 @@ Callers:
 
 ## 4. Technical frame
 
-- Python with FastAPI, part of the modular monolith. Process Orchestration and other modules call the module in the same process through its public interface; the UI calls over HTTP. [openapi.yaml](openapi.yaml) describes both.
+- **Feature `company_profile`** (FRAMEWORK 4.9): served under `/api/company-profile`. Problem types, event sources, permissions and service accounts keep the module identifier `c3-m1`.
+- Python with FastAPI, a feature of the modular monolith. Process Orchestration and other modules call the module in the same process through its public interface; the UI calls over HTTP. [openapi.yaml](openapi.yaml) describes both.
 - Own database `c3_m1` in PostgreSQL with its own database user. The module reads and writes only there.
 - People call with their token from the Portal IAM of the OSP (FRAMEWORK 4.2). The shared token validation library checks the token and returns `sub`, `company_id` and the permissions. The module checks the scope as in 6.8.
 - Events go out through the outbox of the base skeleton: stored in the same transaction as the change, delivered afterwards.
@@ -78,7 +79,7 @@ Callers:
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | own database `c3_m1` | |
+| `COMPANY_PROFILE_DATABASE_URL` | own database `company_profile` (FRAMEWORK 4.9); a runtime that serves only this feature also accepts `DATABASE_URL` | |
 | `SETTINGS_FILE` | installation settings (FRAMEWORK 4.8); empty = no seed data check, no dataspace name, reference data from 6.4 | `config/installation.json` |
 | `COMPANY_ROLES_FILE` | role catalogue (6.5) | `config/company-roles.json` |
 | `LANGUAGES` | languages for descriptions | `de,en` |
@@ -396,13 +397,13 @@ The portal role `Applicant` has no permission of this module. For queries and st
 
 ## 7. Operations
 
-All paths start with `/api/c3-m1`. Checks as in 6.8. Errors as in section 12.
+All paths start with `/api/company-profile`. Checks as in 6.8. Errors as in section 12.
 
-### 7.1 `GET /api/c3-m1/companies/{companyId}`
+### 7.1 `GET /api/company-profile/companies/{companyId}`
 
 Permission `view_company`, scope `company`. Returns the company (`Company`): master data, identifiers with source, source of the core data with time of the last verification, BPN, status, company roles with status and `dataspaceName` from the installation settings.
 
-### 7.2 `PATCH /api/c3-m1/companies/{companyId}`
+### 7.2 `PATCH /api/company-profile/companies/{companyId}`
 
 Permission `edit_company`, scope `company`. Changes the short name.
 
@@ -412,7 +413,7 @@ Permission `edit_company`, scope `company`. Changes the short name.
 4. No change: 200 without event and without audit log entry.
 5. Store, audit log with old and new value, event `CompanyDataChanged` with `changedFields` `[shortName]` and `coreDataChanged` `false`. Response 200 with the company.
 
-### 7.3 `POST /api/c3-m1/companies/{companyId}/attestation-updates`
+### 7.3 `POST /api/company-profile/companies/{companyId}/attestation-updates`
 
 Permission `edit_company`, scope `company`. Changes the core data with a new verification attestation of the EBW-Connector of the installation, immediately and without OSP staff (OP-10). The UI obtains the verification attestation as in onboarding (scopes `openid profile representation company attestation`) and passes it on here. Input: `attestation` (compact JWS).
 
@@ -425,7 +426,7 @@ Permission `edit_company`, scope `company`. Changes the core data with a new ver
 
 An open change request remains; on approval the rules for the source valid at that time apply (7.17).
 
-### 7.4 `POST /api/c3-m1/companies/{companyId}/change-requests`
+### 7.4 `POST /api/company-profile/companies/{companyId}/change-requests`
 
 Permission `edit_company`, scope `company`. Change request with supporting documents, for the path without Business Wallet and for further identifiers. Input as `multipart/form-data`:
 
@@ -443,19 +444,19 @@ Procedure:
 7. Check the supporting documents: number, size per file up to `CHANGE_REQUEST_MAX_DOCUMENT_BYTES`, type PDF, PNG or JPEG from the first bytes. Otherwise 400 `document-invalid`.
 8. Store with status `OPEN`, `requested_by` = `sub`; store the supporting documents; audit log; event `CompanyChangeRequestSubmitted`. Response 201 `ChangeRequest`.
 
-### 7.5 `GET /api/c3-m1/companies/{companyId}/change-requests`
+### 7.5 `GET /api/company-profile/companies/{companyId}/change-requests`
 
 Permission `view_company`, scope `company`. Change requests of the company, newest first, paged (`page`, `size`). Per supporting document only `id`, `fileName`, `mediaType`, `sizeBytes`; no content, no `decidedBy`.
 
-### 7.6 `POST /api/c3-m1/companies/{companyId}/change-requests/{changeRequestId}/withdraw`
+### 7.6 `POST /api/company-profile/companies/{companyId}/change-requests/{changeRequestId}/withdraw`
 
 Permission `edit_company`, scope `company`. Unknown or of another company: 404. `WITHDRAWN`: 200 without change. `APPROVED` or `DECLINED`: 409 `invalid-state`. Otherwise status `WITHDRAWN`, `closed_at`, audit log, event `CompanyChangeRequestClosed` with `outcome` `WITHDRAWN`. Response 200 `ChangeRequest`.
 
-### 7.7 `GET /api/c3-m1/companies/{companyId}/company-roles?lang=`
+### 7.7 `GET /api/company-profile/companies/{companyId}/company-roles?lang=`
 
 Permission `view_company`, scope `company`. All roles of the catalogue with `assignableBy` `COMPANY` and all roles that the company has or had, each with status (`ACTIVE`, `REQUESTED`, `INACTIVE` or `NONE`), description in `lang` (default `en`) and, for each of the terms: key, active version, title and document URL (from C1-M2, 11.1), consented version, consent status and time. This way the UI also shows the Company Admin the roles that can be added.
 
-### 7.8 `POST /api/c3-m1/companies/{companyId}/company-roles`
+### 7.8 `POST /api/company-profile/companies/{companyId}/company-roles`
 
 Permission `edit_company_roles`, scope `company`. Add a role. Input: `companyRole`, `consents` (list of `agreementKey` and `version`: the terms that the Company Admin consents to for the company).
 
@@ -466,7 +467,7 @@ Permission `edit_company_roles`, scope `company`. Add a role. Input: `companyRol
 5. Store the consents (status `ACTIVE`, version, source `COMPANY`, `consented_by` = `sub`, `consented_at` = now), role `ACTIVE` with source `COMPANY`.
 6. Audit log, event `CompanyRolesChanged` with all active roles. Response 200 with the roles as in 7.7.
 
-### 7.9 `DELETE /api/c3-m1/companies/{companyId}/company-roles/{companyRole}`
+### 7.9 `DELETE /api/company-profile/companies/{companyId}/company-roles/{companyRole}`
 
 Permission `edit_company_roles`, scope `company`.
 
@@ -478,15 +479,15 @@ Permission `edit_company_roles`, scope `company`.
 
 The module does not check consequences for offers or subscriptions of the company.
 
-### 7.10 `GET /api/c3-m1/osp/companies`
+### 7.10 `GET /api/company-profile/osp/companies`
 
 Permission `view_companies`, scope `osp`. Filters: `status` (repeatable), `name` (contains, case-insensitive), `bpn`, `hasBpn` (`true` or `false`), `companyRole` (active only), `coreDataSource`. Sorted by `createdAt` descending, paged. Response `{ items, page, size, total }` with summaries (`CompanySummary`).
 
-### 7.11 `GET /api/c3-m1/osp/companies/{companyId}`
+### 7.11 `GET /api/company-profile/osp/companies/{companyId}`
 
 Permission `view_companies`, scope `osp`. The company with all fields (`CompanyDetail`), including `applicationId`, `verificationRef`, `bpnAssignedAt`, `deactivationReason`, all timestamps and `openChangeRequestId`. Unknown: 404.
 
-### 7.12 `PATCH /api/c3-m1/osp/companies/{companyId}`
+### 7.12 `PATCH /api/company-profile/osp/companies/{companyId}`
 
 Permission `manage_companies`, scope `osp`. Correction by OSP staff, for example after a hint in the Application Review or if the Business Wallet is no longer available. Input: fields as in 6.6 (`name`, `shortName`, `address` with country, `identifiers`) and the required field `reason` (1 to 500 characters).
 
@@ -497,7 +498,7 @@ Permission `manage_companies`, scope `osp`. Correction by OSP staff, for example
 5. No change: 200 without event and without audit log entry.
 6. Store. If the name or address of a company with source `EBW` changes: source `MANUAL`, `verification_ref` empty. If core data changes: `core_data_verified_at` = now. Audit log with `reason`, event `CompanyDataChanged` (`coreDataChanged` `true` if core data is affected). Response 200 `CompanyDetail`.
 
-### 7.13 `POST /api/c3-m1/osp/companies/{companyId}/deactivate`
+### 7.13 `POST /api/company-profile/osp/companies/{companyId}/deactivate`
 
 Permission `manage_companies`, scope `osp`. Manual deactivation (FRAMEWORK 5.4). Input: `reason` (justification, 1 to 500 characters).
 
@@ -507,19 +508,19 @@ Permission `manage_companies`, scope `osp`. Manual deactivation (FRAMEWORK 5.4).
 
 The flow in FRAMEWORK 5.4 controls the consequences (lock accounts and technical users, revoke the membership credential, deregister the membership at the CSP). An open change request stays open; it can be approved only after a reactivation, and declined at any time.
 
-### 7.14 `GET /api/c3-m1/osp/change-requests`
+### 7.14 `GET /api/company-profile/osp/change-requests`
 
 Permission `review_company_changes`, scope `osp`. Filters: `status` (repeatable), `companyId`. Sorted by `createdAt` ascending (oldest first), paged. Response `{ items, page, size, total }` with `ChangeRequest` and the name of the company.
 
-### 7.15 `GET /api/c3-m1/osp/change-requests/{changeRequestId}`
+### 7.15 `GET /api/company-profile/osp/change-requests/{changeRequestId}`
 
 Permission `review_company_changes`, scope `osp`. The change request (`ChangeRequestDetail`) with the current state of the company for comparison (name, address, identifiers, source of the core data, status) and the information on the supporting documents. Unknown: 404.
 
-### 7.16 `GET /api/c3-m1/osp/change-requests/{changeRequestId}/documents/{documentId}`
+### 7.16 `GET /api/company-profile/osp/change-requests/{changeRequestId}/documents/{documentId}`
 
 Permission `review_company_changes`, scope `osp`. Returns the content of a supporting document with the stored `Content-Type` and `Content-Disposition: attachment` with the file name. Unknown or belonging to another change request: 404. Audit log entry with `sub` and `documentId`.
 
-### 7.17 `POST /api/c3-m1/osp/change-requests/{changeRequestId}/approve`
+### 7.17 `POST /api/company-profile/osp/change-requests/{changeRequestId}/approve`
 
 Permission `review_company_changes`, scope `osp`. Input: optional `comment` (up to 1000 characters, audit log only).
 
@@ -531,7 +532,7 @@ Permission `review_company_changes`, scope `osp`. Input: optional `comment` (up 
 6. Events: `CompanyDataChanged`, if anything has changed compared with the current state; `CompanyChangeRequestClosed` with `outcome` `APPROVED`.
 7. Response 200 `ChangeRequest`.
 
-### 7.18 `POST /api/c3-m1/osp/change-requests/{changeRequestId}/decline`
+### 7.18 `POST /api/company-profile/osp/change-requests/{changeRequestId}/decline`
 
 Permission `review_company_changes`, scope `osp`. Input: `reason` (1 to 1000 characters, required; the Company Admin sees it in 7.5).
 
@@ -545,7 +546,7 @@ Common rules as in FRAMEWORK 4.4:
 - Result `{ "stepRunId", "state": "DONE", "result" }`. All steps of this module are short; there is no `RUNNING`.
 - Errors as Problem Details with `retryable` (section 12). What the step has already changed stays; a repetition completes it.
 
-### 8.1 `POST /api/c3-m1/steps/create-company`
+### 8.1 `POST /api/company-profile/steps/create-company`
 
 In onboarding and in a transfer to this OSP, after `ApplicationSubmitted` (kind `ONBOARDING` or `TRANSFER`). From submission on, the application data is fixed.
 
@@ -561,7 +562,7 @@ In onboarding and in a transfer to this OSP, after `ApplicationSubmitted` (kind 
 
 On the return of a company that transferred away (application of kind `TRANSFER` for an existing `companyId`, OP-38), the flow does not call `create-company`; a call gives 409 `conflict` as in point 1.
 
-### 8.2 `POST /api/c3-m1/steps/assign-identifier`
+### 8.2 `POST /api/company-profile/steps/assign-identifier`
 
 In onboarding and in a transfer, after `CompanyRegisteredAtCsp` from C3-M2. Replaces the former step `request-identifier`.
 
@@ -578,7 +579,7 @@ In onboarding and in a transfer, after `CompanyRegisteredAtCsp` from C3-M2. Repl
 
 If the registration at the CSP fails, the flow does not call this step (6.2).
 
-### 8.3 `POST /api/c3-m1/steps/activate-company`
+### 8.3 `POST /api/company-profile/steps/activate-company`
 
 In onboarding and in a transfer at the end, after `assign-company-admin` (C2-M2).
 
@@ -595,7 +596,7 @@ In onboarding and in a transfer at the end, after `assign-company-admin` (C2-M2)
 
 C3-M2 registers the membership in the dataspace (`register-membership`), not this step.
 
-### 8.4 `POST /api/c3-m1/steps/reject-company`
+### 8.4 `POST /api/company-profile/steps/reject-company`
 
 In onboarding and in a transfer, after `ApplicationDeclined` or `ApplicationWithdrawn`.
 
@@ -605,7 +606,7 @@ In onboarding and in a transfer, after `ApplicationDeclined` or `ApplicationWith
 - **Result:** `companyId`, `status`.
 - **Event:** `CompanyRejected`.
 
-### 8.5 `POST /api/c3-m1/steps/deactivate-company`
+### 8.5 `POST /api/company-profile/steps/deactivate-company`
 
 In a transfer to another OSP, after `CompanyTransferredAway` from C3-M2, with reason `TRANSFERRED` (FRAMEWORK 5.6). Also usable for other flows with reason `MANUAL`. Manual deactivation runs through 7.13.
 
@@ -619,7 +620,7 @@ In a transfer to another OSP, after `CompanyTransferredAway` from C3-M2, with re
 - **Result:** `companyId`, `status`, `deactivationReason`.
 - **Event:** `CompanyDeactivated`, then the flow in FRAMEWORK 5.4.
 
-### 8.6 `POST /api/c3-m1/steps/reactivate-company`
+### 8.6 `POST /api/company-profile/steps/reactivate-company`
 
 In a reactivation after `ApplicationApproved` with kind `REACTIVATION` (FRAMEWORK 5.5). On the return of a company that transferred away with kind `TRANSFER`, after `CompanyRegisteredAtCsp` and `assign-identifier`, instead of `activate-company` (OP-38).
 
@@ -642,17 +643,17 @@ Company roles and their consents stay as before the deactivation. C1-M2 obtains 
 
 In the same process without a token; over HTTP with the permission `query_c3_m1`. The queries change nothing. Callers may cache the result briefly; this module remains authoritative.
 
-### 9.1 `GET /api/c3-m1/internal/companies/{companyId}`
+### 9.1 `GET /api/company-profile/internal/companies/{companyId}`
 
 One company (`CompanyInternal`): `id`, `name`, `shortName`, `address`, `identifiers` (with source), `coreDataSource`, `status`, `bpn`, `companyRoles` (active only), `deactivationReason`, `createdAt`, `activatedAt`, `deactivatedAt`. Unknown: 404 `not-found`.
 
 Used by: C2-M2, C2-M3, C4-M1, C4-M2 (status, BPN, name, roles); C1-M2 (master data in reactivation and return); Process Orchestration (data for C3-M2 `register-company`: `name` → `legalName`, identifiers `EBWOID` and `EUID`, `address.countryCode` → `country`, address with `street` and `houseNumber` joined into `streetAddress`).
 
-### 9.2 `GET /api/c3-m1/internal/companies?id=…&id=…` or `?bpn=…&bpn=…`
+### 9.2 `GET /api/company-profile/internal/companies?id=…&id=…` or `?bpn=…&bpn=…`
 
 Many companies at once, for example for lists of offers with the name of the provider. Exactly one of the two kinds must be given, with 1 to `QUERY_MAX_COMPANIES` values; otherwise 400 `validation`. BPN case-insensitive. Response `{ "items": [CompanyInternal], "notFound": [value] }`, `items` in the order of the request.
 
-### 9.3 `POST /api/c3-m1/internal/companies/identifier-matches`
+### 9.3 `POST /api/company-profile/internal/companies/identifier-matches`
 
 Duplicate search in the own installation. Complements the duplicate check at the CSP (C3-M2 `find-companies`): the CSP knows a company only after approval; only this query finds two open applications for the same company at this OSP. The query changes nothing; POST only because of the list in the body.
 
@@ -662,7 +663,7 @@ Duplicate search in the own installation. Complements the duplicate check at the
 
 C1-M3 decides whether a match is a duplicate.
 
-### 9.4 `GET /api/c3-m1/internal/company-roles?lang=`
+### 9.4 `GET /api/company-profile/internal/company-roles?lang=`
 
 Role catalogue: per role `companyRole`, `assignableBy`, description in `lang` and all descriptions. For C2-M3 (assignable roles of technical users per company role) and other modules. The terms of the roles are at C1-M2 (9.3 there). People do not read the catalogue here, but through C1-M2 (application) or 7.7 (own company).
 
@@ -693,8 +694,8 @@ Every neighbour has a built-in stand-in (FRAMEWORK 4.7): empty address = stand-i
 
 | Call | Response (fields used) | Built-in stand-in |
 |---|---|---|
-| `get_application_internal(applicationId=…)`, over HTTP `GET /api/c1-m2/internal/applications/{applicationId}` (`ApplicationInternal`, C1-M2 9.1) | `id`, `companyId`, `kind` (`ONBOARDING`, `REACTIVATION`, `TRANSFER`), `existingCompany`, `status`, `verification` (`EBW` or `DOCUMENTS`), `applicant.sub`; `companyData` (`legalName`, `shortName`, `address` with `streetName`, `streetNumber`, `postalCode`, `city`, `region`, `countryCode`; `identifiers` with `type`, `value`, `source` `ATTESTATION` or `APPLICANT`); `companyRoles`; with `EBW` `attestation` (`attestationId` = `jti`, `verifiedAt`); `consents` (each with `agreementKey`, `version`, `language`, `givenAt`; empty before submission) | reads `STUB_APPLICATIONS_FILE` (same format); unknown ID: 404 |
-| `list_agreements_internal()`, over HTTP `GET /api/c1-m2/internal/agreements` (`AgreementVersion`, C1-M2 9.3) | active versions: `agreementKey`, `version`, `scope`, `companyRoles`, `title`, `documentUrls` | the initial values of C1-M2 14.3 |
+| `get_application_internal(applicationId=…)`, over HTTP `GET /api/registration/internal/applications/{applicationId}` (`ApplicationInternal`, C1-M2 9.1) | `id`, `companyId`, `kind` (`ONBOARDING`, `REACTIVATION`, `TRANSFER`), `existingCompany`, `status`, `verification` (`EBW` or `DOCUMENTS`), `applicant.sub`; `companyData` (`legalName`, `shortName`, `address` with `streetName`, `streetNumber`, `postalCode`, `city`, `region`, `countryCode`; `identifiers` with `type`, `value`, `source` `ATTESTATION` or `APPLICANT`); `companyRoles`; with `EBW` `attestation` (`attestationId` = `jti`, `verifiedAt`); `consents` (each with `agreementKey`, `version`, `language`, `givenAt`; empty before submission) | reads `STUB_APPLICATIONS_FILE` (same format); unknown ID: 404 |
+| `list_agreements_internal()`, over HTTP `GET /api/registration/internal/agreements` (`AgreementVersion`, C1-M2 9.3) | active versions: `agreementKey`, `version`, `scope`, `companyRoles`, `title`, `documentUrls` | the initial values of C1-M2 14.3 |
 
 Mapping: `companyData.legalName` → `name`, `companyData.shortName` → `shortName`; `address.streetName` → `street`, `address.streetNumber` → `houseNumber`, the other address fields with the same name; identifier source `ATTESTATION` → `BUSINESS_WALLET`, `APPLICANT` → `DECLARED`; `verification` `EBW` → core data source `EBW`, `DOCUMENTS` → `MANUAL`; `companyRoles` are the requested roles; `applicant.sub` → `consented_by`; `givenAt` → `consented_at`.
 

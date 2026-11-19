@@ -56,7 +56,8 @@ The module has no user interface. Callers:
 
 ## 4. Technical frame
 
-- Python with FastAPI, part of the modular monolith. Process Orchestration calls the steps in the same process; the HTTP paths in [openapi.yaml](openapi.yaml) describe the same contract.
+- **Feature `application_review`** (FRAMEWORK 4.9): served under `/api/application-review`. Problem types, event sources, permissions and service accounts keep the module identifier `c1-m3`.
+- Python with FastAPI, a feature of the modular monolith. Process Orchestration calls the steps in the same process; the HTTP paths in [openapi.yaml](openapi.yaml) describe the same contract.
 - Own database `c1_m3` in PostgreSQL with its own database user.
 - Every HTTP call of a person carries their token from the OSP's Portal IAM. The shared library validates it and provides the claims, including `sub` and the permissions (FRAMEWORK 4.2).
 - Events through the outbox of the base skeleton, in the same transaction as the change.
@@ -67,7 +68,7 @@ The module has no user interface. Callers:
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | own database `c1_m3` | |
+| `APPLICATION_REVIEW_DATABASE_URL` | own database `application_review` (FRAMEWORK 4.9); a runtime that serves only this feature also accepts `DATABASE_URL` | |
 | `IAM_URL`, `IAM_REALM` | the OSP's Portal IAM for token validation | `https://iam.osp-a.example.org/auth`, `osp-a` |
 | `ENABLED_CHECKS` | enabled checks, comma-separated (6.2) | `ATTESTATION_VALID,REPRESENTATION_CONFIRMED,COMPANY_DATA_MATCH,NO_DUPLICATE,CSP_MATCH_EXPECTED,CONSENTS_COMPLETE` |
 | `DUPLICATE_CHECK_IDENTIFIER_TYPES` | identifier types for the duplicate check in the installation | `EUID,EBWOID,VAT_ID,LEI_CODE` |
@@ -364,21 +365,21 @@ Every neighbour has a built-in stand-in (FRAMEWORK 4.7). The stand-in files are 
 
 | Call | Response | Built-in stand-in |
 |---|---|---|
-| `GET /api/c1-m2/internal/applications/{applicationId}` | `ApplicationInternal` (C1-M2 README 9.1) | reads `STUB_APPLICATIONS_FILE`: list of `ApplicationInternal`; `signatureCheck` as in the file; application missing: 404 |
-| `GET /api/c1-m2/internal/applications?applicationId=…` | list of `ApplicationSummary` (C1-M2 README 9.2), also for the status before a decision | built from the same file |
+| `GET /api/registration/internal/applications/{applicationId}` | `ApplicationInternal` (C1-M2 README 9.1) | reads `STUB_APPLICATIONS_FILE`: list of `ApplicationInternal`; `signatureCheck` as in the file; application missing: 404 |
+| `GET /api/registration/internal/applications?applicationId=…` | list of `ApplicationSummary` (C1-M2 README 9.2), also for the status before a decision | built from the same file |
 
 ### 11.2 C3-M1 Company Profile (`COMPANY_URL`)
 
 | Call | Response | Built-in stand-in |
 |---|---|---|
-| `POST /api/c3-m1/internal/companies/identifier-matches` with `identifiers`, `excludeCompanyId`, `statuses` (C3-M1 README 9.3); in the same process `find_identifier_matches(identifiers=…, excludeCompanyId=…, statuses=…)` | `matches`: per company `companyId`, `status`, `bpn`, `matchedOn` | reads `STUB_COMPANIES_FILE`; comparison per type in upper case without spaces, `.`, `-`, `/` |
-| `GET /api/c3-m1/internal/companies/{companyId}` (C3-M1 README 9.1); in the same process `query_company(companyId=…)`; only for `REACTIVATION` and return | `CompanyInternal`; C1-M3 reads `id`, `status`, `bpn`; 404 if unknown | from the same file |
+| `POST /api/company-profile/internal/companies/identifier-matches` with `identifiers`, `excludeCompanyId`, `statuses` (C3-M1 README 9.3); in the same process `find_identifier_matches(identifiers=…, excludeCompanyId=…, statuses=…)` | `matches`: per company `companyId`, `status`, `bpn`, `matchedOn` | reads `STUB_COMPANIES_FILE`; comparison per type in upper case without spaces, `.`, `-`, `/` |
+| `GET /api/company-profile/internal/companies/{companyId}` (C3-M1 README 9.1); in the same process `query_company(companyId=…)`; only for `REACTIVATION` and return | `CompanyInternal`; C1-M3 reads `id`, `status`, `bpn`; 404 if unknown | from the same file |
 
 ### 11.3 C3-M2 CSP Connection (`CSP_CONNECTION_URL`)
 
 | Call | Response | Built-in stand-in |
 |---|---|---|
-| `GET /api/c3-m2/internal/find-companies?ebwoid=&euid=&legalName=&country=` (C3-M2 README 9) | list of `CspCompanyMatch`: `bpn`, `legalName`, `country`, `matchedBy`, `homeOspId`, `homeOspName`, `homeIsThisOsp`, `memberActive`; 502 if the CSP is not reachable | reads `STUB_CSP_FILE`: matches by the same EBWOID (`EBWOID`), the same EUID (`EUID`) or the same name and the same country, ignoring case (`NAME`); per entry one match with the strongest type |
+| `GET /api/csp-connection/internal/find-companies?ebwoid=&euid=&legalName=&country=` (C3-M2 README 9) | list of `CspCompanyMatch`: `bpn`, `legalName`, `country`, `matchedBy`, `homeOspId`, `homeOspName`, `homeIsThisOsp`, `memberActive`; 502 if the CSP is not reachable | reads `STUB_CSP_FILE`: matches by the same EBWOID (`EBWOID`), the same EUID (`EUID`) or the same name and the same country, ignoring case (`NAME`); per entry one match with the strongest type |
 
 ## 12. Errors
 

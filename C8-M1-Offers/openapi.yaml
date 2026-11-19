@@ -12,7 +12,7 @@ info:
       provider company, `/osp` for OSP staff, `/internal` for other modules.
     - Errors as Problem Details (RFC 9457), identifiers in README section 12.
 servers:
-- url: /api/c8-m1
+- url: /api/offers
 security:
 - portalIam: []
 tags:

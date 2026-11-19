@@ -55,7 +55,8 @@ Callers:
 
 ## 4. Technical frame
 
-- Module of the modular monolith (Python, FastAPI), own database `c12_m1` in PostgreSQL.
+- **Feature `process_orchestration`** (FRAMEWORK 4.9): served under `/api/process-orchestration`. Problem types, event sources, permissions and service accounts keep the module identifier `c12-m1`.
+- Feature of the modular monolith (Python, FastAPI), own database `process_orchestration` in the PostgreSQL instance of the installation, with its own database role `process_orchestration` (FRAMEWORK 4.9).
 - **Calling steps:** in the same process through the public interface of the module; if a module is split out, over HTTP at `{module address}/steps/{step}` with a token of the service account of Process Orchestration (permission `execute_steps_<module>`, FRAMEWORK 4.2). Lookups the same way under `/internal/...` (permission `query_<module>`).
 - **Receiving events:** the module subscribes to all event types that its flows name (`type` of the CloudEvent, FRAMEWORK 6). Delivery is at least once; the module ignores an event whose `id` it has already processed.
 - **Worker:** picks due step runs, locks them (`SELECT … FOR UPDATE SKIP LOCKED`), calls the step, stores the result. Several workers may run; a step run is never called twice at the same time.
@@ -66,7 +67,7 @@ Callers:
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | own database `c12_m1` | |
+| `PROCESS_ORCHESTRATION_DATABASE_URL` | own database `process_orchestration` (FRAMEWORK 4.9); a runtime that serves only this feature also accepts `DATABASE_URL` | |
 | `FLOWS_FILE` | flow definitions | `config/flows.yaml` |
 | `MODULE_URLS` | address per module: empty = built-in stand-in (section 11.3), `in-process`, or HTTP address (FRAMEWORK 4.7) | `{"c3-m2": "in-process", "c8-m1": ""}` |
 | `RETRY_BASE_SECONDS`, `RETRY_FACTOR`, `RETRY_MAX_SECONDS` | wait time before a repetition | `5`, `2`, `600` |
@@ -225,7 +226,7 @@ A lookup is declared once under `lookups` in [flows.yaml](flows.yaml). It runs w
 
 | Field | Meaning |
 |---|---|
-| `query` | `<module>.<operationId>` of a `GET` operation under `/internal` in the `openapi.yaml` of that module, e.g. `c3-m1.queryCompany` for `GET /api/c3-m1/internal/companies/{companyId}` |
+| `query` | `<module>.<operationId>` of a `GET` operation under `/internal` in the `openapi.yaml` of that module, e.g. `c3-m1.queryCompany` for `GET /api/company-profile/internal/companies/{companyId}` |
 | `params` | parameter of that operation → source (as for `input`, 6.1). The operation defines whether a parameter is a path or a query parameter |
 | `fields` | field of the lookup → field path in the answer, or a mapping (below) |
 
@@ -259,19 +260,19 @@ A failed lookup is never `found: false`; otherwise steps with a `when` on the lo
 
 All operations by OSP staff over HTTP with a token of the Portal IAM (tag `OSP`), except 7.8 for applicants (tag `Company`, scope `own`).
 
-### 7.1 `GET /api/c12-m1/processes`
+### 7.1 `GET /api/process-orchestration/processes`
 
 Permission `view_processes`. Filters: `flowKey`, `status`, `subjectType`, `subjectId`, `updatedSince`; paging as in FRAMEWORK 4.1, sorted by `updatedAt` descending. Response 200 `ProcessSummaryPage`.
 
-### 7.2 `GET /api/c12-m1/processes/{processId}`
+### 7.2 `GET /api/process-orchestration/processes/{processId}`
 
 Permission `view_processes`. Response 200 `Process` with all step runs (without attempts). Unknown: 404.
 
-### 7.3 `GET /api/c12-m1/processes/{processId}/steps/{stepKey}`
+### 7.3 `GET /api/process-orchestration/processes/{processId}/steps/{stepKey}`
 
 Permission `view_processes`. Response 200 `StepRunDetail` with the attempts. Unknown process or step: 404.
 
-### 7.4 `POST /api/c12-m1/processes/{processId}/steps/{stepKey}/retrigger`
+### 7.4 `POST /api/process-orchestration/processes/{processId}/steps/{stepKey}/retrigger`
 
 Permission `retrigger_process_steps`. Input optional `comment` (up to 500 characters).
 
@@ -280,7 +281,7 @@ Permission `retrigger_process_steps`. Input optional `comment` (up to 500 charac
 3. Step becomes `READY`, attempts start at 0, `await_until` is reset; process status `RUNNING`.
 4. Audit log entry, event `ProcessStepRetriggered`. Response 202 with the step run.
 
-### 7.5 `GET /api/c12-m1/flows` and `GET /api/c12-m1/flows/{flowKey}`
+### 7.5 `GET /api/process-orchestration/flows` and `GET /api/process-orchestration/flows/{flowKey}`
 
 Permission `view_processes`. The loaded flow definitions as JSON, so that the UI can show the steps of a process before they run.
 
@@ -298,11 +299,11 @@ The UI learns about changes of a process without polling. Data flows only from t
 - **Heartbeat:** the module sends a comment line (`: keep-alive`) every `SSE_HEARTBEAT_SECONDS`, so that proxies keep the connection open. The first message of a stream sets `retry: 3000` (the browser reconnects after 3 seconds).
 - The event stream is a message to the UI, not an event of the event bus (section 10).
 
-### 7.7 `GET /api/c12-m1/processes/{processId}/events`
+### 7.7 `GET /api/process-orchestration/processes/{processId}/events`
 
 Permission `view_processes` (scope `osp`), as 7.2. Events of this process (7.6). Unknown process: 404.
 
-### 7.8 `GET /api/c12-m1/applications/{applicationId}/events`
+### 7.8 `GET /api/process-orchestration/applications/{applicationId}/events`
 
 Permission `register_company` (scope `own`, FRAMEWORK 4.3). The applicant follows the processes of their own application, e.g. the onboarding after submission (FRAMEWORK 5.2), without access to 7.1 to 7.5.
 
@@ -316,7 +317,7 @@ None. This module calls the steps of the other modules; it offers none itself.
 
 ## 9. Queries for other modules
 
-### `GET /api/c12-m1/internal/processes`
+### `GET /api/process-orchestration/internal/processes`
 
 Parameters `subjectType`, `subjectId` (both required). Response 200: list of `ProcessSummary` of this subject, newest first. Use: Subscriptions shows the setup status of a subscription; C1-M2 may show why an approved application is not yet active.
 

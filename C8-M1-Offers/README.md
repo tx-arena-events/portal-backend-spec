@@ -52,7 +52,8 @@ Callers:
 
 ## 4. Technical frame
 
-- Module of the modular monolith (Python, FastAPI), own database `c8_m1` in PostgreSQL. Documents are stored in the own database (up to `MAX_DOCUMENT_MB`).
+- **Feature `offers`** (FRAMEWORK 4.9): served under `/api/offers`. Problem types, event sources, permissions and service accounts keep the module identifier `c8-m1`.
+- Feature of the modular monolith (Python, FastAPI), own database `offers` in the PostgreSQL instance of the installation, with its own database role `offers` (FRAMEWORK 4.9). Documents are stored in the own database (up to `MAX_DOCUMENT_MB`).
 - People call with their token from the Portal IAM (FRAMEWORK 4.2). The provider side is checked with the scope `company` against `providerCompanyId`.
 - Events through the outbox of the module.
 
@@ -60,7 +61,7 @@ Callers:
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | own database `c8_m1` | |
+| `OFFERS_DATABASE_URL` | own database `offers` (FRAMEWORK 4.9); a runtime that serves only this feature also accepts `DATABASE_URL` | |
 | `COMPANY_URL` | C3-M1: empty = built-in stand-in, `in-process`, or HTTP address (FRAMEWORK 4.7) | `in-process` |
 | `APP_ACCESS_URL` | C2-M2 | `in-process` |
 | `SUBSCRIPTION_URL` | C10-M1 | `in-process` |
@@ -183,9 +184,9 @@ All other operations (favourites, document lists and downloads, roles of an acti
 
 ### 7.1 Lists
 
-- `GET /api/c8-m1/marketplace/offers`: offers in `ACTIVE`; filters `offerType`, `serviceType`, `useCaseId`, `search`, `favourite`.
-- `GET /api/c8-m1/offers`: all offers of the own company; filters `offerType`, `status`.
-- `GET /api/c8-m1/osp/offers`: offers for the review; filter `status`, default `IN_REVIEW`.
+- `GET /api/offers/marketplace/offers`: offers in `ACTIVE`; filters `offerType`, `serviceType`, `useCaseId`, `search`, `favourite`.
+- `GET /api/offers/offers`: all offers of the own company; filters `offerType`, `status`.
+- `GET /api/offers/osp/offers`: offers for the review; filter `status`, default `IN_REVIEW`.
 
 Response 200 `OfferPage` with `OfferSummary`.
 
@@ -193,31 +194,31 @@ Response 200 `OfferPage` with `OfferSummary`.
 
 `GET /marketplace/offers/{offerId}` (only `ACTIVE`, with `ownSubscriptionStatus` from C10), `GET /offers/{offerId}` (own offer, any status), `GET /osp/offers/{offerId}` (any status). Response 200 `Offer`. For an active app, `roles` comes from C2-M2 `/internal/app-roles`; for a draft, from `planned_role`.
 
-### 7.3 `POST /api/c8-m1/offers`
+### 7.3 `POST /api/offers/offers`
 
 Permission `manage_offers`. Input `OfferInput` with `offerType`. Checks 6.2. Response 201 `Offer` with `CREATED`.
 
-### 7.4 `PUT /api/c8-m1/offers/{offerId}`
+### 7.4 `PUT /api/offers/offers/{offerId}`
 
 Permission `manage_offers`, own offer. Changes allowed by status (6.1); a field that may not change in this status: 409 `invalid-state`. Response 200.
 
-### 7.5 `DELETE /api/c8-m1/offers/{offerId}`
+### 7.5 `DELETE /api/offers/offers/{offerId}`
 
 Permission `manage_offers`, own offer in `CREATED`. Response 204.
 
-### 7.6 `POST /api/c8-m1/offers/{offerId}/submit`
+### 7.6 `POST /api/offers/offers/{offerId}/submit`
 
 Permission `manage_offers`. Checks 6.2; missing items: 409 `submit-incomplete` with the list in `missing`. Event `OfferSubmitted`. Response 200.
 
-### 7.7 `POST /api/c8-m1/osp/offers/{offerId}/approve`
+### 7.7 `POST /api/offers/osp/offers/{offerId}/approve`
 
 Permission `approve_offers`. Status `IN_REVIEW`, otherwise 409. Status `ACTIVE`, `released_at`; event `OfferApproved`. Response 200. For an app, the flow `app-approval` then creates the template client with the planned roles and, for a single-instance app, the client of the instance.
 
-### 7.8 `POST /api/c8-m1/osp/offers/{offerId}/decline`
+### 7.8 `POST /api/offers/osp/offers/{offerId}/decline`
 
 Permission `approve_offers`. Input `reason` (1 to 1000 characters). Status `CREATED`, documents back to `PENDING`; event `OfferDeclined`. Response 200.
 
-### 7.9 `POST /api/c8-m1/offers/{offerId}/deactivate`
+### 7.9 `POST /api/offers/offers/{offerId}/deactivate`
 
 Permission `manage_offers`, own offer in `ACTIVE`. Status `INACTIVE`; event `OfferDeactivated`. Response 200. Existing subscriptions stay (C10 open question 3).
 
@@ -249,7 +250,7 @@ Permission `manage_offers`, own offer in `ACTIVE`. Status `INACTIVE`; event `Off
 
 `PUT` and `DELETE /marketplace/offers/{offerId}/favourite` (`view_marketplace`, scope `company`). Favourites are stored per person (`sub`); a person sees and changes only their own.
 
-### 7.15 `GET /api/c8-m1/reference-data`
+### 7.15 `GET /api/offers/reference-data`
 
 Permission `view_marketplace`. Service types, license types, privacy policies, document types with the statuses in which they may be changed, languages.
 
@@ -259,7 +260,7 @@ None. The steps after the approval belong to C2-M2; this module reports events a
 
 ## 9. Queries for other modules
 
-### 9.1 `GET /api/c8-m1/internal/offers/{offerId}`
+### 9.1 `GET /api/offers/internal/offers/{offerId}`
 
 Response 200 `OfferInternal`:
 
@@ -291,10 +292,10 @@ Every event is a CloudEvent (FRAMEWORK 6) with `source` `urn:c8-m1`; `type` is t
 
 | Neighbour (variable) | Call | Built-in stand-in |
 |---|---|---|
-| C3-M1 (`COMPANY_URL`) | `GET /api/c3-m1/internal/companies/{companyId}`: `status`, `companyRoles` | every company `ACTIVE` with both provider roles |
-| C2-M2 (`APP_ACCESS_URL`) | `GET /api/c2-m2/internal/app-roles?appId=`: roles of active apps | empty list |
-| C2-M3 (`TECHNICAL_USER_URL`) | `GET /api/c2-m3/internal/technical-roles?lang=` (C2-M3 9.3, permission `query_c2_m3`): `name` of every technical user role | the roles of C2-M5 6.4 as a fixed list, among them `Dataspace Discovery` |
-| C10-M1 (`SUBSCRIPTION_URL`) | `GET /api/c10-m1/internal/subscriptions?customerCompanyId=&offerId=`: own subscription status in the offer view | none |
+| C3-M1 (`COMPANY_URL`) | `GET /api/company-profile/internal/companies/{companyId}`: `status`, `companyRoles` | every company `ACTIVE` with both provider roles |
+| C2-M2 (`APP_ACCESS_URL`) | `GET /api/app-access/internal/app-roles?appId=`: roles of active apps | empty list |
+| C2-M3 (`TECHNICAL_USER_URL`) | `GET /api/technical-user/internal/technical-roles?lang=` (C2-M3 9.3, permission `query_c2_m3`): `name` of every technical user role | the roles of C2-M5 6.4 as a fixed list, among them `Dataspace Discovery` |
+| C10-M1 (`SUBSCRIPTION_URL`) | `GET /api/subscriptions/internal/subscriptions?customerCompanyId=&offerId=`: own subscription status in the offer view | none |
 
 No external systems.
 
