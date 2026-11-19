@@ -19,7 +19,7 @@ info:
     - Errors as Problem Details (RFC 9457), identifiers in README section 12.
     - Events under `components/schemas` (names start with `Event`), README section 10.
 servers:
-  - url: /api/c3-m1
+  - url: /api/company-profile
 security:
   - portalIam: []
 tags:

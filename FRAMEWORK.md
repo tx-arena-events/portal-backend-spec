@@ -1,6 +1,6 @@
 # Framework for the module specs (OSP 2.0)
 
-**As of:** 2026-10-30 (switch to OSP 2.0 on 2026-10-28). Binding for all module specs of this part. Modules take over what is written here and do not reinvent it. Deviations go into the module's `open-points.md`. Open questions that concern several modules are in the cross-module [open-points.md](open-points.md). The version for the PSP architecture is in the git history of this repository.
+**As of:** 2026-11-19 (switch to OSP 2.0 on 2026-10-28; feature-first architecture with readable base paths and one database per feature on 2026-11-17, 4.9, OP-55). Binding for all module specs of this part. Modules take over what is written here and do not reinvent it. Deviations go into the module's `open-points.md`. Open questions that concern several modules are in the cross-module [open-points.md](open-points.md). The version for the PSP architecture is in the git history of this repository.
 
 Overview graphic: [architecture-overview.png](architecture-overview.png).
 
@@ -13,31 +13,31 @@ Overview graphic: [architecture-overview.png](architecture-overview.png).
 - **Two wallets.** The EUDI Wallet of the person (phone) holds the PID and the mandate. The Business Wallet of the company (browser) holds the LPID and issues mandates to employees. The EBW-Connector (C5-M1) checks both.
 - **Sign-in without a password.** People sign in at the OSP's portal with the EUDI Wallet: the OSP's Portal IAM forwards to the EBW-Connector. There is no Company IAM and there are no passwords.
 - **Hackathon scenario:** one CSP and two OSPs. In the target picture, OSP A issues credentials itself and OSP B uses the CSP's issuer. At the hackathon on 6 Nov 2026 no real credentials are issued; both run on the stand-in of C4-M1 (`STUB`, OP-53). The aim for the demo at the Community Days is a real issuer. Several CSPs with federation and the connection between dataspaces are later work.
-- **Modular monolith** in Python with FastAPI. Process Orchestration and other modules call a module in the same process through its public interface; the UI calls over HTTP. `openapi.yaml` describes both as the same contract.
+- **Modular monolith of features** in Python with FastAPI. Every module of this part is implemented as one **feature**, named after the readable part of its folder (`C3-M1-CompanyProfile` → `company_profile`) and served under `/api/<feature>` (4.1, 4.9). Process Orchestration and other modules call a feature in the same process through its public interface; the UI calls over HTTP. `openapi.yaml` describes both as the same contract. Which features run together in one pod is a choice of the installation (runtimes, 4.9), not of the spec.
 - **Process Orchestration** (other part of the spec): flows are data. Every step of a flow runs through Process Orchestration; modules call each other directly only for queries. Event-driven, no polling. Long-running steps answer "running" and end with an event of their own. Modules do not know Process Orchestration; they describe their steps with preconditions, without a fixed order.
-- **Own database per module** (PostgreSQL), own database user. No module reads or writes the database of another module. References to data of other modules only by ID.
+- **Own database per feature** in one PostgreSQL instance of the installation, with its own database role (4.9). No module reads or writes the database of another module. References to data of other modules only by ID.
 - **Events** are CloudEvents (section 6). They go out through an outbox per module and never contain secrets.
 - **Roles only in the Portal IAM** of the OSP (Keycloak, configured only, no extension). Descriptions per language as role attributes `description.de`, `description.en`. Only modules of C2 write to Keycloak.
 
 ## 2. Modules
 
-| No. | Module | Folder | Kind | Purpose |
-|---|---|---|---|---|
-| C1-M1 | PSP Admission | `C1-M1-PSPAdmission` | dropped | admission of an OSP through the trust list of the CSP (governance, not a module of the installation) |
-| C1-M2 | Registration | `C1-M2-Registration` | Hackathon | application of a company at the OSP: data, verification attestation, consents, submission; reactivation and transfer |
-| C1-M3 | Application Review | `C1-M3-ApplicationReview` | Hackathon | review case per application, automatic pre-check (with duplicate check at the CSP), decision by OSP staff |
-| C2-M1 | Sign-in Services | `C2-M1-SignInService` | dropped | the only identity provider (EBW-Connector) is configuration in C2-M5 |
-| C2-M2 | Users and App Access | `C2-M2-AppAccess` | Hackathon | accounts of people without passwords, binding to a company, invitations, portal roles and app roles of people; client template and instance clients per app |
-| C2-M3 | Technical Users | `C2-M3-TechnicalUser` | Hackathon | technical users of companies (client with service account), wallet access as a property |
-| C2-M4 | Delegation | `C2-M4-Delegation` | dropped | an OSP and its portal are one |
-| C2-M5 | Portal IAM | `C2-M5-PortalIAM` | Configuration | realm of the OSP, identity provider EBW-Connector, client `portal-core`, permissions and portal roles, token contents |
-| C3-M1 | Company Profile | `C3-M1-CompanyProfile` | Hackathon | record of the company in the installation, company identifier (BPN) from the CSP, company roles, status |
-| C3-M2 | CSP Connection | `C3-M2-CSPConnection` | Hackathon (new) | register companies with the CSP (BPN, home OSP), duplicate check, membership, directory BPN → DID, connectors in the discovery, notifications from the CSP |
-| C4-M1 | Credentials | `C4-M1-Credentials` | Hackathon | trigger, track and revoke BPN and membership credentials at the issuer; own issuer or the CSP's |
-| C4-M2 | Dataspace Wallet Interface | `C4-M2-DataspaceWalletInterface` | Hackathon | vendor-neutral: dataspace wallet per company, wallet accounts for technical users; adapter per provider, also for the CSP's dataspace wallet |
-| C5-M1 | EBW-Connector | `C5-M1-EBWConnector` | Provided | checks EUDI Wallet and Business Wallet via OpenID4VP; OpenID Connect for Portal IAM, UI and Business Wallet; verification attestation for the registration |
+| No. | Module | Folder | Feature (base path) | Kind | Purpose |
+|---|---|---|---|---|---|
+| C1-M1 | PSP Admission | `C1-M1-PSPAdmission` | – | dropped | admission of an OSP through the trust list of the CSP (governance, not a module of the installation) |
+| C1-M2 | Registration | `C1-M2-Registration` | `registration` (`/api/registration`) | Hackathon | application of a company at the OSP: data, verification attestation, consents, submission; reactivation and transfer |
+| C1-M3 | Application Review | `C1-M3-ApplicationReview` | `application_review` (`/api/application-review`) | Hackathon | review case per application, automatic pre-check (with duplicate check at the CSP), decision by OSP staff |
+| C2-M1 | Sign-in Services | `C2-M1-SignInService` | – | dropped | the only identity provider (EBW-Connector) is configuration in C2-M5 |
+| C2-M2 | Users and App Access | `C2-M2-AppAccess` | `app_access` (`/api/app-access`) | Hackathon | accounts of people without passwords, binding to a company, invitations, portal roles and app roles of people; client template and instance clients per app |
+| C2-M3 | Technical Users | `C2-M3-TechnicalUser` | `technical_user` (`/api/technical-user`) | Hackathon | technical users of companies (client with service account), wallet access as a property |
+| C2-M4 | Delegation | `C2-M4-Delegation` | – | dropped | an OSP and its portal are one |
+| C2-M5 | Portal IAM | `C2-M5-PortalIAM` | – (Keycloak paths) | Configuration | realm of the OSP, identity provider EBW-Connector, client `portal-core`, permissions and portal roles, token contents |
+| C3-M1 | Company Profile | `C3-M1-CompanyProfile` | `company_profile` (`/api/company-profile`) | Hackathon | record of the company in the installation, company identifier (BPN) from the CSP, company roles, status |
+| C3-M2 | CSP Connection | `C3-M2-CSPConnection` | `csp_connection` (`/api/csp-connection`) | Hackathon (new) | register companies with the CSP (BPN, home OSP), duplicate check, membership, directory BPN → DID, connectors in the discovery, notifications from the CSP |
+| C4-M1 | Credentials | `C4-M1-Credentials` | `credentials` (`/api/credentials`) | Hackathon | trigger, track and revoke BPN and membership credentials at the issuer; own issuer or the CSP's |
+| C4-M2 | Dataspace Wallet Interface | `C4-M2-DataspaceWalletInterface` | `dataspace_wallet_interface` (`/api/dataspace-wallet-interface`) | Hackathon | vendor-neutral: dataspace wallet per company, wallet accounts for technical users; adapter per provider, also for the CSP's dataspace wallet |
+| C5-M1 | EBW-Connector | `C5-M1-EBWConnector` | – (paths of the standards) | Provided | checks EUDI Wallet and Business Wallet via OpenID4VP; OpenID Connect for Portal IAM, UI and Business Wallet; verification attestation for the registration |
 
-Modules of the other part, referred to by name only: **Process Orchestration**, **Offers** (apps and services), **Subscriptions**, **Connectors**, **Notifications**, **MCP server**. The **UI** of the OSP is built at the hackathon; it is not a module of this part.
+Modules of the other part, referred to by name only: **Process Orchestration**, **Offers** (apps and services), **Subscriptions**, **Connectors**, **Notifications**, **MCP server**. Their features: Connectors `connector` (`/api/connector`, C6-M1), Offers `offers` (`/api/offers`, C8-M1), Subscriptions `subscriptions` (`/api/subscriptions`, C10-M1), Notifications `notifications` (`/api/notifications`, C11-M1), Process Orchestration `process_orchestration` (`/api/process-orchestration`, C12-M1). The **UI** of the OSP is built at the hackathon; it is not a module of this part.
 
 External systems: EUDI Wallet and Business Wallet (through C5-M1), core services of the CSP (through C3-M2), issuers (own IssuerService or the CSP's, C4-M1), dataspace wallets (SAP DIV, IdentityHub, the CSP's dataspace wallet; C4-M2).
 
@@ -64,8 +64,8 @@ A dropped module keeps its folder with a short README: dropped since when, why, 
 ## 1. Purpose            (with a table of callers: Who | What for)
 ## 2. Terms
 ## 3. Not part of this module   (What | Where)
-## 4. Technical frame  (incl. ### Configuration as a table Variable | Meaning | Example)
-## 5. Data              (tables of the module's own database: Field | Type | Rule; what is deliberately not stored)
+## 4. Technical frame  (first bullet: feature name and base path, 4.9; incl. ### Configuration as a table Variable | Meaning | Example)
+## 5. Data              (tables of the feature's own database: Field | Type | Rule; what is deliberately not stored)
 ## 6. Rules             (status with transitions, permissions, repeatability)
 ## 7. Operations        (per path: step by step, checks, responses, errors)
 ## 8. Steps for Process Orchestration   (if any: input, preconditions, behaviour, result, event)
@@ -83,7 +83,8 @@ Sections that do not fit a module are dropped with a one-sentence reason; the nu
 
 ### 4.1 Paths, formats
 
-- Base per module: `/api/<module>` with the module identifier in lower case, e.g. `/api/c1-m2` (until the common path convention is settled). Exception: C5-M1 (standards).
+- Base per module: `/api/<feature>`, the feature name of the module (section 2, 4.9) with `-` instead of `_`, e.g. `/api/registration` for C1-M2 and `/api/company-profile` for C3-M1 (decided on 17 Nov 2026, OP-55; replaces the provisional `/api/<module>`). The `servers` entry of every `openapi.yaml` carries this base. The former base `/api/<module>` is not served (404). Exceptions: C5-M1 (standards) and C2-M5 (Keycloak).
+- **Identifiers keep the module identifier.** Only the address uses the feature name. Problem types (`urn:<module>:problem:<name>`, 4.5), the event `source` (`urn:<module>`, 6), permissions (`execute_steps_<module>`, `query_<module>`, 4.2), service accounts (`svc-<module>`), the keys of `MODULE_URLS` and the references in flows (`<module>.<step>`, C12-M1) stay as they are.
 - Resources in English, lower case with hyphens: `/applications/{id}/submit`.
 - JSON fields in camelCase, times in ISO 8601 UTC, IDs as UUID.
 - Lists with `page` (from 0) and `size` (1 to 100, default 20), response `{ "items", "page", "size", "total" }`.
@@ -152,6 +153,50 @@ Every installation has a file with common settings that every module reads at st
 | `ospCompanyFile` | seed data of the OSP company (C3-M1, C3-M2): JSON object with `companyId` (equal to `ospCompanyId`), `name`, `bpn`, `address` (`street`, `houseNumber`, `postalCode`, `city`, `countryCode`), `identifiers` (each `type`, `value`) and `companyRoles` | `config/osp-company.json` |
 
 Relative paths in the settings count from the settings file.
+
+### 4.9 Features, runtimes and databases
+
+Decided on 17 Nov 2026 (OP-55), with all modules of the backend migrated. The reference implementation is `dataspace-mgm-services` ([ADR-0003](https://github.com/eclipse-tractusx/dataspace-mgm-services/blob/main/docs/architecture/decisions/ADR-0003-feature-first-layout-and-runtimes.md)).
+
+**Feature.** Every module with an interface is implemented as one feature: one package that one team owns, reviews, tests and can deploy alone. The spec stays the contract per module; the feature is how it is built and addressed.
+
+| Module | Feature | Base path |
+|---|---|---|
+| C1-M2 Registration | `registration` | `/api/registration` |
+| C1-M3 Application Review | `application_review` | `/api/application-review` |
+| C2-M2 Users and App Access | `app_access` | `/api/app-access` |
+| C2-M3 Technical Users | `technical_user` | `/api/technical-user` |
+| C3-M1 Company Profile | `company_profile` | `/api/company-profile` |
+| C3-M2 CSP Connection | `csp_connection` | `/api/csp-connection` |
+| C4-M1 Credentials | `credentials` | `/api/credentials` |
+| C4-M2 Dataspace Wallet Interface | `dataspace_wallet_interface` | `/api/dataspace-wallet-interface` |
+| C6-M1 Connectors | `connector` | `/api/connector` |
+| C8-M1 Offers | `offers` | `/api/offers` |
+| C10-M1 Subscriptions | `subscriptions` | `/api/subscriptions` |
+| C11-M1 Notifications | `notifications` | `/api/notifications` |
+| C12-M1 Process Orchestration | `process_orchestration` | `/api/process-orchestration` |
+
+- **Name:** the readable part of the module folder in snake case (`C2-M3-TechnicalUser` → `technical_user`), never a plural that the folder does not have and never a team name. The base path uses the same name with `-`. A new module gets its feature name from its folder in the same way.
+- **Shape of a feature** (binding for the implementation, so code is found in the same place in every feature):
+
+  | Part | Holds |
+  |---|---|
+  | index | name, module identifier, lifecycle (start, reset, receiving events) |
+  | router | the controllers mounted under the base path; every operation is checked against the module's `openapi.yaml` and gets its `x-permission` from there |
+  | `interface` | the in-process contract for Process Orchestration and other modules: the steps (section 8 of the README) and queries (section 9) |
+  | `controllers/` | HTTP only, one folder per path segment of the API; checks the scope (4.3), calls one service, no business logic |
+  | `services/` | business logic, without HTTP, so Process Orchestration and other modules can call it in-process |
+  | `managers/` | state and adapters: repositories, storage, clients of neighbours and of external systems, configuration, stand-ins (4.7) |
+  | `models/` | request bodies, step inputs, responses and value sets with the field names of `openapi.yaml`; the tables of the database |
+  | runtime | the feature alone as its own service |
+
+  Dependencies only go downwards: controllers → services → managers; models are used by all. A feature calls another module only through that module's interface (in-process) or its HTTP paths (split out, 4.7), never through its code, its models or its database. Code that several features need is shared code of the installation, not part of one feature.
+- **Runtimes.** A runtime is a set of features that run together in one process: the whole installation (the modular monolith, default), a group (for example onboarding: `registration` and `company_profile`), or one feature alone. One image serves all of them; the installation chooses the runtime per pod. In a runtime, calls to its own features are `in-process`; every other module is called over HTTP with the token of the calling service account (4.2, 4.7), and events go through the event inbox (6). Moving a feature to another runtime changes configuration, not the spec.
+- **Databases.** One PostgreSQL instance per installation. Inside it, one database per feature, named after the feature (`company_profile`), owned by a database role of the same name that can connect only to its own database. Databases, not schemas: references to other modules stay IDs, enforced by the server.
+  - The feature reads its address from `<FEATURE>_DATABASE_URL` (`COMPANY_PROFILE_DATABASE_URL`). `DATABASE_URL` alone is accepted only by a runtime that serves exactly this one feature; a runtime with several features and only `DATABASE_URL` does not start, because its features would share one database.
+  - Without an address, a feature runs on a private in-memory database, so it can be tested alone (as the stand-ins in 4.7).
+  - Each feature owns its tables, its migrations and the version table in its own database and applies them at start with its own role. The credentials are one secret per feature; a pod receives only the secrets of the features it runs.
+  - The table names in section 5 of a README are the tables of this database. The audit log (4.3) and the outbox (6) are tables of the same database.
 
 **Configuration variables** (section 4 of each module README) come from one shared configuration of the installation. A name therefore means the same in every module that uses it. Where two modules need different values, their variables have different names (for example `INSTANCE_CLIENT_ID_PREFIX` in C2-M2 and `TECHNICAL_USER_CLIENT_ID_PREFIX` in C2-M3).
 

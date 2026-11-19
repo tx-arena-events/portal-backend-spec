@@ -22,7 +22,7 @@ defaults:
 
 lookups:
   company-core-data:
-    query: c3-m1.queryCompany           # GET /api/c3-m1/internal/companies/{companyId}
+    query: c3-m1.queryCompany           # GET /api/company-profile/internal/companies/{companyId}
     params: { companyId: companyId }
     fields:
       legalName: name
@@ -36,7 +36,7 @@ lookups:
         locality: address.city
         country: address.countryCode
   offer:
-    query: c8-m1.getOfferInternal       # GET /api/c8-m1/internal/offers/{offerId}
+    query: c8-m1.getOfferInternal       # GET /api/offers/internal/offers/{offerId}
     params: { offerId: offerId }
     fields:
       offerType: offerType
@@ -49,7 +49,7 @@ lookups:
       technicalUserName: technicalUserProfile.name
       technicalUserRoles: technicalUserProfile.roles
   subscription-instance-client:
-    query: c2-m2.listAppInstanceClients   # GET /api/c2-m2/internal/app-instance-clients (answer: list)
+    query: c2-m2.listAppInstanceClients   # GET /api/app-access/internal/app-instance-clients (answer: list)
     params: { offerSubscriptionId: offerSubscriptionId }
     fields:
       appInstanceClientId: '[0].id'

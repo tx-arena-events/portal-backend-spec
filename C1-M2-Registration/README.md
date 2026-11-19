@@ -71,7 +71,8 @@ The module has no user interface. Callers:
 
 ## 4. Technical frame
 
-- Python with FastAPI, part of the modular monolith. Process Orchestration and other modules call steps and queries in the same process through the public interface of the module. The HTTP paths in [openapi.yaml](openapi.yaml) describe the same contract.
+- **Feature `registration`** (FRAMEWORK 4.9): served under `/api/registration`. Problem types, event sources, permissions and service accounts keep the module identifier `c1-m2`.
+- Python with FastAPI, a feature of the modular monolith. Process Orchestration and other modules call steps and queries in the same process through the public interface of the module. The HTTP paths in [openapi.yaml](openapi.yaml) describe the same contract.
 - Own database `c1_m2` in PostgreSQL with its own database user. Other modules read only through the queries in section 9.
 - Every HTTP call of a person carries their token from the Portal IAM of the OSP. The shared library validates it and returns the claims: `sub`, `company_id` (only for a bound account), `given_name`, `family_name` and the permissions (FRAMEWORK 4.2).
 - Events go out through the outbox of the base skeleton, stored in the same transaction as the change.
@@ -85,7 +86,7 @@ The module has no user interface. Callers:
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | own database `c1_m2` | |
+| `REGISTRATION_DATABASE_URL` | own database `registration` (FRAMEWORK 4.9); a runtime that serves only this feature also accepts `DATABASE_URL` | |
 | `IAM_URL`, `IAM_REALM` | Portal IAM of the OSP for token validation | `https://iam.osp-a.example.org/auth`, `osp-a` |
 | `SETTINGS_FILE` | installation settings (FRAMEWORK 4.8); from these `masterDataFile` with countries and identifier types (structure in 14.2) | `config/installation.json` |
 | `CATALOG_FILE` | initial values for company roles and terms, taken over at start (5, structure in 14.3) | `config/registration-catalog.json` |
@@ -631,8 +632,8 @@ Only for applications with a reference (6.2).
 
 | Call | Response | Built-in stand-in |
 |---|---|---|
-| in the same process `query_company(companyId=…)`; over HTTP `GET /api/c3-m1/internal/companies/{companyId}` | `CompanyInternal` (C3-M1 9.1); C1-M2 reads `id`, `name`, `address.countryCode`, `status`, `deactivationReason`, `bpn`, `identifiers` (each `type`, `value`), `companyRoles`; 404 if unknown | reads `STUB_COMPANIES_FILE`: list of `CompanyInternal` (14.5) |
-| in the same process `query_companies(bpn=[bpn])`; over HTTP `GET /api/c3-m1/internal/companies?bpn={bpn}` | `{ "items": [CompanyInternal], "notFound": [ … ] }` (C3-M1 9.2) | from the same file |
+| in the same process `query_company(companyId=…)`; over HTTP `GET /api/company-profile/internal/companies/{companyId}` | `CompanyInternal` (C3-M1 9.1); C1-M2 reads `id`, `name`, `address.countryCode`, `status`, `deactivationReason`, `bpn`, `identifiers` (each `type`, `value`), `companyRoles`; 404 if unknown | reads `STUB_COMPANIES_FILE`: list of `CompanyInternal` (14.5) |
+| in the same process `query_companies(bpn=[bpn])`; over HTTP `GET /api/company-profile/internal/companies?bpn={bpn}` | `{ "items": [CompanyInternal], "notFound": [ … ] }` (C3-M1 9.2) | from the same file |
 
 ### 11.3 C1-M3 Application Review (`REVIEW_URL`)
 
@@ -640,7 +641,7 @@ When withdrawing a submitted application (7.11) and for `reviewStatus` (7.4, 7.1
 
 | Call | Response | Built-in stand-in |
 |---|---|---|
-| in the same process `get_review_status_by_application(applicationId=…)`; over HTTP `GET /api/c1-m3/internal/review-cases?applicationId={id}` | `{ "reviewCaseId", "applicationId", "status", "decidedAt" }`; 404 if there is no review case | reads `STUB_REVIEWS_FILE`: list of `{ "applicationId", "status" }` |
+| in the same process `get_review_status_by_application(applicationId=…)`; over HTTP `GET /api/application-review/internal/review-cases?applicationId={id}` | `{ "reviewCaseId", "applicationId", "status", "decidedAt" }`; 404 if there is no review case | reads `STUB_REVIEWS_FILE`: list of `{ "applicationId", "status" }` |
 
 The stand-in files are read on every call so that tests can change them. If a stand-in file contains the JSON string `"unavailable"` instead of a list, the stand-in reports "not reachable".
 

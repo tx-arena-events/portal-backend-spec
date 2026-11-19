@@ -48,7 +48,8 @@ Callers:
 
 ## 4. Technical frame
 
-- Module of the modular monolith (Python, FastAPI), own database `c11_m1` in PostgreSQL.
+- **Feature `notifications`** (FRAMEWORK 4.9): served under `/api/notifications`. Problem types, event sources, permissions and service accounts keep the module identifier `c11-m1`.
+- Feature of the modular monolith (Python, FastAPI), own database `notifications` in the PostgreSQL instance of the installation, with its own database role `notifications` (FRAMEWORK 4.9).
 - People call with their token from the Portal IAM. The inbox of a person: personal notifications with their `sub`, plus staff notifications whose permission is in the token.
 - Events are CloudEvents (FRAMEWORK 6). They are received at least once; an event `id` is processed once.
 - A recipient query that fails (C2-M2 not reachable) is repeated with growing wait times (5 s, doubling, at most 10 minutes, at most 10 attempts); after that the event is logged as not delivered.
@@ -57,7 +58,7 @@ Callers:
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | own database `c11_m1` | |
+| `NOTIFICATIONS_DATABASE_URL` | own database `notifications` (FRAMEWORK 4.9); a runtime that serves only this feature also accepts `DATABASE_URL` | |
 | `APP_ACCESS_URL` | C2-M2: empty = built-in stand-in, `in-process`, or HTTP address (FRAMEWORK 4.7) | `in-process` |
 | `SUBSCRIPTION_URL` | C10-M1 | `in-process` |
 | `RETENTION_DAYS` | notifications that are read or done are deleted after this many days | `180` |
@@ -155,27 +156,27 @@ There are no other operations. Nobody can create notifications through the API.
 
 All operations on the own inbox (tag `Company`, FRAMEWORK 4.1), permission `view_notifications`, scope `own`. A notification that is not in the own inbox: 404.
 
-### 7.1 `GET /api/c11-m1/notifications`
+### 7.1 `GET /api/notifications/notifications`
 
 Filters `topic`, `type`, `read` (`true`, `false`), `done` (`true`, `false`, tasks only), `createdSince`; sorting `createdAt` descending (default) or ascending. Hidden notifications are left out. Paging as in FRAMEWORK 4.1. Response 200 `NotificationPage`.
 
-### 7.2 `GET /api/c11-m1/notifications/count`
+### 7.2 `GET /api/notifications/notifications/count`
 
 Response 200 `{ total, unread, openTasks, unreadInfo }` for the own inbox.
 
-### 7.3 `GET /api/c11-m1/notifications/{notificationId}`
+### 7.3 `GET /api/notifications/notifications/{notificationId}`
 
 Response 200 `Notification` with `read` for the calling person.
 
-### 7.4 `POST /api/c11-m1/notifications/{notificationId}/read` and `/unread`
+### 7.4 `POST /api/notifications/notifications/{notificationId}/read` and `/unread`
 
 Sets or removes `read_at` for the calling person. Response 204.
 
-### 7.5 `POST /api/c11-m1/notifications/{notificationId}/hide`
+### 7.5 `POST /api/notifications/notifications/{notificationId}/hide`
 
 Hides the notification for the calling person. An open task: 409 `task-open`. Response 204. Hidden notifications are deleted with the retention period (`RETENTION_DAYS`).
 
-### 7.6 `GET /api/c11-m1/notifications/events`
+### 7.6 `GET /api/notifications/notifications/events`
 
 Server-Sent Events for the own inbox, so that the UI learns about new notifications without polling. Data flows only from the server to the browser; marking and hiding use 7.4 and 7.5.
 
@@ -219,8 +220,8 @@ Every consumed event is a CloudEvent (FRAMEWORK 6). The module reads the name fr
 
 | Neighbour (variable) | Call | Built-in stand-in |
 |---|---|---|
-| C2-M2 (`APP_ACCESS_URL`) | `GET /api/c2-m2/internal/company-users?companyId=&portalRole=` → `userId` (= `sub`) of the people | reads `stub-company-users.json` |
-| C10-M1 (`SUBSCRIPTION_URL`) | `GET /api/c10-m1/internal/subscriptions?offerId=&status=ACTIVE`, `GET /api/c10-m1/internal/subscriptions/{id}` | empty list |
+| C2-M2 (`APP_ACCESS_URL`) | `GET /api/app-access/internal/company-users?companyId=&portalRole=` → `userId` (= `sub`) of the people | reads `stub-company-users.json` |
+| C10-M1 (`SUBSCRIPTION_URL`) | `GET /api/subscriptions/internal/subscriptions?offerId=&status=ACTIVE`, `GET /api/subscriptions/internal/subscriptions/{id}` | empty list |
 
 ## 12. Errors
 

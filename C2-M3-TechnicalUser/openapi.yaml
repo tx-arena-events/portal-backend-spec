@@ -24,7 +24,7 @@ info:
     - The events of the module are under `components/schemas` (names start
       with `Event`), see README section 10.
 servers:
-  - url: /api/c2-m3
+  - url: /api/technical-user
 security:
   - portalIam: []
 tags:

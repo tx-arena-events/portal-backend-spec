@@ -13,7 +13,7 @@ info:
     - The CSP calls `/csp-notifications` with its service account.
     - Errors as Problem Details (RFC 9457), identifiers in README section 12.
 servers:
-  - url: /api/c3-m2
+  - url: /api/csp-connection
 security:
   - portalIam: []
 tags:

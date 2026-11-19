@@ -13,7 +13,7 @@ info:
       `Content-Type: text/event-stream`, events `notification-created`, `notification-done`,
       `resync`. The token is sent in the `Authorization` header, never in the URL.
 servers:
-  - url: /api/c11-m1
+  - url: /api/notifications
 security:
   - portalIam: []
 tags:

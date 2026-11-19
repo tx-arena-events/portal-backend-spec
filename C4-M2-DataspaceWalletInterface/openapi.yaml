@@ -19,7 +19,7 @@ info:
     - Events are under `components/schemas` (names start with `Event`),
       see README section 10. They never contain secrets.
 servers:
-  - url: /api/c4-m2
+  - url: /api/dataspace-wallet-interface
 security:
   - portalIam: []
 tags:

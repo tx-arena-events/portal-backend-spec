@@ -74,7 +74,8 @@ Later, further credential types will be added, above all credentials for partici
 
 ## 4. Technical frame
 
-- Python with FastAPI, part of the modular monolith. Process Orchestration and other modules call the module in the same process; the user interface, issuers and callback adapters call it over HTTP. [openapi.yaml](openapi.yaml) describes both.
+- **Feature `credentials`** (FRAMEWORK 4.9): served under `/api/credentials`. Problem types, event sources, permissions and service accounts keep the module identifier `c4-m1`.
+- Python with FastAPI, a feature of the modular monolith. Process Orchestration and other modules call the module in the same process; the user interface, issuers and callback adapters call it over HTTP. [openapi.yaml](openapi.yaml) describes both.
 - Own database `c4_m1` in PostgreSQL with its own database user.
 - Every HTTP call carries a token of the OSP's Portal IAM, validated with the shared library. Scope `company`: `company_id` in the token equals `companyId` in the path, otherwise 404 (FRAMEWORK 4.3).
 - Events through the module's outbox, in the same transaction as the change.
@@ -89,7 +90,7 @@ Later, further credential types will be added, above all credentials for partici
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | own PostgreSQL database `c4_m1` | |
+| `CREDENTIALS_DATABASE_URL` | own database `credentials` (FRAMEWORK 4.9); a runtime that serves only this feature also accepts `DATABASE_URL` | |
 | `SETTINGS_FILE` | installation settings (FRAMEWORK 4.8): `ospId`, `dataspace.memberOf` | `config/installation.json` |
 | `ISSUER_MODE` | `OWN` = own issuer of the OSP; `CSP` = CSP issuer (6.3) | `OWN` |
 | `ONBOARDING_CREDENTIAL_TYPES` | credential types in onboarding, comma-separated | `BPN,MEMBERSHIP` |
@@ -379,14 +380,14 @@ Every neighbour has a built-in stand-in (FRAMEWORK 4.7): address empty = stand-i
 
 | Call | Response | Built-in stand-in |
 |---|---|---|
-| `query_company(companyId=…)`, over HTTP `GET /api/c3-m1/internal/companies/{companyId}` | `id`, `status`, `bpn`, `name` (name only for the holder in the own IssuerService) | reads `stub-companies.json`; unknown ID: status `REQUESTED`, BPN `BPNL` + first 12 hex characters of the `companyId` in upper case |
+| `query_company(companyId=…)`, over HTTP `GET /api/company-profile/internal/companies/{companyId}` | `id`, `status`, `bpn`, `name` (name only for the holder in the own IssuerService) | reads `stub-companies.json`; unknown ID: status `REQUESTED`, BPN `BPNL` + first 12 hex characters of the `companyId` in upper case |
 
 ### 11.2 C4-M2 Dataspace Wallet Interface (`WALLET_URL`)
 
 | Call | Response | Built-in stand-in |
 |---|---|---|
-| `get_wallet_info(companyId=…)`, over HTTP `GET /api/c4-m2/internal/wallets/{companyId}` | `companyId`, `status` (ready: `ACTIVE`), `provider`, `issuanceMode`, `did`, `didDocumentLocation`, `providerRef` | reads `stub-wallets.json`; unknown ID: `ACTIVE`, provider `STUB`, DID `did:web:wallet.example.org:{bpn}` |
-| `get_holder_access(companyId=…)`, over HTTP `GET /api/c4-m2/internal/wallets/{companyId}/holder-access`; not for `STUB` | with `ISSUER_WRITES`: `holder` (location of the DID document), `walletUrl`, `clientId`, `clientSecret`; with `HOLDER_REQUESTS`: `identityApiUrl`, `participantContextId`, `apiKey` | fixed test values from `stub-wallets.json` |
+| `get_wallet_info(companyId=…)`, over HTTP `GET /api/dataspace-wallet-interface/internal/wallets/{companyId}` | `companyId`, `status` (ready: `ACTIVE`), `provider`, `issuanceMode`, `did`, `didDocumentLocation`, `providerRef` | reads `stub-wallets.json`; unknown ID: `ACTIVE`, provider `STUB`, DID `did:web:wallet.example.org:{bpn}` |
+| `get_holder_access(companyId=…)`, over HTTP `GET /api/dataspace-wallet-interface/internal/wallets/{companyId}/holder-access`; not for `STUB` | with `ISSUER_WRITES`: `holder` (location of the DID document), `walletUrl`, `clientId`, `clientSecret`; with `HOLDER_REQUESTS`: `identityApiUrl`, `participantContextId`, `apiKey` | fixed test values from `stub-wallets.json` |
 
 The holder access stays only in memory and never appears in the log.
 
@@ -396,7 +397,7 @@ Current behaviour (source: Portal 2.6.0 `IssuerComponent.Library`). Token for th
 
 | Purpose | Call |
 |---|---|
-| BPN credential | `POST {CREDENTIAL_ISSUER_URL}/api/issuer/bpn` with `holder` (location of the DID document), `businessPartnerNumber`, `technicalUserDetails` (`walletUrl`, `clientId`, `clientSecret` from `get_holder_access`), `callbackUrl` = `{CALLBACK_BASE_URL}/api/c4-m1/issuer-callbacks/bpn` |
+| BPN credential | `POST {CREDENTIAL_ISSUER_URL}/api/issuer/bpn` with `holder` (location of the DID document), `businessPartnerNumber`, `technicalUserDetails` (`walletUrl`, `clientId`, `clientSecret` from `get_holder_access`), `callbackUrl` = `{CALLBACK_BASE_URL}/api/credentials/issuer-callbacks/bpn` |
 | Membership credential | `POST {CREDENTIAL_ISSUER_URL}/api/issuer/membership` with `holder`, `businessPartnerNumber`, `memberOf` = `dataspace.memberOf` from the settings, `technicalUserDetails`, `callbackUrl` = `…/issuer-callbacks/membership` |
 | Status report | The Credential Issuer calls `callbackUrl` with `{ bpn, status, message }` (7.4), with its service account (6.5). |
 | Revocation | not supported in 0.2 (6.3) |
@@ -412,10 +413,10 @@ Based on the documentation of the previous connection of the IdentityHub to the 
 | Register the holder | administration interface of the own IssuerService (`ISSUER_SERVICE_ADMIN_URL`, key `ISSUER_SERVICE_API_KEY`), participant context `ISSUER_SERVICE_PARTICIPANT_ID`: create the holder with DID, holder ID = BPN, name (from C3-M1) and property `memberOf` = `dataspace.memberOf`. If it already exists, that counts as success; a differing DID is updated. |
 | Request the credential | identity interface of the holder's dataspace wallet with the holder access from C4-M2 (`identityApiUrl`, `participantContextId`, header `x-api-key` = `apiKey`); applies to the IdentityHub and to the dataspace wallet of the CSP: credential request to `ISSUER_DID` with `holderPid` = `{companyId}:{credentialType}:{attempt}` and the credential definition from `ISSUER_SERVICE_CREDENTIAL_DEFINITIONS` in the format `CREDENTIAL_FORMAT`. `request_ref` = `holderPid`, `issuer_did` = `ISSUER_DID`. |
 | Issuance | The holder's wallet fetches the credential from the IssuerService via DCP and stores it. The IssuerService takes the value for `memberOf` in the membership credential from the property of the holder. |
-| Status report | The callback adapter of the wallet reports when the request reaches the state "issued" or "error", with `{ bpn, status, message }` (7.4); holder identifier = BPN. In the own IdentityHub it is an add-on; the dataspace wallet of the CSP reports itself to `{address of the installation}/api/c4-m1/issuer-callbacks/{credentialKind}`. Both with their own service account (6.5). |
+| Status report | The callback adapter of the wallet reports when the request reaches the state "issued" or "error", with `{ bpn, status, message }` (7.4); holder identifier = BPN. In the own IdentityHub it is an add-on; the dataspace wallet of the CSP reports itself to `{address of the installation}/api/credentials/issuer-callbacks/{credentialKind}`. Both with their own service account (6.5). |
 | Revocation | administration interface of the IssuerService: search the holder's credentials of this type, revoke each one. |
 
-The callback adapter for the IdentityHub that exists today calls fixed paths of the old portal (`/api/administration/registration/issuer/bpncredential` and `…/membershipcredential`). Until it is configurable, the ingress of the installation redirects these paths to `/api/c4-m1/issuer-callbacks/bpn` or `/membership`.
+The callback adapter for the IdentityHub that exists today calls fixed paths of the old portal (`/api/administration/registration/issuer/bpncredential` and `…/membershipcredential`). Until it is configurable, the ingress of the installation redirects these paths to `/api/credentials/issuer-callbacks/bpn` or `/membership`.
 
 ### 11.5 Route `CSP_ISSUER` (CSP issuer)
 
@@ -424,7 +425,7 @@ The issuer API of the CSP is a proposal, like the core services API in C3-M2. If
 | Call | Purpose | Responses |
 |---|---|---|
 | `PUT {CSP_ISSUER_URL}/holders/{bpn}` with `did` | Create the holder or update its DID. The CSP checks: the calling OSP is the home OSP of the BPN, and the DID equals the entry in the directory BPN → DID. | 200 (exists), 201 (new); 403 other home OSP; 409 DID does not match the directory |
-| `PUT {CSP_ISSUER_URL}/holders/{bpn}/grants/{credentialKind}` with `callbackUrl` = `{CALLBACK_BASE_URL}/api/c4-m1/issuer-callbacks/{credentialKind}`, for `membership` also `memberOf` = `dataspace.memberOf` | Grant the credential type to the holder; the wallet may then request it via DCP. `credentialKind` is `bpn` or `membership`. | 204; 403 other home OSP; 404 holder unknown; 422 `memberOf` is not the dataspace of the CSP |
+| `PUT {CSP_ISSUER_URL}/holders/{bpn}/grants/{credentialKind}` with `callbackUrl` = `{CALLBACK_BASE_URL}/api/credentials/issuer-callbacks/{credentialKind}`, for `membership` also `memberOf` = `dataspace.memberOf` | Grant the credential type to the holder; the wallet may then request it via DCP. `credentialKind` is `bpn` or `membership`. | 204; 403 other home OSP; 404 holder unknown; 422 `memberOf` is not the dataspace of the CSP |
 | `DELETE {CSP_ISSUER_URL}/holders/{bpn}/grants/{credentialKind}` | Remove the grant and revoke issued credentials of this type | 204, also if there was nothing to revoke |
 
 Procedure of an order:

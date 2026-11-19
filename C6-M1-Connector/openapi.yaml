@@ -12,7 +12,7 @@ info:
     - Process Orchestration calls the paths under `/steps`; other modules call `/internal`.
     - Errors as Problem Details (RFC 9457), identifiers in README section 12.
 servers:
-  - url: /api/c6-m1
+  - url: /api/connector
 security:
   - portalIam: []
 tags:

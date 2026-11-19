@@ -59,6 +59,7 @@ It is the only module that writes these clients into the Portal IAM. It has no u
 
 ## 4. Technical frame
 
+- **Feature `technical_user`** (FRAMEWORK 4.9): served under `/api/technical-user`. Problem types, event sources, permissions and service accounts keep the module identifier `c2-m3`.
 - Python with FastAPI.
 - Own database `c2_m3` in PostgreSQL with its own database user. The module reads and writes only there. Other modules read through the interface.
 - People call through the UI of the OSP over HTTP, with their token from the Portal IAM. The shared token validation library checks signature, expiry and audience (`aud` contains `portal-core`) and provides the claims: `sub`, `company_id` (only for a bound account) and the permissions (FRAMEWORK 4.2).
@@ -71,7 +72,7 @@ It is the only module that writes these clients into the Portal IAM. It has no u
 
 | Variable | Meaning | Example |
 |---|---|---|
-| `DATABASE_URL` | own PostgreSQL database `c2_m3` | |
+| `TECHNICAL_USER_DATABASE_URL` | own database `technical_user` (FRAMEWORK 4.9); a runtime that serves only this feature also accepts `DATABASE_URL` | |
 | `IAM_URL` | base address of the OSP's Portal IAM | `https://iam.osp-a.example.org/auth` |
 | `IAM_REALM` | realm of the installation | `CX-Central` |
 | `C2_M3_CLIENT_ID`, `C2_M3_CLIENT_SECRET` | the module's own service account for the Admin API (C2-M5 5.9; secret from the secret store, C2-M5 4); needs the rights `manage-clients`, `view-clients`, `query-clients`, `manage-users`, `view-users`, `query-users` in the realm | `svc-c2-m3` |
@@ -504,9 +505,9 @@ In the shared process, the module calls the public interface of the neighbour; t
 
 | Neighbour (variable) | Call | Response | Built-in stand-in |
 |---|---|---|---|
-| C3-M1 Company Profile (`COMPANY_URL`) | `GET /api/c3-m1/internal/companies/{companyId}` | `{ "id", "status", "bpn", "companyRoles": [] }` (active roles only), status `REQUESTED`, `ACTIVE`, `REJECTED` or `INACTIVE`; 404 if unknown | reads `stub-companies.json` on every call |
-| C6-M1 Connectors (`CONNECTOR_URL`) | `GET /api/c6-m1/internal/connectors?technicalUserId={id}` (C6-M1 9.1) | list of `{ "connectorId", "status" }` of the `ACTIVE` connectors | empty list |
-| C10-M1 Subscriptions (`SUBSCRIPTION_URL`) | `GET /api/c10-m1/internal/subscriptions/{offerSubscriptionId}` (C10-M1 9.2) | `{ "offerSubscriptionId", "status", … }` | status `INACTIVE` |
+| C3-M1 Company Profile (`COMPANY_URL`) | `GET /api/company-profile/internal/companies/{companyId}` | `{ "id", "status", "bpn", "companyRoles": [] }` (active roles only), status `REQUESTED`, `ACTIVE`, `REJECTED` or `INACTIVE`; 404 if unknown | reads `stub-companies.json` on every call |
+| C6-M1 Connectors (`CONNECTOR_URL`) | `GET /api/connector/internal/connectors?technicalUserId={id}` (C6-M1 9.1) | list of `{ "connectorId", "status" }` of the `ACTIVE` connectors | empty list |
+| C10-M1 Subscriptions (`SUBSCRIPTION_URL`) | `GET /api/subscriptions/internal/subscriptions/{offerSubscriptionId}` (C10-M1 9.2) | `{ "offerSubscriptionId", "status", … }` | status `INACTIVE` |
 
 A connector uses the account if it is in the list.
 

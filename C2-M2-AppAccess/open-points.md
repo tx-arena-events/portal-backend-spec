@@ -71,7 +71,7 @@ What C2-M2 expects from other modules. The form is provisional until their specs
 | C1-M2 Registration | keeps the `sub` of the applicant on the application and passes it to Process Orchestration as `applicantSub`; accepts applications of kind `ONBOARDING` only from people without `company_id` in the token, so that `assign-company-admin` does not fail with `user-already-bound`. |
 | Process Orchestration | calls `assign-company-admin` with `companyId`, `bpn` (from `CompanyRegisteredAtCsp`) and `applicantSub` (FRAMEWORK 5.2, 5.6); `disable-company-users` on `CompanyDeactivated`, `enable-company-users` on `CompanyReactivated` (FRAMEWORK 5.4, 5.5); retries on `retryable: true`. |
 | Subscriptions | query of the active subscriptions of a company to an app, filters `customerCompanyId`, `offerId`, `status`. |
-| C3-M1 Company Profile | query 9.1 `GET /api/c3-m1/internal/companies/{companyId}` with `status` and `bpn`; creates the OSP company at the first start from seed data (`ACTIVE`, with BPN), without onboarding. |
+| C3-M1 Company Profile | query 9.1 `GET /api/company-profile/internal/companies/{companyId}` with `status` and `bpn`; creates the OSP company at the first start from seed data (`ACTIVE`, with BPN), without onboarding. |
 | Offers | calls the steps for the template and the instance clients through Process Orchestration (FRAMEWORK 5.8); reads app roles through `/internal/app-roles`. |
 | Notifications | use the events and `/internal/company-users` to notify people. |
 | UI | shows the invitation code once and builds the link with the code in the fragment; fetches a new token after an invitation is accepted; shows people of a deactivated company that their company is deactivated and offers them the application for reactivation. |

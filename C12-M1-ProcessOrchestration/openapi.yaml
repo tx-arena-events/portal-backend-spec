@@ -15,7 +15,7 @@ info:
     - The module offers no steps; it calls the steps of the other modules.
     - Errors as Problem Details (RFC 9457), identifiers in README section 12.
 servers:
-  - url: /api/c12-m1
+  - url: /api/process-orchestration
 security:
   - portalIam: []
 tags:
