@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: C5-M1 EBW-Connector
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Identifies a person with the EUDI Wallet and, where needed, the company with
     its Business Wallet. Clients use OpenID Connect; wallets use OpenID4VP 1.0.
@@ -67,7 +67,10 @@ paths:
         - name: scope
           in: query
           required: true
-          description: Space-separated; `openid` required (README 6.1)
+          description: |
+            Space-separated; `openid` required (README 6.1). `attestation` needs
+            `profile` and `representation`; with `company` the attestation has the
+            purpose `onboarding`, without it the purpose `representation`.
           schema: { type: string, example: openid profile representation company attestation }
         - { name: state, in: query, required: true, schema: { type: string } }
         - { name: nonce, in: query, required: true, schema: { type: string } }
@@ -352,7 +355,10 @@ components:
         id_token: { type: string, description: 'ES256; claims per README 6.7' }
         ebw_attestation:
           type: string
-          description: Verification attestation, compact JWS (README section 9); only with scope `attestation`
+          description: |
+            Verification attestation, compact JWS (README section 9); only with
+            scope `attestation`. Purpose `onboarding` with the step `company`,
+            `representation` without it.
 
     Claims:
       type: object
@@ -375,7 +381,7 @@ components:
         representation_company_id: { type: string }
         representation_company_name: { type: string }
         representation_issuer: { type: string }
-        representation_trust: { type: string, enum: [trust_list, company_key, client_key] }
+        representation_trust: { type: string, enum: [trust_list, company_key, client_key, company_credential] }
         company_legal_name: { type: string }
         company_ebwoid: { type: string }
         company_euid: { type: string }

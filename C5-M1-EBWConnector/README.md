@@ -1,6 +1,6 @@
 # C5-M1 EBW-Connector
 
-**Version:** 0.2, as of 2026-10-30
+**Version:** 0.3, as of 2026-11-24
 **Capability:** C5 Business Wallet
 **Kind:** Provided (built before the hackathon; a reference implementation is provided for the hackathon)
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
@@ -136,7 +136,7 @@ Audit entry per finished transaction, without personal data: time, `client_id`, 
 | `profile` | `given_name`, `family_name`, `birthdate` in the ID token |
 | `representation` | mandate from the EUDI Wallet, required; representation claims (6.5) |
 | `company` | LPID from the Business Wallet in a second step; company claims |
-| `attestation` | verification attestation in the token response (section 9); requires `profile`, `representation` and `company` |
+| `attestation` | verification attestation in the token response (section 9); requires `profile` and `representation`. With `company` its purpose is `onboarding`, without `company` it is `representation` (9.1) |
 
 Steps of a transaction:
 
@@ -152,6 +152,7 @@ Typical requests:
 | Sign-in at an OSP's portal (Portal IAM as client) | `openid profile` | `person` |
 | Sign-in at a Business Wallet | `openid profile representation` | `person` |
 | Onboarding a company at an OSP | `openid profile representation company attestation` | `person`, `company` |
+| A person joins a company at an OSP with a mandate (C2-M2 6.8a) | `openid profile representation attestation` | `person` |
 
 Each step sends one DCQL query to one wallet. Every credential in the query is required: the query has no `credential_sets` and no optional credentials, and claim paths name top-level claims only. Wallets differ in how they handle optional sets, combinations and nested paths; a fixed query per step works with all of them. Examples are in 14.4.
 
@@ -221,13 +222,22 @@ The `vct` values and claim names of LPID and mandate are placeholders until the 
 | 1 | the issuer is in the trust list for credential type `MANDATE` (registers) | `trust_list` |
 | 2 | the mandate is signed with the key the company's LPID in the same transaction is bound to (`cnf.jwk` of the LPID): the company's Business Wallet issued it; the company check below compares `represented.identifier` with the LPID | `company_key` |
 | 3 | the mandate is signed with a key from the JWKS of the client: a Business Wallet trusts the mandates it issued itself | `client_key` |
+| 4 | the mandate carries the company's LPID in the claim `company_credential` (11.2) and is signed with the key this LPID is bound to (`cnf.jwk`): the company's Business Wallet issued it; the company check below compares `represented.identifier` with this LPID | `company_credential` |
 
 For each rule, the EBW-Connector checks the mandate's signature with the respective keys; the first rule whose key verifies the signature applies. A Business Wallet signs mandates with the key its LPID is bound to (11.2). If no rule applies, the result is `NOT_CONFIRMED` with the only reason `ISSUER_NOT_TRUSTED`, and no further checks run.
+
+**The LPID inside a mandate (rule 4).** With rule 4 a person can show that they represent a company without the company's Business Wallet taking part in the transaction. The trust runs as a chain: the trust list names the issuer of the LPID, the LPID names the key of the company, and this key signed the mandate.
+
+- `company_credential` holds the LPID as an SD-JWT VC without a key binding: `<issuer-signed JWT>~<disclosure>~…~`. The claim is in the payload of the mandate, not selectively disclosable, so a wallet cannot leave it out.
+- The EBW-Connector checks this LPID as in 6.3, except for the holder binding (step 6): issuer in the trust list for `LPID`, signature, validity, status. It must disclose `legal_name`, `ebwoid` and `country`. The signature of the mandate with the key of the LPID takes the place of the holder binding, and the key binding of the mandate shows that the presentation is fresh.
+- An LPID that does not pass these checks gives no trust: rule 4 does not apply. The transaction does not fail because of it.
+- Rules 1 to 3 come first. A mandate with `company_credential` therefore keeps its result in an onboarding (rule 2) and at the sign-in to its Business Wallet (rule 3).
+- This is a convention of this spec, not of a standard (open point 16).
 
 **Checks**, after trust:
 
 1. **Person:** given name, family name and birth date of `representative` equal those of the PID, after normalisation (Unicode NFC, outer spaces removed, case ignored). Otherwise `PERSON_MISMATCH`.
-2. **Company:** with step `company`, `represented.identifier` equals `ebwoid` or `euid` of the LPID. Otherwise `COMPANY_MISMATCH`.
+2. **Company:** `represented.identifier` equals `ebwoid` or `euid` of the LPID: with step `company` the LPID of that step, with rule 4 the LPID inside the mandate, with both each of them. Otherwise `COMPANY_MISMATCH`.
 3. **Kind:** `representation_type` is in `ACCEPTED_REPRESENTATION_TYPES`. Otherwise `TYPE_NOT_ACCEPTED`.
 4. **Validity:** `valid_until` is missing or not before today (UTC). Otherwise `EXPIRED`.
 
@@ -261,7 +271,7 @@ After the response, the wallet follows the `redirect_uri` from the EBW-Connector
 | `company_legal_name`, `company_ebwoid`, `company_euid`, `company_country` | `company` | LPID |
 | `company_address` | `company` | LPID, object with `street_address`, `postal_code`, `locality`, `country` |
 
-Missing values are left out, never `null`. With `ISSUER_NOT_TRUSTED`, only `representation_result`, `representation_reasons` and `representation_issuer` are given, because the other values are not verified. `userinfo` returns the same claims without `iss`, `aud`, `exp`, `iat`, `auth_time` and `nonce`.
+The `company_*` claims come from the LPID of the step `company` only; the LPID inside a mandate (6.5 rule 4) adds none. Missing values are left out, never `null`. With `ISSUER_NOT_TRUSTED`, only `representation_result`, `representation_reasons` and `representation_issuer` are given, because the other values are not verified. `userinfo` returns the same claims without `iss`, `aud`, `exp`, `iat`, `auth_time` and `nonce`.
 
 ### 6.8 Clients
 
@@ -274,6 +284,7 @@ Registered in `CLIENTS_FILE` (example 14.2):
 | `jwksUri` or `jwks` | public keys of the client for `private_key_jwt`; for a Business Wallet also the key it signs mandates with (6.5 rule 3) |
 | `redirectUris` | allowed `redirect_uri`, exact match |
 | `scopes` | allowed scopes |
+| `page` | optional: the look of the transaction page for this client, an object with `theme` (a look the installation offers), `brand` (name in the header; default `name`) and `tagline`. The page then names the EBW-Connector in a line of its own. Without it, or with an unknown `theme`, the page has the look of the EBW-Connector. The page shown without the cookie (7.3) always has that look. |
 
 **Client assertion** (RFC 7523): `iss` and `sub` = `clientId`, `aud` = `{PUBLIC_URL}/token` or `PUBLIC_URL`, `exp` at most 5 minutes in the future, `jti` used once, signed with `ES256` and a key of the client. There are no client secrets.
 
@@ -313,7 +324,7 @@ Names and birth date are normalised as in 6.5. `sub` stays the same as long as t
 Parameters: `response_type=code`, `client_id`, `redirect_uri`, `scope`, `state`, `nonce`, `code_challenge`, `code_challenge_method=S256`, optional `ui_locales`.
 
 1. Client unknown or `redirect_uri` not registered: error page 400, no redirect.
-2. Other errors: redirect to `redirect_uri` with `error` (`invalid_request` without `nonce` or PKCE; `invalid_scope` for scopes not allowed for the client, without `openid`, or `attestation` without `profile`, `representation` and `company`), `state`, `iss`.
+2. Other errors: redirect to `redirect_uri` with `error` (`invalid_request` without `nonce` or PKCE; `invalid_scope` for scopes not allowed for the client, without `openid`, or `attestation` without `profile` and `representation`), `state`, `iss`.
 3. Create the transaction (status `PENDING`, steps per 6.1, `expires_at` = now + `TRANSACTION_TTL_SECONDS`). Set the cookie `ebw_tx` (random value, `HttpOnly`, `SameSite=Lax`, path `/`, `Secure` with HTTPS); store its hash.
 4. Redirect 302 to `{PUBLIC_URL}/transactions/{id}`.
 
@@ -412,24 +423,28 @@ Claims (snake_case; times as seconds since 1970; dates as `YYYY-MM-DD`; missing 
 | Claim | Required | Content |
 |---|---|---|
 | `iss` | yes | `PUBLIC_URL` |
-| `sub` | yes | `company.ebwoid` |
+| `sub` | yes | purpose `onboarding`: `company.ebwoid`. Purpose `representation`: the company the mandate names (`representation.company_id`); left out if the mandate is not trusted |
 | `aud` | yes | `ATTESTATION_AUDIENCE` |
 | `iat`, `exp` | yes | issued; `iat` + `ATTESTATION_TTL_HOURS` |
 | `jti` | yes | ID of the check (`verification_id`, UUID) |
 | `attestation_version` | yes | `"0.2"` |
-| `purpose` | yes | `"onboarding"` |
+| `purpose` | yes | `"onboarding"` with the step `company`, `"representation"` without it (6.1) |
 | `verified_at` | yes | time of the last step |
 | `client_id` | yes | client of the transaction |
 | `person` | yes | `given_name`, `family_name` |
-| `company` | yes | `legal_name`, `ebwoid`, `country` required; `euid`, `address` (`street_address`, `postal_code`, `locality`, `country`) optional; from the LPID |
-| `representation` | yes | `confirmed` (`true` exactly with `CONFIRMED`), `result`; `type`, `role`, `valid_until`, `issuer`, `trust` (6.5); `reasons` with `NOT_CONFIRMED` |
-| `evidence` | yes | per checked credential: `type` (`PID`, `LPID`, `MANDATE`), `vct`, `issuer`, `wallet` (`EUDI_WALLET` or `BUSINESS_WALLET`), `status_checked` |
+| `company` | purpose `onboarding`: yes | `legal_name`, `ebwoid`, `country` required; `euid`, `address` (`street_address`, `postal_code`, `locality`, `country`) optional; from the LPID. Purpose `representation`: only if the LPID inside the mandate gave the trust (6.5 rule 4), then from that LPID |
+| `representation` | yes | `confirmed` (`true` exactly with `CONFIRMED`), `result`; `type`, `role`, `valid_until`, `issuer`, `trust` (6.5); `reasons` with `NOT_CONFIRMED`. Purpose `representation` in addition: `company_id`, `company_name` (`represented.identifier`, `represented.legal_name` of the mandate). For a mandate that is not trusted only `confirmed`, `result`, `reasons` and `issuer` |
+| `evidence` | yes | per checked credential: `type` (`PID`, `LPID`, `MANDATE`), `vct`, `issuer`, `wallet` (`EUDI_WALLET` or `BUSINESS_WALLET`), `status_checked`. An LPID inside a mandate that gave the trust is listed with `wallet` `EUDI_WALLET` and `carried_in` `MANDATE` |
 
 Not included: birth date, nationality, address of the person, the credentials themselves.
 
+The two purposes keep the attestations apart: an attestation with the purpose `representation` says that a person represents a company, not that the company itself took part. A recipient accepts only the purpose it needs.
+
 ### 9.2 Check by the recipient
 
-The registration (C1-M2) checks: `iss` is a recognised instance with its JWKS (`{iss}/jwks`); `typ`, `alg`, `kid` and signature; `aud`, `exp`, `iat`; `jti` used once; then its own rules. Unchanged from version 0.1, except that `psp_id` is gone and `evidence` names the wallet.
+The registration (C1-M2) checks: `iss` is a recognised instance with its JWKS (`{iss}/jwks`); `typ`, `alg`, `kid` and signature; `aud`, `exp`, `iat`; `jti` used once; `purpose` `onboarding`; then its own rules. Unchanged from version 0.1, except that `psp_id` is gone and `evidence` names the wallet.
+
+Users and App Access (C2-M2 6.8a) checks an attestation with the purpose `representation` in the same way and accepts it only shortly after `verified_at`.
 
 ## 10. Events
 
@@ -448,6 +463,7 @@ Same requirements as 11.1, and in addition:
 - **Wallet address:** an HTTPS address that accepts `client_id` and `request_uri` as query parameters, shows the request to the signed-in user and sends the response after consent. The Business Wallet shows this address to its users, for example on its start page.
 - **Redirect:** after sending the response it opens the `redirect_uri` from the EBW-Connector's answer in the browser.
 - **Key:** it signs the mandates it issues with the key its LPID is bound to (`cnf.jwk`), and publishes this key in its JWKS as a client (6.5 rules 2 and 3).
+- **LPID inside the mandate:** it puts its LPID into every mandate it issues, as the claim `company_credential` (6.5 rule 4): without a key binding, not selectively disclosable, with the disclosures of `legal_name`, `ebwoid`, `country` and, if present, `euid`. It leaves out the address. When its LPID is replaced or revoked, the mandates that carry the old one lose their trust under rule 4; it issues them again.
 
 ### 11.3 Trust list of the core services
 
@@ -494,7 +510,7 @@ The module is done when these cases work with the test issuer (14.1) and a test 
 3. The request object is signed with the certificate, has `client_id` `x509_san_dns:{host}`, `response_mode` `direct_post.jwt` and a DCQL query without `credential_sets`.
 4. The response is encrypted (`direct_post.jwt`); a response that cannot be decrypted gives `INVALID_RESPONSE`.
 5. Onboarding with `openid profile representation company attestation`: steps `person` and `company`; the token response contains `ebw_attestation`, which verifies against `/jwks` and contains the values of 14.5 with `representation.confirmed` `true`.
-6. Mandate issued by the Business Wallet with the key of its LPID: onboarding gives `CONFIRMED` with `representation_trust` `company_key`; sign-in at the Business Wallet gives `CONFIRMED` with `client_key`; sign-in at another client gives `NOT_CONFIRMED` with `ISSUER_NOT_TRUSTED`.
+6. Mandate issued by the Business Wallet with the key of its LPID: onboarding gives `CONFIRMED` with `representation_trust` `company_key`; sign-in at the Business Wallet gives `CONFIRMED` with `client_key`; the same mandate without `company_credential` gives `NOT_CONFIRMED` with `ISSUER_NOT_TRUSTED` at another client.
 7. Mandate for another company: `NOT_CONFIRMED` with `COMPANY_MISMATCH` (onboarding). Mandate for another person: `PERSON_MISMATCH`.
 8. PID of an issuer not in the trust list: `FAILED`, `UNTRUSTED_ISSUER`; the client receives `error=access_denied`.
 9. Mandate revoked in its status list: `FAILED`, `CREDENTIAL_REVOKED`.
@@ -504,6 +520,10 @@ The module is done when these cases work with the test issuer (14.1) and a test 
 13. Code used twice: `invalid_grant`; the access token issued before no longer works for `userinfo`. Client assertion with the same `jti` twice: `invalid_client`.
 14. `complete` from another browser without the cookie: 404. The page without the cookie shows no data.
 15. Privacy: the audit log contains no given name, family name, birth date or identifier of the person.
+16. Mandate of the Business Wallet with `company_credential`, at a client other than the Business Wallet and without the step `company`: `CONFIRMED` with `representation_trust` `company_credential`; the ID token has no `company_*` claims.
+17. `openid profile representation attestation` with this mandate: one step; `ebw_attestation` with `purpose` `representation`, `sub` and `representation.company_id` = EBWOID of the LPID, `company` from the LPID inside the mandate, `evidence` with the LPID as `carried_in` `MANDATE`. With the mandate of the register: `trust` `trust_list` and no `company`. With a mandate that is not trusted: `representation.confirmed` `false`, no `sub`, no `company`.
+18. `company_credential` copied into a mandate signed with another key: `ISSUER_NOT_TRUSTED`. A mandate that names another company than its LPID: `COMPANY_MISMATCH`. A damaged or revoked LPID inside the mandate: `ISSUER_NOT_TRUSTED`.
+19. `attestation` without `representation`: `invalid_scope`.
 
 ## 14. Test data
 
@@ -615,7 +635,58 @@ Step `company`:
 }
 ```
 
-## 15. Changes from version 0.1
+### 14.6 Example verification attestation with the purpose `representation` (payload)
+
+A person joins a company with a mandate of its Business Wallet (6.5 rule 4); no step `company`.
+
+```json
+{
+  "iss": "https://ebw-connector.example.org",
+  "sub": "EBWOID-DE-0000000001",
+  "aud": "portal-registration",
+  "iat": 1795478400,
+  "exp": 1798070400,
+  "jti": "0d0a5e0e-3c4b-4f4e-9d53-2f6f3a1b7c10",
+  "attestation_version": "0.2",
+  "purpose": "representation",
+  "verified_at": 1795478400,
+  "client_id": "osp-a-ui",
+  "person": { "given_name": "Max", "family_name": "Mustermann" },
+  "company": {
+    "legal_name": "Beispiel Maschinenbau GmbH",
+    "ebwoid": "EBWOID-DE-0000000001",
+    "euid": "DEXX001T.HRB100001",
+    "country": "DE"
+  },
+  "representation": {
+    "confirmed": true, "result": "CONFIRMED",
+    "type": "power_of_attorney", "role": "Purchasing", "valid_until": "2027-12-31",
+    "company_id": "EBWOID-DE-0000000001", "company_name": "Beispiel Maschinenbau GmbH",
+    "issuer": "https://business-wallet.example.org", "trust": "company_credential"
+  },
+  "evidence": [
+    { "type": "PID", "vct": "urn:eudi:pid:1", "issuer": "https://pid.test.example.org",
+      "wallet": "EUDI_WALLET", "status_checked": false },
+    { "type": "MANDATE", "vct": "urn:tx:test:mandate:1", "issuer": "https://business-wallet.example.org",
+      "wallet": "EUDI_WALLET", "status_checked": true },
+    { "type": "LPID", "vct": "urn:tx:test:lpid:1", "issuer": "https://register.test.example.org",
+      "wallet": "EUDI_WALLET", "carried_in": "MANDATE", "status_checked": true }
+  ]
+}
+```
+
+## 15. Changes
+
+### From version 0.2 (version 0.3)
+
+- A mandate of a Business Wallet carries the company's LPID (`company_credential`, 11.2). New trust rule 4 (6.5): the EBW-Connector trusts such a mandate without the step `company`.
+- The scope `attestation` no longer requires `company` (6.1, 7.2). Without the step `company` the verification attestation has the purpose `representation` (9.1); its `company` comes from the LPID inside the mandate, and `representation` names the company of the mandate.
+- The format of the attestation with the purpose `onboarding` is unchanged, and `attestation_version` stays `0.2`. A recipient must check `purpose`; C1-M2 and C3-M1 already do.
+- A client may set the look of the transaction page (`page`, 6.8), so that a person can tell the sign-in at one service from the sign-in at another.
+- Acceptance: case 6 changed, cases 16 to 19 new. Example 14.6 new.
+- Sections were not renumbered.
+
+### From version 0.1 (version 0.2)
 
 - Two wallets: the LPID comes from the company's Business Wallet in a second step; PID and mandate come from the person's EUDI Wallet. The mandate is required for onboarding.
 - Clients use OpenID Connect only. The separate API for verification sessions is gone; the verification attestation comes with the token response (scope `attestation`).

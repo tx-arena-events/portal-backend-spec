@@ -1,8 +1,8 @@
 # C2-M2 Users and App Access: open points
 
-**Version:** 0.2, as of 2026-10-28
+**Version:** 0.3, as of 2026-11-24
 
-For version 0.2 the README settles each of these points so that the module can be built. The following decisions are provisional and still to be agreed. Decided on 28 Oct 2026 is OSP 2.0: every OSP runs its own installation with its own Portal IAM; people sign in with the EUDI Wallet through the EBW-Connector and call the modules with their own token; no delegation, no PSP, no identity providers per PSP. The binding framework is `../FRAMEWORK.md`; the version for the PSP architecture is in the git history of this repository.
+For version 0.3 the README settles each of these points so that the module can be built. The following decisions are provisional and still to be agreed. Decided on 28 Oct 2026 is OSP 2.0: every OSP runs its own installation with its own Portal IAM; people sign in with the EUDI Wallet through the EBW-Connector and call the modules with their own token; no delegation, no PSP, no identity providers per PSP. The binding framework is `../FRAMEWORK.md`; the version for the PSP architecture is in the git history of this repository.
 
 ## Provisional decisions
 
@@ -42,6 +42,10 @@ For version 0.2 the README settles each of these points so that the module can b
 | 32 | Concurrency | advisory locks per app, per company, for the staff, per invitation, per account, in a fixed order (README 6.14) | base skeleton |
 | 33 | Invitations by the staff | The OSP staff with `manage_users` invites people to any company (README 7.20 to 7.22), e.g. the first Company Admin of the OSP company or a new one when none is left | project owner (OP-41) |
 | 34 | Kind of the module | Hackathon. Onboarding, Offers and Subscriptions need C2-M2; either it is built beforehand or the teams use a stand-in. | architecture, project owner |
+| 35 | Accepting with a mandate | an invitation of kind `COMPANY` can be accepted with a verification attestation of the EBW-Connector (purpose `representation`) in place of the code; the invitation with its roles stays required (README 6.8a, 7.10). Not chosen: the mandate alone, without an invitation, with roles from the mandate or a default role; it would need a rule that turns roles of a Business Wallet into portal roles | project owner, C5-M1 |
+| 36 | `jti` of the attestation is not stored | no own table; the attestation is accepted only for `INVITATION_ATTESTATION_MAX_AGE_MINUTES`, is bound to one person by the names, and accepting uses up the invitation (README 6.8a). C5-M1 9.2 asks recipients to use a `jti` once; C1-M2 does | C5-M1, security review |
+| 37 | A mandate is checked once | at acceptance only. A mandate revoked later does not end the binding; the Company Admin removes the person. A check at every sign-in would be a sign-in method of its own (C2-M5) | project owner, C2-M5 |
+| 38 | Audience of the attestation | the same `ATTESTATION_AUDIENCE` as the registration (`portal-registration`); the purpose keeps the two uses apart (README 6.8a) | C5-M1, C1-M2 |
 
 ## Additions to the framework
 

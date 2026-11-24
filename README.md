@@ -60,7 +60,7 @@ Details in [FRAMEWORK 4.9](FRAMEWORK.md#49-features-runtimes-and-databases) and 
 
 ## Modules
 
-All modules are at version 0.2 for OSP 2.0, as of 28 Oct 2026. Every decision that is not yet agreed is marked as provisional in the module's `open-points.md`.
+All modules are at version 0.2 for OSP 2.0, as of 28 Oct 2026; C2-M2 and C5-M1 are at version 0.3, as of 24 Nov 2026 (joining a company with a mandate). Every decision that is not yet agreed is marked as provisional in the module's `open-points.md`.
 
 | Module | Feature (base path) | Kind | Status |
 |---|---|---|---|
@@ -68,7 +68,7 @@ All modules are at version 0.2 for OSP 2.0, as of 28 Oct 2026. Every decision th
 | [C1-M2 Registration](C1-M2-Registration/) | `registration` (`/api/registration`) | Hackathon | draft 0.2 |
 | [C1-M3 Application Review](C1-M3-ApplicationReview/) | `application_review` (`/api/application-review`) | Hackathon | draft 0.2 |
 | [C2-M1 Sign-in Services](C2-M1-SignInService/) | – | – | dropped with OSP 2.0: the only identity provider (EBW-Connector) is configuration in C2-M5 |
-| [C2-M2 Users and App Access](C2-M2-AppAccess/) | `app_access` (`/api/app-access`) | Hackathon | draft 0.2 |
+| [C2-M2 Users and App Access](C2-M2-AppAccess/) | `app_access` (`/api/app-access`) | Hackathon | draft 0.3 (accepting an invitation with a mandate) |
 | [C2-M3 Technical Users](C2-M3-TechnicalUser/) | `technical_user` (`/api/technical-user`) | Hackathon | draft 0.2 |
 | [C2-M4 Delegation](C2-M4-Delegation/) | – | – | dropped with OSP 2.0 |
 | [C2-M5 Portal IAM](C2-M5-PortalIAM/) | – | Configuration | draft 0.2 |
@@ -76,7 +76,7 @@ All modules are at version 0.2 for OSP 2.0, as of 28 Oct 2026. Every decision th
 | [C3-M2 CSP Connection](C3-M2-CSPConnection/) | `csp_connection` (`/api/csp-connection`) | Hackathon | draft 0.1 (new with OSP 2.0) |
 | [C4-M1 Credentials](C4-M1-Credentials/) | `credentials` (`/api/credentials`) | Hackathon | draft 0.2 |
 | [C4-M2 Dataspace Wallet Interface](C4-M2-DataspaceWalletInterface/) | `dataspace_wallet_interface` (`/api/dataspace-wallet-interface`) | Hackathon | draft 0.2 |
-| [C5-M1 EBW-Connector](C5-M1-EBWConnector/) | – | Provided | draft 0.2 (two wallets, OSP 2.0; lenient for the hackathon, OP-43) |
+| [C5-M1 EBW-Connector](C5-M1-EBWConnector/) | – | Provided | draft 0.3 (two wallets, OSP 2.0; mandate that carries the LPID, OP-56; lenient for the hackathon, OP-43) |
 | [C6-M1 Connectors](C6-M1-Connector/) | `connector` (`/api/connector`) | Hackathon | draft 0.2 (other part of the spec) |
 | [C8-M1 Offers](C8-M1-Offers/) | `offers` (`/api/offers`) | Hackathon | draft 0.2 (other part of the spec) |
 | [C10-M1 Subscriptions](C10-M1-Subscriptions/) | `subscriptions` (`/api/subscriptions`) | Hackathon | draft 0.2 (other part of the spec) |

@@ -1,8 +1,8 @@
 # C5-M1 EBW-Connector: open points
 
-**As of:** 2026-10-30, version 0.2
+**As of:** 2026-11-24, version 0.3
 
-The README fixes each of these points for version 0.2 so that the module can be built. The following decisions are provisional and still to be agreed. Decided on 28 Oct 2026: OSP 2.0 (every OSP runs the portal modules itself, the CSP provides the core services), two wallets, the mandate is required at onboarding, the EBW-Connector and a Business Wallet are provided for the hackathon.
+The README fixes each of these points for version 0.3 so that the module can be built. The following decisions are provisional and still to be agreed. Decided on 28 Oct 2026: OSP 2.0 (every OSP runs the portal modules itself, the CSP provides the core services), two wallets, the mandate is required at onboarding, the EBW-Connector and a Business Wallet are provided for the hackathon.
 
 ## Provisional decisions
 
@@ -12,7 +12,7 @@ The README fixes each of these points for version 0.2 so that the module can be 
 | 2 | Interface to clients | OpenID Connect only: authorization code flow with PKCE and `private_key_jwt`; verification attestation in the token response as `ebw_attestation` (README 6.1, 7.6). The own interface for verification sessions from 0.1 is dropped. | C1-M2, OSPs |
 | 3 | Two wallets | step `person` (EUDI Wallet: PID, mandate), step `company` (Business Wallet: LPID) (README 6.1) | decided 28 Oct 2026 |
 | 4 | Invoking the Business Wallet | wallet address, entered once and remembered in the browser; link to copy as fallback (README 6.6, 11.2) | Business Wallet providers |
-| 5 | Trust in mandates | three rules: trust list (register), key of the LPID in the same transaction, key of the client (README 6.5) | project owner, European Business Wallet pilots |
+| 5 | Trust in mandates | four rules: trust list (register), key of the LPID in the same transaction, key of the client, key of the LPID inside the mandate (README 6.5) | project owner, European Business Wallet pilots |
 | 6 | DCQL | no `credential_sets`, no optional credentials, top-level claims only (README 6.1) | wallet providers |
 | 7 | Format of the verification attestation | version `0.2`: without `psp_id`, with `evidence[].wallet` and `representation.trust`; otherwise as 0.1 (README 9.1) | C1-M2 |
 | 8 | Trust list of the core services | own JSON, signed as `trust-list+jwt`; entries with keys, `iss` optional (README 11.3) | core services (CSP) |
@@ -23,6 +23,9 @@ The README fixes each of these points for version 0.2 so that the module can be 
 | 13 | Claims in the ID token | flat names (`representation_*`, `company_*`) (README 6.7) | OSPs |
 | 14 | Single sign-on | none; every transaction asks the wallet | OSPs |
 | 15 | Clients of an OSP | Portal IAM (sign-in, scopes `openid profile`) and the server part of the user interface (onboarding with verification attestation; client ID `osp-a-ui`, `osp-b-ui`, FRAMEWORK 7a) are separate clients (README 1, 6.1; FRAMEWORK 5.2) | C2-M5, user interface |
+| 16 | LPID inside the mandate | a Business Wallet puts its LPID into the mandates it issues (`company_credential`), so that a verifier can trust the mandate without the Business Wallet taking part (README 6.5 rule 4, 11.2). Own convention, no standard prescribes it. Alternatives looked at: a directory of Business Wallets (the clean way, does not exist here), the LPID fetched from the issuer of the mandate (the Business Wallet must be reachable then) | project owner, European Business Wallet pilots, wallet providers |
+| 17 | Purposes of the verification attestation | `onboarding` (with the step `company`) and `representation` (without it); the purpose follows from the scopes, there is no own parameter; `attestation_version` stays `0.2` (README 6.1, 9.1) | C1-M2, C2-M2 |
+| 18 | Size of a mandate | the LPID roughly doubles the size of a mandate (about 4.7 KB with the test credentials). Checked with the test wallet of the reference implementation and, on 24 Nov 2026, with one wallet app on a phone, which stored and presented such a mandate in full; other wallet apps are not checked yet | wallet providers |
 
 ## Deviations from the framework
 

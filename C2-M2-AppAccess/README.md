@@ -1,6 +1,6 @@
 # C2-M2 Users and App Access
 
-**Version:** 0.2, as of 2026-10-28
+**Version:** 0.3, as of 2026-11-24
 **Capability:** C2 Identity and Access
 **Kind:** Hackathon
 **Files:** this README (behaviour), [openapi.yaml](openapi.yaml) (interface), [open-points.md](open-points.md)
@@ -102,6 +102,14 @@ It is the only module that writes bindings, portal roles of people, app clients 
 | `INVITATION_MAX_OPEN` | maximum number of open invitations per company or for the staff | `50` |
 | `INVITATION_MAX_FAILED_ATTEMPTS` | failed attempts with differing names after which an invitation lapses | `5` |
 | `INVITATION_NAME_CHECK` | check the names on acceptance (6.8) | `true` |
+| `ATTESTATION_ISSUER` | `iss` of the EBW-Connector (C5-M1) whose verification attestations the module accepts (6.8a); the same value as in C1-M2. Empty = an invitation cannot be accepted with a mandate | `https://ebw-connector.osp-a.example.org` |
+| `ATTESTATION_JWKS_URL` | JWKS of that EBW-Connector; empty = `{ATTESTATION_ISSUER}/jwks` | |
+| `ATTESTATION_JWKS_FILE` | tests only: the JWKS as a file, no fetch | |
+| `ATTESTATION_AUDIENCE` | expected `aud` | `portal-registration` |
+| `ATTESTATION_CLIENT_IDS` | allowed `client_id` values, comma-separated; empty = any client of the EBW-Connector | `osp-a-ui` |
+| `ATTESTATION_CLOCK_SKEW_SECONDS` | accepted clock difference | `60` |
+| `ATTESTATION_JWKS_CACHE_SECONDS` | how long the keys are cached | `300` |
+| `INVITATION_ATTESTATION_MAX_AGE_MINUTES` | how old `verified_at` may be when an invitation is accepted with a mandate (6.8a) | `15` |
 | `BOOTSTRAP_ADMIN_FILE` | bootstrap of the first OSP Admin (6.9); empty = none | `config/bootstrap-admin.json` |
 | `SETTINGS_FILE` | installation settings (FRAMEWORK 4.8); the module reads `ospCompanyId` | `config/installation.json` |
 | `INSTANCE_CLIENT_ID_PREFIX` | prefix of the client IDs of instance clients | `app` |
@@ -380,6 +388,40 @@ New invitations and new bindings exist only for `ACTIVE`. The intermediate state
 
 `ACCEPTED`, `REVOKED` and `EXPIRED` are final. After the reactivation of a company, the Company Admin invites again.
 
+### 6.8a Accepting with a mandate
+
+A person can accept an invitation of kind `COMPANY` without the code, by showing a mandate of the company in their EUDI Wallet. The mandate comes from the company's Business Wallet and carries the company's LPID (C5-M1 6.5 rule 4, 11.2). The server part of the user interface asks the EBW-Connector as its client (scopes `openid profile representation attestation`, C5-M1 6.1) and receives a verification attestation with the purpose `representation`. The UI passes it to 7.10 in place of the code. The module never talks to the EBW-Connector or to a wallet; it only checks the attestation.
+
+The Company Admin still creates the invitation (7.7): it names the person and the portal roles. The mandate replaces the code, not the invitation. The role in the mandate (for example "Purchasing") is free text and decides nothing here.
+
+**Checks of the attestation**, in this order; the first that fails gives 400 `attestation-invalid` with its `reason`:
+
+| No. | Check | `reason` |
+|---|---|---|
+| 1 | a compact JWS | `format` |
+| 2 | header `typ` `ebw-attestation+jwt`, `alg` `ES256` | `algorithm` |
+| 3 | `iss` = `ATTESTATION_ISSUER`; if that is empty, every attestation fails here | `issuer` |
+| 4 | signature with the key `kid` from the JWKS of the EBW-Connector (11.4) | `signature` |
+| 5 | `aud` contains `ATTESTATION_AUDIENCE` | `audience` |
+| 6 | `exp` not passed, `iat` not in the future (`ATTESTATION_CLOCK_SKEW_SECONDS`) | `expired`, `not-yet-valid` |
+| 7 | `jti` present; `purpose` = `representation`; `person.given_name` and `person.family_name` present; `representation` present; `client_id` in `ATTESTATION_CLIENT_IDS`, if set | `claims` |
+| 8 | `verified_at` not older than `INVITATION_ATTESTATION_MAX_AGE_MINUTES` | `too-old` |
+
+An attestation with the purpose `onboarding` fails check 7: it says that a company took part, not that this person may join it. The other way round, C1-M2 refuses the purpose `representation`.
+
+**Checks after that:**
+
+1. `representation.confirmed` is `true`. Otherwise 403 `representation-not-confirmed` with `reasons` from the attestation.
+2. The names in the token (`given_name`, `family_name`) equal `person` of the attestation, compared as in 6.8. Otherwise 403 `name-mismatch`; names missing in the token count as a mismatch. So an attestation is of no use to another person.
+3. The company: exactly one company of the installation with status `ACTIVE` has `representation.company_id`, `company.ebwoid` or `company.euid` as its EBWOID or EUID (C3-M1, 11.2). Otherwise 409 `company-not-active`.
+4. The invitation: the newest invitation of kind `COMPANY` of this company with status `OPEN` and not expired whose names equal `person`. None: 404 `invitation-not-found`.
+
+Then the invitation is accepted as with the code (7.10 steps 4, 6, 7, 8). `failed_attempts` is not used on this way: there is no code to guess.
+
+**Once.** The module does not store `jti`. An attestation is short-lived (`INVITATION_ATTESTATION_MAX_AGE_MINUTES`), bound to one person by the names, and accepting uses up the invitation; a second use needs a second open invitation for the same person (open point 36).
+
+**Later changes.** The mandate is checked at acceptance only. If the company revokes it afterwards, the binding stays; the Company Admin removes the person (7.4) (open point 37).
+
 ### 6.9 OSP staff and bootstrap
 
 - The OSP Admin assigns staff portal roles through an invitation of kind `STAFF` (7.17) or directly to a known account (7.16). Directly works only for accounts that are already staff or are bound to the OSP company; the staff does not know other accounts and invites them.
@@ -591,7 +633,11 @@ Invitation of kind `COMPANY` of this company, otherwise 404 `not-found`. `OPEN`:
 
 ### 7.10 `POST /invitations/accept`
 
-Scope `own`. Input: `code`.
+Scope `own`. Input: exactly one of `code` and `attestation`; both or none: 400 `validation`.
+
+With `attestation` (6.8a, kind `COMPANY` only): the checks of 6.8a find the invitation. If the account is already bound through an invitation of this company that it accepted itself: response 200 with the same result as the first time. Otherwise continue with step 4, then 6 to 8; steps 1 to 3 and 5 do not apply.
+
+With `code`:
 
 1. Checks as in 6.11. Code not in the format from 6.8: 400 `validation`.
 2. Find the invitation by `code_hash`. None: 404 `invitation-not-found`.
@@ -919,8 +965,13 @@ In the shared process, the module calls the public interface of the neighbour; t
 |---|---|---|---|
 | Subscriptions (`SUBSCRIPTION_URL`) | active subscriptions of a company to an app: `GET /internal/subscriptions?customerCompanyId=&offerId=&status=ACTIVE` (base as in the spec of Subscriptions) | list of `{ "offerSubscriptionId", "offerId", "customerCompanyId", "status" }` | reads `stub-subscriptions.json` |
 | C3-M1 Company Profile (`COMPANY_URL`) | only for a company without a row in `company` (6.6): `GET /api/company-profile/internal/companies/{companyId}` | `{ "id", "status", "bpn", … }` with status `REQUESTED`, `ACTIVE`, `REJECTED` or `INACTIVE`; 404 if unknown | reads `stub-companies.json` |
+| C3-M1 Company Profile (`COMPANY_URL`) | the company of a mandate (6.8a): `POST /api/company-profile/internal/companies/identifier-matches` with `identifiers` (the value as `EBWOID` and as `EUID`) and `statuses` `["ACTIVE"]` | `{ "matches": [{ "companyId", … }] }` | reads `stub-companies.json` (fields `ebwoid`, `euid`) |
 
 Apart from these, the module calls no modules. The BPN of a company usually comes with the step `assign-company-admin`; the steps 8.9 and 8.10 report the status of the company.
+
+### 11.4 EBW-Connector (keys only)
+
+For 6.8a the module reads the JWKS of the EBW-Connector of the installation: `ATTESTATION_JWKS_URL`, by default `{ATTESTATION_ISSUER}/jwks`. It caches the keys for `ATTESTATION_JWKS_CACHE_SECONDS` and reloads at most once a minute for an unknown `kid`. Keys come only from this address (or from `ATTESTATION_JWKS_FILE` in tests); header parameters of an attestation such as `jku` or `jwk` are ignored. If the keys cannot be read: 502 `upstream-error`. The module makes no other call to the EBW-Connector.
 
 ### 11.3 Installation settings
 
@@ -934,12 +985,14 @@ Errors come as Problem Details (RFC 9457). `type` is `urn:c2-m2:problem:<name>`.
 |---|---|---|---|
 | `validation` | 400 | invalid input | `false` |
 | `unknown-app-role` | 400 | the app role to assign does not exist on the template | – |
+| `attestation-invalid` | 400 | the verification attestation fails a check of 6.8a; the field `reason` names it | – |
 | `unauthorized` | 401 | token missing or invalid (HTTP only) | – |
 | `forbidden` | 403 | permission missing (HTTP only) | – |
-| `name-mismatch` | 403 | names in the token do not match the invitation | – |
+| `name-mismatch` | 403 | names in the token do not match the invitation, or the attestation (6.8a) | – |
+| `representation-not-confirmed` | 403 | the attestation says the mandate is not confirmed (6.8a); the field `reasons` repeats the reasons of the EBW-Connector | – |
 | `not-found` | 404 | instance client, template, binding or invitation unknown, or the path names another company | `false` |
 | `role-not-found` | 404 | role does not exist on the template (8.7) | `false` |
-| `invitation-not-found` | 404 | no invitation for this code | – |
+| `invitation-not-found` | 404 | no invitation for this code, or no open invitation of the company for this person (6.8a) | – |
 | `user-not-found` | 404 | account unknown in the Portal IAM | `false` |
 | `template-missing` | 409 | no template for the app | `false` |
 | `instance-exists` | 409 | an instance client for this subscription or this single-instance app exists with different data | `false` |
@@ -951,7 +1004,7 @@ Errors come as Problem Details (RFC 9457). `type` is `urn:c2-m2:problem:<name>`.
 | `last-company-admin` | 409 | last Company Admin of the company | – |
 | `last-osp-admin` | 409 | last OSP Admin of the installation | – |
 | `too-many-invitations` | 409 | too many open invitations | – |
-| `company-not-active` | 409 | company without a row in `company` or not `ACTIVE` | – |
+| `company-not-active` | 409 | company without a row in `company` or not `ACTIVE`; or no single `ACTIVE` company has the identifier of the mandate (6.8a) | – |
 | `no-active-subscription` | 409 | the company has no active subscription to the app with an active instance client | – |
 | `iam-error` | 502 | the Portal IAM did not answer as expected | `true` |
 | `upstream-error` | 502 | a neighbouring module did not answer as expected | `true` |
@@ -1018,6 +1071,13 @@ OSP staff:
 36. Otto (OSP Admin, without a company) invites himself through 7.20 as `Company Admin` to the OSP company: the module creates the row in `company` with the BPN from the stand-in for C3-M1 (`BPNL00000000OSPA`). Otto accepts; afterwards he is Company Admin of the OSP company and still OSP Admin. The same invitation for Ohne Zustimmung GmbH (`REQUESTED`): 409 `company-not-active`.
 37. `/internal/company-users?companyId=…&portalRole=Company%20Admin` returns exactly the Company Admins with binding `ACTIVE`, without names.
 
+Accepting with a mandate (6.8a):
+
+40. Erika invites Max Mustermann as `Member`. Max, signed in and without a company, sends a verification attestation with the purpose `representation`, `representation.confirmed` `true` and the EBWOID of Beispiel Maschinenbau GmbH: 200; he is bound with `Member`, route `INVITATION`; the invitation is `ACCEPTED`. The same call again: 200 with the same result.
+41. Each check of the attestation fails with its `reason`: wrong `typ`, other issuer, other key, other `aud`, `exp` passed, `iat` in the future, purpose `onboarding`, `client_id` not allowed, `person` incomplete, no `jti`, `verified_at` too old. Without `ATTESTATION_ISSUER`: `issuer`.
+42. `representation.confirmed` `false`: 403 `representation-not-confirmed` with the `reasons`. Attestation of another person: 403 `name-mismatch`. No open invitation for this person in the company: 404 `invitation-not-found`. No `ACTIVE` company with the identifier: 409 `company-not-active`. Account already bound to another company: 409 `user-already-bound`.
+43. Body with `code` and `attestation`, or with neither: 400 `validation`.
+
 General:
 
 38. No event, no step result and no audit log entry contains a name or an invitation code. Every changing operation has an entry in `audit_log` with `actor_sub`.
@@ -1067,7 +1127,15 @@ Files:
 - For calls via HTTP in the tests of this module, the test signs tokens itself with a test key; the token validation library gets its JWKS in the test. Claims as in FRAMEWORK 4.2: `sub` = `userId`, `company_id` and `bpn` when bound, `given_name`, `family_name`, permissions as in the proposal in 6.11.
 - End-to-end (cases 15, 17, 28, 29, 31) with real tokens of the test Portal IAM after sign-in through the stand-in for the EBW-Connector.
 
-## 15. Changes from version 0.1
+## 15. Changes
+
+### From version 0.2 (version 0.3)
+
+- **Accepting with a mandate** (6.8a, 7.10): `POST /invitations/accept` takes a verification attestation of the EBW-Connector with the purpose `representation` in place of the code. The invitation with its roles stays; the code way is unchanged.
+- New configuration `ATTESTATION_*` and `INVITATION_ATTESTATION_MAX_AGE_MINUTES`; new errors `attestation-invalid` and `representation-not-confirmed`; new call to C3-M1 (`identifier-matches`) and the JWKS of the EBW-Connector (11.2, 11.4); acceptance cases 40 to 43.
+- Sections were not renumbered; 6.8a and 11.4 are inserted.
+
+### From version 0.1 (version 0.2)
 
 - **New name and wider purpose:** "Users and App Access" instead of "App Access". The module now manages the accounts of all people: binding to a company, portal roles, app roles, deactivation. App users are the same accounts as for the portal.
 - **Accounts are created at the first login** (C2-M5), no longer by the module. App users created in advance with an alias of the identity provider and an identifier at the PSP are dropped, as are the table `app_user`, `POST /app-users`, `pspSubject`, `signInAlias`.
